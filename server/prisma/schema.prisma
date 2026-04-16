@@ -1,0 +1,166 @@
+// HiNest database schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("MEMBER") // ADMIN | MANAGER | MEMBER
+  position     String?  // 사원/대리/과장/팀장/이사 등
+  team         String?
+  active       Boolean  @default(true)
+  avatarColor  String   @default("#36D7B7")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  inviteKey    InviteKey? @relation("UsedKey")
+  events       Event[]
+  leaves       Leave[]
+  attendances  Attendance[]
+  journals     Journal[]
+  notices      Notice[]
+  messagesSent ChatMessage[]    @relation("Sender")
+  memberships  RoomMember[]
+  logs         AuditLog[]
+  cardExpenses CardExpense[]
+}
+
+model InviteKey {
+  id          String    @id @default(cuid())
+  key         String    @unique
+  email       String?
+  name        String?
+  role        String    @default("MEMBER")
+  team        String?
+  position    String?
+  used        Boolean   @default(false)
+  usedAt      DateTime?
+  usedById    String?   @unique
+  usedBy      User?     @relation("UsedKey", fields: [usedById], references: [id])
+  createdById String?
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime?
+}
+
+model Event {
+  id        String   @id @default(cuid())
+  title     String
+  content   String?
+  scope     String   @default("COMPANY") // COMPANY | TEAM | PERSONAL
+  team      String?
+  startAt   DateTime
+  endAt     DateTime
+  color     String   @default("#36D7B7")
+  createdBy String
+  author    User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model Leave {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // ANNUAL | HALF | SICK | OTHER
+  startDate DateTime
+  endDate   DateTime
+  reason    String?
+  status    String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  reviewer  String?
+  createdAt DateTime @default(now())
+}
+
+model Attendance {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      String   // YYYY-MM-DD
+  checkIn   DateTime?
+  checkOut  DateTime?
+  note      String?
+
+  @@unique([userId, date])
+}
+
+model Journal {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      String   // YYYY-MM-DD
+  title     String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Notice {
+  id        String   @id @default(cuid())
+  title     String
+  content   String
+  pinned    Boolean  @default(false)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model ChatRoom {
+  id        String        @id @default(cuid())
+  name      String
+  type      String        @default("GROUP") // GROUP | DIRECT | TEAM
+  createdAt DateTime      @default(now())
+  members   RoomMember[]
+  messages  ChatMessage[]
+}
+
+model RoomMember {
+  id     String   @id @default(cuid())
+  roomId String
+  userId String
+  room   ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  roomId    String
+  senderId  String
+  content   String
+  createdAt DateTime @default(now())
+  room      ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sender    User     @relation("Sender", fields: [senderId], references: [id], onDelete: Cascade)
+}
+
+model CardExpense {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usedAt     DateTime
+  merchant   String
+  category   String   // 식비 | 교통 | 업무 | 접대 | 비품 | 기타
+  amount     Int
+  memo       String?
+  receiptUrl String?  // base64 데이터 URL 또는 외부 링크
+  status     String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  reviewer   String?
+  createdAt  DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  target    String?
+  detail    String?
+  ip        String?
+  createdAt DateTime @default(now())
+}

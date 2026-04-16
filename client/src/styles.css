@@ -1,0 +1,175 @@
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  background: #f9fafb;
+  color: #191f28;
+  font-feature-settings: "tnum" 1, "ss01" 1;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    system-ui, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ----- Buttons ----- */
+.btn {
+  @apply inline-flex items-center justify-center gap-2 font-bold transition active:scale-[.98] disabled:opacity-40 disabled:cursor-not-allowed select-none;
+  height: 48px;
+  padding: 0 20px;
+  border-radius: 12px;
+  font-size: 15px;
+  letter-spacing: -0.02em;
+}
+.btn-sm {
+  height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+  border-radius: 10px;
+}
+.btn-primary {
+  @apply btn bg-brand-500 text-white hover:bg-brand-600;
+}
+.btn-ghost {
+  @apply btn bg-ink-100 text-ink-800 hover:bg-ink-200;
+}
+.btn-outline {
+  @apply btn bg-white text-ink-800 border border-ink-200 hover:bg-ink-50;
+}
+.btn-danger {
+  @apply btn bg-danger text-white hover:brightness-95;
+}
+
+/* ----- Card ----- */
+.card {
+  @apply bg-white border border-ink-100;
+  border-radius: 20px;
+  padding: 24px;
+}
+.card-tight {
+  @apply bg-white border border-ink-100;
+  border-radius: 16px;
+  padding: 16px;
+}
+
+/* ----- Inputs ----- */
+.input {
+  @apply w-full bg-ink-100 border border-transparent text-ink-900 placeholder:text-ink-500 outline-none transition;
+  height: 52px;
+  padding: 0 16px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 500;
+}
+.input:focus {
+  @apply bg-white border-brand-500;
+  box-shadow: 0 0 0 3px rgba(49, 130, 246, 0.15);
+}
+textarea.input {
+  padding: 14px 16px;
+  height: auto;
+  line-height: 1.55;
+}
+
+/* ----- Label ----- */
+.label {
+  @apply block font-bold text-ink-800 mb-2;
+  font-size: 13px;
+  letter-spacing: -0.02em;
+}
+
+/* ----- Chip ----- */
+.chip {
+  @apply inline-flex items-center font-bold;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: -0.02em;
+}
+
+/* ----- Tables ----- */
+table.toss {
+  @apply w-full;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+table.toss thead th {
+  @apply text-ink-500 font-bold text-left;
+  font-size: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #f2f4f6;
+  background: #fafbfc;
+  letter-spacing: -0.01em;
+}
+table.toss tbody td {
+  padding: 16px;
+  border-bottom: 1px solid #f2f4f6;
+  font-size: 14px;
+  color: #333d4b;
+}
+table.toss tbody tr:last-child td {
+  border-bottom: 0;
+}
+table.toss tbody tr:hover td {
+  background: #fafbfc;
+}
+
+/* ----- Heading helper ----- */
+.h-display {
+  @apply font-extrabold text-ink-900;
+  font-size: 28px;
+  line-height: 1.25;
+  letter-spacing: -0.03em;
+}
+.h-title {
+  @apply font-extrabold text-ink-900;
+  font-size: 20px;
+  line-height: 1.3;
+  letter-spacing: -0.025em;
+}
+.h-sub {
+  @apply font-bold text-ink-900;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+.t-body {
+  @apply text-ink-700;
+  font-size: 15px;
+  line-height: 1.55;
+  letter-spacing: -0.01em;
+}
+.t-caption {
+  @apply text-ink-500;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #e5e8eb;
+  border-radius: 999px;
+  border: 2px solid #f9fafb;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #d1d6db;
+}
