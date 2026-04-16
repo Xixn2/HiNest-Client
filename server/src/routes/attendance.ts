@@ -1,0 +1,120 @@
+import { Router } from "express";
+import { z } from "zod";
+import { prisma } from "../lib/db.js";
+import { requireAuth, writeLog } from "../lib/auth.js";
+
+const router = Router();
+router.use(requireAuth);
+
+function todayStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const da = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${da}`;
+}
+
+// 오늘 출퇴근 상태
+router.get("/today", async (req, res) => {
+  const u = (req as any).user;
+  const rec = await prisma.attendance.findUnique({
+    where: { userId_date: { userId: u.id, date: todayStr() } },
+  });
+  res.json({ attendance: rec });
+});
+
+// 출근
+router.post("/check-in", async (req, res) => {
+  const u = (req as any).user;
+  const date = todayStr();
+  const exists = await prisma.attendance.findUnique({
+    where: { userId_date: { userId: u.id, date } },
+  });
+  if (exists?.checkIn) return res.status(400).json({ error: "이미 출근 처리되었습니다" });
+  const rec = await prisma.attendance.upsert({
+    where: { userId_date: { userId: u.id, date } },
+    update: { checkIn: new Date() },
+    create: { userId: u.id, date, checkIn: new Date() },
+  });
+  await writeLog(u.id, "CHECK_IN", date);
+  res.json({ attendance: rec });
+});
+
+// 퇴근
+router.post("/check-out", async (req, res) => {
+  const u = (req as any).user;
+  const date = todayStr();
+  const rec = await prisma.attendance.update({
+    where: { userId_date: { userId: u.id, date } },
+    data: { checkOut: new Date() },
+  });
+  await writeLog(u.id, "CHECK_OUT", date);
+  res.json({ attendance: rec });
+});
+
+// 월별 근태 기록
+router.get("/month", async (req, res) => {
+  const u = (req as any).user;
+  const month = String(req.query.month ?? ""); // YYYY-MM
+  if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: "month=YYYY-MM" });
+  const prefix = month + "-";
+  const list = await prisma.attendance.findMany({
+    where: { userId: u.id, date: { startsWith: prefix } },
+    orderBy: { date: "asc" },
+  });
+  res.json({ attendances: list });
+});
+
+// 휴가 신청
+const leaveSchema = z.object({
+  type: z.enum(["ANNUAL", "HALF", "SICK", "OTHER"]),
+  startDate: z.string(),
+  endDate: z.string(),
+  reason: z.string().optional(),
+});
+
+router.post("/leave", async (req, res) => {
+  const parsed = leaveSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid input" });
+  const u = (req as any).user;
+  const d = parsed.data;
+  const leave = await prisma.leave.create({
+    data: {
+      userId: u.id,
+      type: d.type,
+      startDate: new Date(d.startDate),
+      endDate: new Date(d.endDate),
+      reason: d.reason,
+    },
+  });
+  await writeLog(u.id, "LEAVE_REQUEST", leave.id, d.type);
+  res.json({ leave });
+});
+
+router.get("/leave", async (req, res) => {
+  const u = (req as any).user;
+  const all = req.query.all === "1" && (u.role === "ADMIN" || u.role === "MANAGER");
+  const leaves = await prisma.leave.findMany({
+    where: all ? {} : { userId: u.id },
+    orderBy: { createdAt: "desc" },
+    include: { user: { select: { name: true, team: true } } },
+  });
+  res.json({ leaves });
+});
+
+router.patch("/leave/:id", async (req, res) => {
+  const u = (req as any).user;
+  if (u.role !== "ADMIN" && u.role !== "MANAGER")
+    return res.status(403).json({ error: "forbidden" });
+  const status = req.body?.status;
+  if (!["APPROVED", "REJECTED", "PENDING"].includes(status))
+    return res.status(400).json({ error: "invalid status" });
+  const leave = await prisma.leave.update({
+    where: { id: req.params.id },
+    data: { status, reviewer: u.id },
+  });
+  await writeLog(u.id, "LEAVE_REVIEW", leave.id, status);
+  res.json({ leave });
+});
+
+export default router;
