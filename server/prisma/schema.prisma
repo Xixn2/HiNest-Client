@@ -13,7 +13,11 @@ model User {
   email        String   @unique
   name         String
   passwordHash String
+  // 총관리자 전용 step-up 비밀번호 (일반 로그인 비밀번호와 분리).
+  // null 이면 일반 비밀번호로 fallback (초기 설정용).
+  superPasswordHash String?
   role         String   @default("MEMBER") // ADMIN | MANAGER | MEMBER
+  superAdmin   Boolean  @default(false)    // 최상위 관리자 - DM/팀 채팅 감사 권한 보유
   position     String?  // 사원/대리/과장/팀장/이사 등
   team         String?
   active       Boolean  @default(true)
@@ -31,6 +35,43 @@ model User {
   memberships  RoomMember[]
   logs         AuditLog[]
   cardExpenses CardExpense[]
+  notifications Notification[]
+  documents    Document[]       @relation("DocumentAuthor")
+  approvalsRequested Approval[] @relation("ApprovalRequester")
+  approvalReviews    ApprovalStep[] @relation("ApprovalReviewer")
+  passkeys     Passkey[]
+  desktopBios  DesktopBiometric[]
+  reactions    MessageReaction[]
+}
+
+/// Electron 데스크톱 앱에서 OS Touch ID 로 총관리자 잠금 해제할 수 있게 등록된 기기.
+/// Chromium WebAuthn 이 Electron 에서 플랫폼 인증기를 노출하지 않기 때문에 별도 관리.
+model DesktopBiometric {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId   String   // Electron 이 userData 폴더에 생성한 안정적인 기기 UUID
+  deviceName String?
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime?
+
+  @@unique([userId, deviceId])
+  @@index([userId])
+}
+
+model Passkey {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialId String    @unique
+  publicKey    Bytes
+  counter      Int       @default(0)
+  transports   String?
+  deviceName   String?
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+
+  @@index([userId])
 }
 
 model InviteKey {
@@ -51,17 +92,19 @@ model InviteKey {
 }
 
 model Event {
-  id        String   @id @default(cuid())
-  title     String
-  content   String?
-  scope     String   @default("COMPANY") // COMPANY | TEAM | PERSONAL
-  team      String?
-  startAt   DateTime
-  endAt     DateTime
-  color     String   @default("#36D7B7")
-  createdBy String
-  author    User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  id            String   @id @default(cuid())
+  title         String
+  content       String?
+  scope         String   @default("COMPANY") // COMPANY | TEAM | PERSONAL | TARGETED
+  team          String?
+  category      String   @default("OTHER") // MEETING | DEADLINE | OUT | HOLIDAY | EVENT | BIRTHDAY | TASK | OTHER
+  targetUserIds String?  // comma separated userIds (scope=TARGETED or mention targets)
+  startAt       DateTime
+  endAt         DateTime
+  color         String   @default("#3B5CF0")
+  createdBy     String
+  author        User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
 }
 
 model Leave {
@@ -130,13 +173,51 @@ model RoomMember {
 }
 
 model ChatMessage {
+  id          String    @id @default(cuid())
+  roomId      String
+  senderId    String
+  content     String
+  kind        String    @default("TEXT") // TEXT | IMAGE | VIDEO | FILE
+  fileUrl     String?
+  fileName    String?
+  fileType    String?
+  fileSize    Int?
+  mentions    String?   // comma-separated userIds
+  editedAt    DateTime?
+  deletedAt   DateTime?
+  scheduledAt DateTime?
+  createdAt   DateTime  @default(now())
+  room        ChatRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sender      User      @relation("Sender", fields: [senderId], references: [id], onDelete: Cascade)
+  reactions   MessageReaction[]
+
+  @@index([roomId, scheduledAt])
+}
+
+model MessageReaction {
+  id        String      @id @default(cuid())
+  messageId String
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String
+  createdAt DateTime    @default(now())
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+}
+
+model Team {
   id        String   @id @default(cuid())
-  roomId    String
-  senderId  String
-  content   String
+  name      String   @unique
   createdAt DateTime @default(now())
-  room      ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  sender    User     @relation("Sender", fields: [senderId], references: [id], onDelete: Cascade)
+}
+
+model Position {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  rank      Int      @default(0)
+  createdAt DateTime @default(now())
 }
 
 model CardExpense {
@@ -152,6 +233,81 @@ model CardExpense {
   status     String   @default("PENDING") // PENDING | APPROVED | REJECTED
   reviewer   String?
   createdAt  DateTime @default(now())
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String    // NOTICE | DM | APPROVAL_REQUEST | APPROVAL_REVIEW | MENTION | SYSTEM
+  title     String
+  body      String?
+  linkUrl   String?
+  actorName String?   // 알림 유발자 이름 (ex. 메시지 발신자)
+  actorColor String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+}
+
+model Folder {
+  id        String     @id @default(cuid())
+  name      String
+  parentId  String?
+  parent    Folder?    @relation("FolderChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[]   @relation("FolderChildren")
+  documents Document[]
+  createdAt DateTime   @default(now())
+}
+
+model Document {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  folderId    String?
+  folder      Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  fileUrl     String?
+  fileName    String?
+  fileType    String?
+  fileSize    Int?
+  tags        String?  // comma separated
+  authorId    String
+  author      User     @relation("DocumentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Approval {
+  id          String   @id @default(cuid())
+  type        String   // TRIP | EXPENSE | PURCHASE | GENERAL | OFFSITE | OTHER
+  title       String
+  content     String?
+  data        String?  // JSON
+  status      String   @default("PENDING") // PENDING | APPROVED | REJECTED | CANCELED
+  requesterId String
+  requester   User     @relation("ApprovalRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  startDate   DateTime?
+  endDate     DateTime?
+  amount      Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  steps       ApprovalStep[]
+}
+
+model ApprovalStep {
+  id         String   @id @default(cuid())
+  approvalId String
+  approval   Approval @relation(fields: [approvalId], references: [id], onDelete: Cascade)
+  reviewerId String
+  reviewer   User     @relation("ApprovalReviewer", fields: [reviewerId], references: [id], onDelete: Cascade)
+  order      Int
+  status     String   @default("PENDING") // PENDING | APPROVED | REJECTED | SKIPPED
+  comment    String?
+  actedAt    DateTime?
+
+  @@unique([approvalId, order])
+  @@index([reviewerId, status])
 }
 
 model AuditLog {
