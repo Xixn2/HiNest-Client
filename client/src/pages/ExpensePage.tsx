@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
+import MonthPicker from "../components/MonthPicker";
+import DateTimePicker from "../components/DateTimePicker";
 
 type Expense = {
   id: string;
@@ -112,7 +114,7 @@ export default function ExpensePage() {
         description="법인카드 사용건을 등록하고 영수증을 첨부합니다."
         right={
           <div className="flex gap-2">
-            <input type="month" className="input" value={month} onChange={(e) => setMonth(e.target.value)} />
+            <MonthPicker value={month} onChange={setMonth} />
             {isReviewer && (
               <select className="input" value={scope} onChange={(e) => setScope(e.target.value as any)}>
                 <option value="mine">내 사용내역</option>
@@ -127,17 +129,38 @@ export default function ExpensePage() {
       />
 
       <div className="grid grid-cols-4 gap-4 mb-6">
-        <div className="card bg-gradient-to-br from-brand-400 to-brand-500 text-white border-0">
-          <div className="text-xs opacity-90">{month} 합계</div>
-          <div className="text-2xl font-bold mt-1">{total.toLocaleString()}원</div>
-          <div className="text-xs opacity-90 mt-2">총 {list.length}건</div>
-        </div>
-        {CATEGORIES.slice(0, 3).map((c) => (
-          <div key={c} className="card">
-            <div className="text-xs text-slate-500">{c}</div>
-            <div className="text-xl font-bold mt-1">{(summary[c] ?? 0).toLocaleString()}원</div>
+        {/* 월 합계: 브랜드 컬러 강조 카드 */}
+        <div
+          className="panel p-5 text-white relative overflow-hidden"
+          style={{
+            background: "linear-gradient(135deg, var(--c-brand) 0%, var(--c-brand-hover) 100%)",
+            borderColor: "transparent",
+          }}
+        >
+          <div className="text-[11px] font-bold uppercase tracking-[0.06em] opacity-90">
+            {month} 합계
           </div>
-        ))}
+          <div className="text-[24px] font-extrabold mt-2 tabular" style={{ letterSpacing: "-0.02em" }}>
+            {total.toLocaleString()}<span className="text-[15px] font-bold opacity-90 ml-0.5">원</span>
+          </div>
+          <div className="text-[11.5px] opacity-90 mt-1">
+            {list.length > 0 ? `총 ${list.length}건 사용` : "사용 내역 없음"}
+          </div>
+        </div>
+        {CATEGORIES.slice(0, 3).map((c) => {
+          const amount = summary[c] ?? 0;
+          return (
+            <div key={c} className="panel p-5">
+              <div className="text-[11px] font-bold uppercase tracking-[0.06em] text-ink-500">{c}</div>
+              <div className="text-[20px] font-extrabold text-ink-900 mt-2 tabular" style={{ letterSpacing: "-0.02em" }}>
+                {amount.toLocaleString()}<span className="text-[13px] font-bold text-ink-500 ml-0.5">원</span>
+              </div>
+              <div className="text-[11.5px] text-ink-500 mt-1">
+                {amount > 0 ? "이번 달 집계" : "내역 없음"}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <div className="card p-0 overflow-hidden">
@@ -223,7 +246,7 @@ export default function ExpensePage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">사용일시</label>
-                  <input type="datetime-local" className="input" value={form.usedAt} onChange={(e) => setForm({ ...form, usedAt: e.target.value })} required />
+                  <DateTimePicker value={form.usedAt} onChange={(v) => setForm({ ...form, usedAt: v })} />
                 </div>
                 <div>
                   <label className="label">금액 (원)</label>

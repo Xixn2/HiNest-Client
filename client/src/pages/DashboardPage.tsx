@@ -3,22 +3,8 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
 
-type Notice = {
-  id: string;
-  title: string;
-  content: string;
-  createdAt: string;
-  author: { name: string };
-  pinned: boolean;
-};
-type Event = {
-  id: string;
-  title: string;
-  startAt: string;
-  endAt: string;
-  scope: string;
-  color: string;
-};
+type Notice = { id: string; title: string; content: string; createdAt: string; author: { name: string }; pinned: boolean };
+type Event = { id: string; title: string; startAt: string; endAt: string; scope: string; color: string };
 type Attendance = { checkIn?: string; checkOut?: string } | null;
 
 export default function DashboardPage() {
@@ -26,6 +12,12 @@ export default function DashboardPage() {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [att, setAtt] = useState<Attendance>(null);
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000 * 30);
+    return () => clearInterval(t);
+  }, []);
 
   async function load() {
     const today = new Date();
@@ -33,9 +25,7 @@ export default function DashboardPage() {
     const to = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7).toISOString();
     const [n, s, a] = await Promise.all([
       api<{ notices: Notice[] }>("/api/notice"),
-      api<{ events: Event[] }>(
-        `/api/schedule?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
-      ),
+      api<{ events: Event[] }>(`/api/schedule?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
       api<{ attendance: Attendance }>("/api/attendance/today"),
     ]);
     setNotices(n.notices.slice(0, 5));
@@ -56,8 +46,29 @@ export default function DashboardPage() {
     load();
   }
 
-  const today = new Date();
-  const dateStr = today.toLocaleDateString("ko-KR", {
+  const status = att?.checkOut ? "퇴근 완료" : att?.checkIn ? "근무 중" : "출근 전";
+  const statusClass = att?.checkOut
+    ? "chip-gray"
+    : att?.checkIn
+    ? "chip-green"
+    : "chip-amber";
+  const statusDot = att?.checkOut ? "#8E959E" : att?.checkIn ? "#16A34A" : "#D97706";
+
+  const workedMinutes = att?.checkIn
+    ? Math.max(
+        0,
+        Math.floor(
+          ((att?.checkOut ? new Date(att.checkOut).getTime() : now.getTime()) -
+            new Date(att.checkIn).getTime()) /
+            60000
+        )
+      )
+    : 0;
+  const workedH = Math.floor(workedMinutes / 60);
+  const workedM = workedMinutes % 60;
+
+  const dateStr = now.toLocaleDateString("ko-KR", {
+    year: "numeric",
     month: "long",
     day: "numeric",
     weekday: "long",
@@ -65,110 +76,80 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <PageHeader title={`${user?.name}님, 안녕하세요 👋`} description={dateStr} />
+      <PageHeader
+        eyebrow="개요"
+        title={`${user?.name}님, 안녕하세요`}
+        description={dateStr}
+      />
+
+      {/* KPI strip */}
+      <div className="grid grid-cols-4 gap-3 mb-5">
+        <KPI label="오늘 상태" value={status} valueClass="text-ink-900" sub={dateStr.split(" ").slice(-1)[0]} badge={<span className={statusClass}><span className="badge-dot" style={{ background: statusDot }} />{status}</span>} />
+        <KPI
+          label="출근 시각"
+          value={att?.checkIn ? new Date(att.checkIn).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false }) : "—"}
+          sub="check-in"
+          mono
+        />
+        <KPI
+          label="퇴근 시각"
+          value={att?.checkOut ? new Date(att.checkOut).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false }) : "—"}
+          sub="check-out"
+          mono
+        />
+        <KPI
+          label="누적 근무"
+          value={att?.checkIn ? `${workedH}h ${String(workedM).padStart(2, "0")}m` : "—"}
+          sub={att?.checkIn && !att?.checkOut ? "실시간" : "집계 완료"}
+          mono
+        />
+      </div>
 
       <div className="grid grid-cols-3 gap-5">
         <div className="col-span-2 space-y-5">
-          {/* 오늘의 근태 */}
-          <div className="card">
-            <div className="flex items-center justify-between mb-5">
-              <div>
-                <div className="h-sub">오늘의 근태</div>
-                <div className="t-caption mt-1">출·퇴근 시각을 기록하세요</div>
-              </div>
-              <div className="chip bg-brand-50 text-brand-600">
-                {att?.checkIn && !att?.checkOut
-                  ? "근무중"
-                  : att?.checkOut
-                  ? "퇴근 완료"
-                  : "출근 전"}
+          {/* 출퇴근 */}
+          <div className="panel">
+            <div className="section-head">
+              <div className="title">근태</div>
+              <div className="flex gap-1.5">
+                <button className="btn-primary btn-xs" disabled={!!att?.checkIn} onClick={checkIn}>
+                  {att?.checkIn ? "출근 완료" : "출근"}
+                </button>
+                <button className="btn-ghost btn-xs" disabled={!att?.checkIn || !!att?.checkOut} onClick={checkOut}>
+                  {att?.checkOut ? "퇴근 완료" : "퇴근"}
+                </button>
               </div>
             </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-2xl bg-ink-50 p-5">
-                <div className="text-[13px] font-bold text-ink-600">출근</div>
-                <div className="text-[32px] font-extrabold tracking-tighter text-ink-900 mt-2">
-                  {att?.checkIn
-                    ? new Date(att.checkIn).toLocaleTimeString("ko-KR", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        hour12: false,
-                      })
-                    : "--:--"}
-                </div>
-                <button
-                  className="btn-primary w-full mt-4"
-                  disabled={!!att?.checkIn}
-                  onClick={checkIn}
-                >
-                  {att?.checkIn ? "출근 완료" : "출근하기"}
-                </button>
-              </div>
-              <div className="rounded-2xl bg-ink-50 p-5">
-                <div className="text-[13px] font-bold text-ink-600">퇴근</div>
-                <div className="text-[32px] font-extrabold tracking-tighter text-ink-900 mt-2">
-                  {att?.checkOut
-                    ? new Date(att.checkOut).toLocaleTimeString("ko-KR", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        hour12: false,
-                      })
-                    : "--:--"}
-                </div>
-                <button
-                  className="btn-ghost w-full mt-4"
-                  disabled={!att?.checkIn || !!att?.checkOut}
-                  onClick={checkOut}
-                >
-                  {att?.checkOut ? "퇴근 완료" : "퇴근하기"}
-                </button>
-              </div>
+            <div className="grid grid-cols-3 divide-x divide-ink-100">
+              <Stat label="출근" value={att?.checkIn ? new Date(att.checkIn).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false }) : "—"} />
+              <Stat label="퇴근" value={att?.checkOut ? new Date(att.checkOut).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false }) : "—"} />
+              <Stat label="근무시간" value={att?.checkIn ? `${workedH}h ${String(workedM).padStart(2, "0")}m` : "—"} />
             </div>
           </div>
 
-          {/* 이번주 일정 */}
-          <div className="card">
-            <div className="flex items-center justify-between mb-4">
-              <div className="h-sub">이번 주 일정</div>
-              <span className="t-caption">{events.length}건</span>
+          {/* 일정 */}
+          <div className="panel">
+            <div className="section-head">
+              <div className="title">이번 주 일정 <span className="text-ink-400 font-medium ml-1">{events.length}</span></div>
             </div>
-            <div className="space-y-1">
+            <div className="divide-y divide-ink-100">
               {events.length === 0 && (
-                <div className="py-10 text-center t-caption">등록된 일정이 없어요.</div>
+                <div className="py-12 text-center">
+                  <div className="t-caption">등록된 일정이 없습니다.</div>
+                </div>
               )}
               {events.map((e) => (
-                <div
-                  key={e.id}
-                  className="flex items-center gap-4 p-3 rounded-xl hover:bg-ink-50"
-                >
-                  <div
-                    className="w-1.5 h-10 rounded-full"
-                    style={{ background: e.color }}
-                  />
+                <div key={e.id} className="flex items-center gap-3 px-5 py-3 hover:bg-ink-25">
+                  <div className="w-[3px] h-7 rounded-full" style={{ background: e.color }} />
                   <div className="flex-1 min-w-0">
-                    <div className="font-extrabold text-ink-900 tracking-tight">
-                      {e.title}
-                    </div>
-                    <div className="t-caption mt-0.5">
-                      {new Date(e.startAt).toLocaleString("ko-KR", {
-                        month: "2-digit",
-                        day: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}{" "}
-                      ~{" "}
-                      {new Date(e.endAt).toLocaleString("ko-KR", {
-                        month: "2-digit",
-                        day: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                    <div className="text-[13px] font-semibold text-ink-900 truncate">{e.title}</div>
+                    <div className="text-[11px] text-ink-500 mt-0.5 tabular">
+                      {new Date(e.startAt).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                      {" → "}
+                      {new Date(e.endAt).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
                     </div>
                   </div>
-                  <span className="chip bg-ink-100 text-ink-700">
-                    {e.scope === "COMPANY" ? "전사" : e.scope === "TEAM" ? "팀" : "개인"}
-                  </span>
+                  <ScopeBadge scope={e.scope} />
                 </div>
               ))}
             </div>
@@ -176,49 +157,59 @@ export default function DashboardPage() {
         </div>
 
         <div className="space-y-5">
-          {/* 내 정보 */}
-          <div className="card bg-ink-900 border-ink-900 text-white">
-            <div className="text-[13px] font-bold text-ink-300">나의 정보</div>
-            <div className="text-[22px] font-extrabold tracking-tight mt-4">
-              {user?.name}
+          {/* 프로필 요약 */}
+          <div className="panel p-5">
+            <div className="flex items-center gap-3">
+              <div
+                className="w-10 h-10 rounded-full grid place-items-center text-white text-[14px] font-bold"
+                style={{ background: user?.avatarColor ?? "#3D54C4" }}
+              >
+                {user?.name?.[0]}
+              </div>
+              <div className="min-w-0">
+                <div className="text-[14px] font-bold text-ink-900">{user?.name}</div>
+                <div className="text-[12px] text-ink-500 truncate">{user?.email}</div>
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-4 mt-5 pt-5 border-t border-white/10">
+            <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-ink-100">
               <div>
-                <div className="text-[12px] text-ink-300 font-bold">직급</div>
-                <div className="text-[16px] font-extrabold mt-1">
-                  {user?.position ?? "-"}
-                </div>
+                <div className="text-[11px] font-semibold text-ink-500 uppercase tracking-wide">직급</div>
+                <div className="text-[13px] font-semibold text-ink-900 mt-1">{user?.position ?? "—"}</div>
               </div>
               <div>
-                <div className="text-[12px] text-ink-300 font-bold">팀</div>
-                <div className="text-[16px] font-extrabold mt-1">{user?.team ?? "-"}</div>
+                <div className="text-[11px] font-semibold text-ink-500 uppercase tracking-wide">팀</div>
+                <div className="text-[13px] font-semibold text-ink-900 mt-1">{user?.team ?? "—"}</div>
+              </div>
+              <div>
+                <div className="text-[11px] font-semibold text-ink-500 uppercase tracking-wide">권한</div>
+                <div className="text-[13px] font-semibold text-ink-900 mt-1 font-mono">{user?.role}</div>
+              </div>
+              <div>
+                <div className="text-[11px] font-semibold text-ink-500 uppercase tracking-wide">상태</div>
+                <div className="mt-1"><span className="chip-green"><span className="badge-dot" style={{ background: "#16A34A" }} />Active</span></div>
               </div>
             </div>
           </div>
 
           {/* 공지 */}
-          <div className="card">
-            <div className="flex items-center justify-between mb-4">
-              <div className="h-sub">공지사항</div>
-              <span className="t-caption">{notices.length}건</span>
+          <div className="panel">
+            <div className="section-head">
+              <div className="title">공지사항 <span className="text-ink-400 font-medium ml-1">{notices.length}</span></div>
             </div>
-            <div className="space-y-1">
+            <div className="divide-y divide-ink-100">
               {notices.length === 0 && (
                 <div className="py-10 text-center t-caption">공지가 없습니다.</div>
               )}
               {notices.map((n) => (
-                <div key={n.id} className="p-3 rounded-xl hover:bg-ink-50">
+                <div key={n.id} className="px-5 py-3 hover:bg-ink-25">
                   <div className="flex items-center gap-2">
-                    {n.pinned && (
-                      <span className="chip bg-danger/10 text-danger">고정</span>
-                    )}
-                    <div className="font-extrabold text-ink-900 truncate tracking-tight">
-                      {n.title}
-                    </div>
+                    {n.pinned && <span className="chip-red">PIN</span>}
+                    <div className="text-[13px] font-semibold text-ink-900 truncate">{n.title}</div>
                   </div>
-                  <div className="t-caption mt-1">
-                    {n.author?.name} ·{" "}
-                    {new Date(n.createdAt).toLocaleDateString("ko-KR")}
+                  <div className="text-[11px] text-ink-500 mt-0.5 flex items-center gap-1.5">
+                    <span>{n.author?.name}</span>
+                    <span className="text-ink-300">·</span>
+                    <span className="tabular">{new Date(n.createdAt).toLocaleDateString("ko-KR")}</span>
                   </div>
                 </div>
               ))}
@@ -228,4 +219,34 @@ export default function DashboardPage() {
       </div>
     </div>
   );
+}
+
+function KPI({ label, value, sub, badge, mono, valueClass }: { label: string; value: string; sub?: string; badge?: React.ReactNode; mono?: boolean; valueClass?: string }) {
+  return (
+    <div className="panel p-4">
+      <div className="flex items-center justify-between">
+        <div className="text-[11px] font-semibold text-ink-500 uppercase tracking-wider">{label}</div>
+        {badge}
+      </div>
+      <div className={`text-[22px] font-bold ${valueClass ?? "text-ink-900"} mt-2 ${mono ? "tabular" : ""}`} style={{ letterSpacing: "-0.02em" }}>
+        {value}
+      </div>
+      {sub && <div className="text-[11px] text-ink-400 mt-1 tabular">{sub}</div>}
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="px-5 py-4">
+      <div className="text-[11px] font-semibold text-ink-500 uppercase tracking-wider">{label}</div>
+      <div className="text-[20px] font-bold text-ink-900 mt-1 tabular">{value}</div>
+    </div>
+  );
+}
+
+function ScopeBadge({ scope }: { scope: string }) {
+  if (scope === "COMPANY") return <span className="chip-brand">전사</span>;
+  if (scope === "TEAM") return <span className="chip-blue">팀</span>;
+  return <span className="chip-gray">개인</span>;
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import PageHeader from "../components/PageHeader";
+import DateTimePicker from "../components/DateTimePicker";
 
 type Journal = {
   id: string;
@@ -84,7 +85,7 @@ export default function JournalPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">날짜</label>
-                  <input type="date" className="input" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />
+                  <DateTimePicker mode="date" value={form.date} onChange={(v) => setForm({ ...form, date: v })} />
                 </div>
                 <div>
                   <label className="label">제목</label>
