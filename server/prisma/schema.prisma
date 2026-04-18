@@ -186,6 +186,8 @@ model ChatMessage {
   editedAt    DateTime?
   deletedAt   DateTime?
   scheduledAt DateTime?
+  pinnedAt    DateTime?
+  pinnedById  String?
   createdAt   DateTime  @default(now())
   room        ChatRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
   sender      User      @relation("Sender", fields: [senderId], references: [id], onDelete: Cascade)

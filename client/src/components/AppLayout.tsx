@@ -67,7 +67,7 @@ function AppLayoutInner() {
             }}
           />
         )}
-        <div className="h-[56px] px-5 flex items-center border-b border-ink-150">
+        <div className="h-[48px] px-5 flex items-center border-b border-ink-150">
           <Logo size={20} />
         </div>
 
@@ -124,10 +124,9 @@ function AppLayoutInner() {
       </aside>
 
       <div className="flex-1 min-w-0 flex flex-col">
-        {/* 창모드의 상단 여백을 TopBar 배경과 통합해 자연스럽게 — 색 동일 */}
         {showTitlebarSpace && (
           <div
-            className="bg-white border-b border-ink-150"
+            className="bg-white"
             style={{
               height: 28,
               // @ts-expect-error drag region
@@ -135,7 +134,7 @@ function AppLayoutInner() {
             }}
           />
         )}
-        <TopBar />
+        <TopBar draggable={showTitlebarSpace} />
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-[1400px] mx-auto px-8 py-6">
             <Outlet />
@@ -203,7 +202,7 @@ const BREADCRUMB: Record<string, string> = {
   "/profile": "내 프로필",
 };
 
-function TopBar() {
+function TopBar({ draggable = false }: { draggable?: boolean }) {
   const loc = useLocation();
   const label = BREADCRUMB[loc.pathname] ?? "";
   const [searchOpen, setSearchOpen] = useState(false);
@@ -222,13 +221,19 @@ function TopBar() {
 
   return (
     <>
-      <header className="h-[56px] flex items-center justify-between px-6 border-b border-ink-150 bg-white">
+      <header
+        className="h-[48px] flex items-center justify-between px-6 border-b border-ink-150 bg-white"
+        style={draggable ? ({ WebkitAppRegion: "drag" } as React.CSSProperties) : undefined}
+      >
         <div className="flex items-center gap-2 text-[13px]">
           <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--c-brand)" }} />
           <span className="text-ink-900 font-bold">{label || "HiNest"}</span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div
+          className="flex items-center gap-2"
+          style={draggable ? ({ WebkitAppRegion: "no-drag" } as React.CSSProperties) : undefined}
+        >
           <button
             onClick={() => setSearchOpen(true)}
             className="hidden md:flex items-center gap-2 h-[34px] px-4 rounded-full bg-ink-50 border border-ink-150 text-ink-500 text-[12px] hover:bg-ink-100 hover:border-ink-200 min-w-[260px]"
