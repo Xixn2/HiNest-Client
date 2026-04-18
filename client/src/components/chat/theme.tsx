@@ -83,6 +83,41 @@ export function formatClock(d: Date): string {
   return `${period} ${hh}:${mm}`;
 }
 
+/**
+ * 간결 상대 시각 — "방금 / N분 전 / N시간 전 / M/D (하루 이상)".
+ * 채팅 마지막 메시지 옆에 붙일 때 사용.
+ */
+export function formatShort(d: Date): string {
+  const diff = Date.now() - d.getTime();
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return "방금";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}분 전`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}시간 전`;
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+/**
+ * 상세 시각 — 같은 해/같은 날 기준으로 축약:
+ *  - 오늘: "오늘 오후 3:24"
+ *  - 어제: "어제 오후 3:24"
+ *  - 같은 해: "4월 18일 오후 3:24"
+ *  - 다른 해: "2024년 4월 18일 오후 3:24"
+ */
+export function formatDetailed(d: Date): string {
+  const now = new Date();
+  const sameYear = d.getFullYear() === now.getFullYear();
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const dayDiff = Math.round((startOf(now) - startOf(d)) / 86400000);
+
+  const clock = formatClock(d);
+  if (dayDiff === 0) return `오늘 ${clock}`;
+  if (dayDiff === 1) return `어제 ${clock}`;
+  if (sameYear) return `${d.getMonth() + 1}월 ${d.getDate()}일 ${clock}`;
+  return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 ${clock}`;
+}
+
 /** 이름 첫 글자 기반 원형 아바타 */
 export function Avatar({
   name,

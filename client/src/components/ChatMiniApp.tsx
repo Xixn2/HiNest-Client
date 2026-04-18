@@ -7,8 +7,9 @@ import {
   FONT,
   Avatar,
   formatBytes,
-  formatClock,
+  formatDetailed,
   formatRelative,
+  formatShort,
   loadAllRoomSettings,
   previewForMessage,
   roomColor,
@@ -1109,6 +1110,13 @@ function RoomView({
   const prevCountRef = useRef(0);
   const stuckToBottomRef = useRef(true);
 
+  // 마지막 메시지의 상대 시각을 분 단위로 갱신 (방금 → 1분 전 …)
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+
   // 방이 바뀌면 다시 준비 상태로 돌려서 첫 페인트 전에 최하단으로 점프
   useEffect(() => {
     setReady(false);
@@ -1265,7 +1273,7 @@ function RoomView({
                     </div>
                   )}
 
-                  {/* 마지막 메시지 — 보낸 시각 표시 */}
+                  {/* 마지막 메시지 — 간결 상대 시각 */}
                   {m.isLast && (
                     <div
                       style={{
@@ -1276,17 +1284,17 @@ function RoomView({
                         textAlign: mine ? "right" : "left",
                       }}
                     >
-                      {formatClock(new Date(m.createdAt))}
+                      {formatShort(new Date(m.createdAt))}
                     </div>
                   )}
 
-                  {/* 컨텍스트 메뉴: 이모지 + 액션 */}
+                  {/* 컨텍스트 메뉴: 이모지 + 액션 — 헤더는 상세 시각 */}
                   {isPicking && (
                     <ReactionPicker
                       mine={mine}
                       onPick={(e) => { onReact(m.id, e); setReactingId(null); }}
                       onDismiss={() => setReactingId(null)}
-                      header={formatClock(new Date(m.createdAt))}
+                      header={formatDetailed(new Date(m.createdAt))}
                       actions={buildMessageActions(m, onPin)}
                     />
                   )}
