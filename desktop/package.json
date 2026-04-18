@@ -1,0 +1,77 @@
+{
+  "name": "hinest-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HiNest Desktop (Electron wrapper)",
+  "main": "dist/main.js",
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "tsc -p tsconfig.json",
+    "dev": "npm run build && cross-env HINEST_DEV=1 electron .",
+    "start": "npm run build && electron .",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win"
+  },
+  "devDependencies": {
+    "@types/node": "^22.8.4",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.6.3"
+  },
+  "build": {
+    "appId": "com.hivits.hinest",
+    "productName": "HiNest",
+    "afterPack": "build/afterPack.js",
+    "asar": true,
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "category": "public.app-category.business",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["arm64"]
+        }
+      ],
+      "icon": "assets/icon.icns",
+      "identity": "jiwan seo (3NVCLTSP9V)",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
+      "extendInfo": {
+        "NSCameraUsageDescription": "Face ID·영상 통화 기능에 사용됩니다.",
+        "NSMicrophoneUsageDescription": "영상·음성 통화에 사용됩니다.",
+        "NSAppleEventsUsageDescription": "시스템 자동화를 위해 필요합니다.",
+        "com.apple.developer.authentication-services.autofill-credential-provider": true
+      }
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "protocols": [
+      {
+        "name": "HiNest",
+        "schemes": ["hinest"]
+      }
+    ]
+  }
+}
