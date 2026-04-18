@@ -9,7 +9,6 @@ import {
   formatBytes,
   formatDetailed,
   formatRelative,
-  formatShort,
   loadAllRoomSettings,
   previewForMessage,
   roomColor,
@@ -1284,7 +1283,7 @@ function RoomView({
                         textAlign: mine ? "right" : "left",
                       }}
                     >
-                      {formatShort(new Date(m.createdAt))}
+                      {formatRelative(new Date(m.createdAt))}
                     </div>
                   )}
 
