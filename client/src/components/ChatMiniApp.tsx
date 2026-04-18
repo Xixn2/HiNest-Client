@@ -22,11 +22,13 @@ import type {
   RoomLocalSetting,
 } from "./chat/types";
 import {
+  ActionIcons,
   AttachmentPreview,
   LongPress,
   MessageBubble,
   ReactionPicker,
   groupReactions,
+  type MessageAction,
 } from "./chat/MessageBubble";
 
 /**
@@ -228,6 +230,21 @@ export default function ChatMiniApp({
     }
   }
 
+  async function pinMessage(messageId: string) {
+    // 낙관적: 현재 pinnedAt 상태를 토글
+    setMessages((prev) => prev.map((m) =>
+      m.id === messageId
+        ? { ...m, pinnedAt: m.pinnedAt ? null : new Date().toISOString() }
+        : m
+    ));
+    try {
+      await api(`/api/chat/messages/${messageId}/pin`, { method: "POST" });
+      if (activeId) loadMessages(activeId);
+    } catch {
+      if (activeId) loadMessages(activeId);
+    }
+  }
+
   async function send() {
     if (!activeId || sending) return;
     const content = input.trim();
@@ -342,6 +359,7 @@ export default function ChatMiniApp({
           onPickFile={pickAndUpload}
           onClearAttachment={() => setAttachment(null)}
           onReact={reactToMessage}
+          onPin={pinMessage}
         />
       ) : (
         <ListView
@@ -1026,10 +1044,55 @@ function SettingsView({
   );
 }
 
+/* 메시지 컨텍스트 메뉴 액션 빌드 — 복사 / 다운로드(파일) / 고정(토글) */
+function buildMessageActions(m: Message, onPin: (id: string) => void): MessageAction[] {
+  const actions: MessageAction[] = [];
+
+  // 복사 — 텍스트는 본문, 파일은 파일명을 복사(없으면 본문)
+  actions.push({
+    key: "copy",
+    label: "복사",
+    icon: ActionIcons.copy,
+    onSelect: () => {
+      const text = m.kind === "TEXT" ? (m.content || "") : (m.fileName || m.content || "");
+      if (!text) return;
+      navigator.clipboard?.writeText(text).catch(() => {});
+    },
+  });
+
+  // 다운로드 — 파일 종류인 경우만
+  if (m.kind !== "TEXT" && m.fileUrl) {
+    actions.push({
+      key: "download",
+      label: "다운로드",
+      icon: ActionIcons.download,
+      onSelect: () => {
+        const a = document.createElement("a");
+        a.href = m.fileUrl!;
+        a.download = m.fileName || "";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      },
+    });
+  }
+
+  // 고정 / 고정 해제
+  const isPinned = !!m.pinnedAt;
+  actions.push({
+    key: "pin",
+    label: isPinned ? "고정 해제" : "고정",
+    icon: isPinned ? ActionIcons.unpin : ActionIcons.pin,
+    onSelect: () => onPin(m.id),
+  });
+
+  return actions;
+}
+
 /* ======================= 대화방 ======================= */
 function RoomView({
   room, messages, meId, onBack, input, setInput, onSend, sending, scrollRef,
-  attachment, uploading, onPickFile, onClearAttachment, onReact,
+  attachment, uploading, onPickFile, onClearAttachment, onReact, onPin,
 }: {
   room: Room; messages: Message[]; meId: string; onBack: () => void;
   input: string; setInput: (v: string) => void; onSend: () => void; sending: boolean;
@@ -1037,6 +1100,7 @@ function RoomView({
   attachment: Attachment | null; uploading: boolean;
   onPickFile: (file: File) => void; onClearAttachment: () => void;
   onReact: (messageId: string, emoji: string) => void;
+  onPin: (messageId: string) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [reactingId, setReactingId] = useState<string | null>(null);
@@ -1100,8 +1164,26 @@ function RoomView({
         }}
       >
         {messages.length === 0 && (
-          <div style={{ padding: "72px 0", textAlign: "center", color: C.gray500, fontSize: 14, fontWeight: 500 }}>
-            첫 메시지를 보내보세요
+          <div style={{ height: "100%", display: "grid", placeItems: "center" }}>
+            <div style={{ textAlign: "center" }}>
+              <div
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 999,
+                  background: C.gray100,
+                  display: "grid",
+                  placeItems: "center",
+                  margin: "0 auto 10px",
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8E959E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 5h16v11H9l-4 4z" />
+                </svg>
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>아직 메시지가 없어요</div>
+              <div style={{ fontSize: 12, color: C.gray500, marginTop: 4 }}>첫 메시지를 남겨보세요.</div>
+            </div>
           </div>
         )}
         {rendered.map((m) => {
@@ -1181,12 +1263,13 @@ function RoomView({
                     </div>
                   )}
 
-                  {/* 이모지 픽커 */}
+                  {/* 컨텍스트 메뉴: 이모지 + 액션 */}
                   {isPicking && (
                     <ReactionPicker
                       mine={mine}
                       onPick={(e) => { onReact(m.id, e); setReactingId(null); }}
                       onDismiss={() => setReactingId(null)}
+                      actions={buildMessageActions(m, onPin)}
                     />
                   )}
                 </div>

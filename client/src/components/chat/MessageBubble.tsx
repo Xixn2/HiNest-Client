@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { C, FONT, formatBytes } from "./theme";
 import type { Attachment, Message, Reaction } from "./types";
 
@@ -75,16 +75,27 @@ export function LongPress({
   );
 }
 
-/* ===== 이모지 픽커 팝오버 ===== */
+/* ===== 메시지 컨텍스트 메뉴(이모지 + 액션) ===== */
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+
+export type MessageAction = {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+  danger?: boolean;
+  onSelect: () => void;
+};
+
 export function ReactionPicker({
   mine,
   onPick,
   onDismiss,
+  actions = [],
 }: {
   mine: boolean;
   onPick: (emoji: string) => void;
   onDismiss: () => void;
+  actions?: MessageAction[];
 }) {
   // 버블 위에 띄움. 바깥 클릭 시 닫기.
   useEffect(() => {
@@ -99,23 +110,43 @@ export function ReactionPicker({
     };
   }, [onDismiss]);
 
+  // 긴 버블일 때 위쪽으로 띄우면 스크롤 컨테이너/뷰포트에서 잘리므로
+  // 렌더 직후 측정 → 잘리면 버블 하단으로 뒤집음.
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [flip, setFlip] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    // 가장 가까운 스크롤 가능한 조상 찾기
+    let p: HTMLElement | null = el.parentElement;
+    let limitTop = 0;
+    while (p) {
+      const style = window.getComputedStyle(p);
+      if (/(auto|scroll)/.test(style.overflowY)) {
+        limitTop = p.getBoundingClientRect().top;
+        break;
+      }
+      p = p.parentElement;
+    }
+    if (r.top < limitTop + 4) setFlip(true);
+  }, []);
+
   return (
     <div
+      ref={ref}
       onMouseDown={(e) => e.stopPropagation()}
       style={{
         position: "absolute",
-        bottom: "calc(100% + 6px)",
+        ...(flip
+          ? { top: "calc(100% + 6px)" }
+          : { bottom: "calc(100% + 6px)" }),
         [mine ? "right" : "left"]: 0,
         zIndex: 10,
-        background: "#fff",
-        border: `1px solid ${C.gray200}`,
-        borderRadius: 999,
-        padding: "4px 6px",
         display: "flex",
-        alignItems: "center",
-        gap: 2,
-        boxShadow:
-          "0 8px 24px rgba(25, 31, 40, .14), 0 2px 6px rgba(25, 31, 40, .06)",
+        flexDirection: "column",
+        alignItems: mine ? "flex-end" : "flex-start",
+        gap: 8,
         animation: "hinest-pop .14s cubic-bezier(.22,.61,.36,1)",
       } as React.CSSProperties}
     >
@@ -123,39 +154,131 @@ export function ReactionPicker({
         from { transform: scale(.85) translateY(4px); opacity: 0; }
         to   { transform: scale(1) translateY(0); opacity: 1; }
       }`}</style>
-      {QUICK_EMOJIS.map((e) => (
-        <button
-          key={e}
-          type="button"
-          onClick={() => onPick(e)}
+
+      {/* 이모지 행 */}
+      <div
+        style={{
+          background: "#fff",
+          border: `1px solid ${C.gray200}`,
+          borderRadius: 999,
+          padding: "4px 6px",
+          display: "flex",
+          alignItems: "center",
+          gap: 2,
+          boxShadow:
+            "0 8px 24px rgba(25, 31, 40, .14), 0 2px 6px rgba(25, 31, 40, .06)",
+        }}
+      >
+        {QUICK_EMOJIS.map((e) => (
+          <button
+            key={e}
+            type="button"
+            onClick={() => onPick(e)}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 999,
+              background: "transparent",
+              border: 0,
+              cursor: "pointer",
+              fontSize: 18,
+              lineHeight: 1,
+              display: "grid",
+              placeItems: "center",
+              transition: "background .12s ease, transform .12s ease",
+            }}
+            onMouseEnter={(ev) => {
+              ev.currentTarget.style.background = C.gray100;
+              ev.currentTarget.style.transform = "scale(1.15)";
+            }}
+            onMouseLeave={(ev) => {
+              ev.currentTarget.style.background = "transparent";
+              ev.currentTarget.style.transform = "scale(1)";
+            }}
+          >
+            {e}
+          </button>
+        ))}
+      </div>
+
+      {/* 액션 메뉴 */}
+      {actions.length > 0 && (
+        <div
           style={{
-            width: 32,
-            height: 32,
-            borderRadius: 999,
-            background: "transparent",
-            border: 0,
-            cursor: "pointer",
-            fontSize: 18,
-            lineHeight: 1,
-            display: "grid",
-            placeItems: "center",
-            transition: "background .12s ease, transform .12s ease",
-          }}
-          onMouseEnter={(ev) => {
-            ev.currentTarget.style.background = C.gray100;
-            ev.currentTarget.style.transform = "scale(1.15)";
-          }}
-          onMouseLeave={(ev) => {
-            ev.currentTarget.style.background = "transparent";
-            ev.currentTarget.style.transform = "scale(1)";
+            background: "#fff",
+            border: `1px solid ${C.gray200}`,
+            borderRadius: 14,
+            minWidth: 200,
+            padding: 4,
+            boxShadow:
+              "0 10px 28px rgba(25, 31, 40, .16), 0 2px 6px rgba(25, 31, 40, .06)",
+            overflow: "hidden",
           }}
         >
-          {e}
-        </button>
-      ))}
+          {actions.map((a, i) => (
+            <button
+              key={a.key}
+              type="button"
+              onClick={() => {
+                a.onSelect();
+                onDismiss();
+              }}
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "10px 12px",
+                background: "transparent",
+                border: 0,
+                borderTop: i === 0 ? "none" : `1px solid ${C.gray100}`,
+                cursor: "pointer",
+                fontSize: 14,
+                fontWeight: 600,
+                fontFamily: FONT,
+                color: a.danger ? "#F04452" : C.ink,
+                textAlign: "left",
+                transition: "background .12s ease",
+              }}
+              onMouseEnter={(ev) => {
+                ev.currentTarget.style.background = C.gray100;
+              }}
+              onMouseLeave={(ev) => {
+                ev.currentTarget.style.background = "transparent";
+              }}
+            >
+              <span
+                style={{
+                  width: 18,
+                  height: 18,
+                  display: "grid",
+                  placeItems: "center",
+                  color: a.danger ? "#F04452" : C.gray600,
+                }}
+              >
+                {a.icon}
+              </span>
+              <span>{a.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
+
+/* 액션 아이콘 (stroke-current) */
+const ICON_SVG = (d: React.ReactNode) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    {d}
+  </svg>
+);
+export const ActionIcons = {
+  copy: ICON_SVG(<><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></>),
+  download: ICON_SVG(<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></>),
+  pin: ICON_SVG(<><path d="M12 17v5" /><path d="M5 2h14l-2 7 3 5H4l3-5-2-7z" /></>),
+  unpin: ICON_SVG(<><path d="M3 3l18 18" /><path d="M12 17v5" /><path d="M5 2h14l-2 7 3 5h-5" /></>),
+};
 
 /** 같은 이모지끼리 그룹핑 + 카운트 + 누구 단건지 이름 배열 */
 export function groupReactions(list: Reaction[]) {
