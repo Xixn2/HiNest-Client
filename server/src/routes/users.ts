@@ -5,10 +5,14 @@ import { requireAuth } from "../lib/auth.js";
 const router = Router();
 router.use(requireAuth);
 
-// 팀원 목록 (일반 유저도 볼 수 있음)
-router.get("/", async (_req, res) => {
+// 팀원 목록 (일반 유저도 볼 수 있음) — 총관리자는 자신 외엔 보이지 않음
+router.get("/", async (req, res) => {
+  const u = (req as any).user;
   const users = await prisma.user.findMany({
-    where: { active: true },
+    where: {
+      active: true,
+      OR: [{ superAdmin: false }, { id: u.id }],
+    },
     orderBy: { name: "asc" },
     select: {
       id: true,

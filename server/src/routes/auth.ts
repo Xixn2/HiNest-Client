@@ -2,12 +2,24 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "../lib/db.js";
-import { signToken, setAuthCookie, clearAuthCookie, writeLog } from "../lib/auth.js";
+import {
+  signToken,
+  setAuthCookie,
+  clearAuthCookie,
+  writeLog,
+  requireAuth,
+  signSuper,
+  setSuperCookie,
+  clearSuperCookie,
+  verifySuperToken,
+  SUPER_TTL_SEC,
+  requireSuperAdminStepUp,
+} from "../lib/auth.js";
 
 const router = Router();
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  email: z.string().min(1), // 이메일 형식 또는 사내 ID 모두 허용
   password: z.string().min(1),
 });
 
@@ -34,6 +46,7 @@ router.post("/login", async (req, res) => {
       team: user.team,
       position: user.position,
       avatarColor: user.avatarColor,
+      superAdmin: user.superAdmin,
     },
   });
 });
@@ -90,13 +103,132 @@ router.post("/signup", async (req, res) => {
       team: user.team,
       position: user.position,
       avatarColor: user.avatarColor,
+      superAdmin: user.superAdmin,
     },
   });
 });
 
 router.post("/logout", async (req, res) => {
   clearAuthCookie(res);
+  clearSuperCookie(res);
   res.json({ ok: true });
+});
+
+/* ===== 총관리자 step-up (비밀번호 재확인) ===== */
+router.post("/step-up", requireAuth, async (req, res) => {
+  const u = (req as any).user;
+  const user = await prisma.user.findUnique({ where: { id: u.id } });
+  if (!user || !user.superAdmin) return res.status(403).json({ error: "forbidden" });
+  const password = String(req.body?.password ?? "");
+  if (!password) return res.status(400).json({ error: "비밀번호를 입력해주세요" });
+
+  // 총관리자는 반드시 별도의 super 비밀번호가 설정되어 있어야 함 — 일반 비밀번호 fallback 금지
+  if (!user.superPasswordHash) {
+    await writeLog(user.id, "SUPER_STEPUP_FAIL", undefined, "no_super_password_set", req.ip);
+    return res.status(403).json({ error: "총관리자 전용 비밀번호가 설정되어있지 않아요. 서버 관리자에게 문의하세요." });
+  }
+  const ok = await bcrypt.compare(password, user.superPasswordHash);
+  if (!ok) {
+    await writeLog(user.id, "SUPER_STEPUP_FAIL", undefined, undefined, req.ip);
+    return res.status(401).json({ error: "비밀번호가 일치하지 않습니다" });
+  }
+
+  const token = signSuper(user.id);
+  setSuperCookie(res, token);
+  await writeLog(user.id, "SUPER_STEPUP_OK", undefined, `ttl=${SUPER_TTL_SEC}s`, req.ip);
+  res.json({ ok: true, expiresAt: Date.now() + SUPER_TTL_SEC * 1000 });
+});
+
+/**
+ * ===== 데스크톱 앱 전용 생체 인증 =====
+ * Electron Chromium 이 macOS Touch ID 를 WebAuthn 플랫폼 인증기로 노출하지 못해서,
+ * main 프로세스가 직접 systemPreferences.promptTouchID 로 OS 프롬프트를 띄우는 별도 경로.
+ *
+ * 등록 플로우:
+ *   1. 총관리자가 비번으로 1차 step-up (기존 /auth/step-up)
+ *   2. step-up 상태에서 /auth/desktop-biometric/enroll 로 현재 기기의 deviceId 등록
+ * 잠금 해제:
+ *   3. 다음부터는 OS Touch ID 통과 + (userId, deviceId) 가 등록되어 있으면 super cookie 발급
+ *
+ * deviceId 는 Electron userData 폴더에 저장된 랜덤 UUID (main 프로세스가 생성).
+ * 사용자가 직접 수정할 수 없고 앱 재설치 시 재생성됨.
+ */
+router.get("/desktop-biometric", requireAuth, async (req, res) => {
+  const u = (req as any).user;
+  const list = await prisma.desktopBiometric.findMany({
+    where: { userId: u.id },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, deviceId: true, deviceName: true, createdAt: true, lastUsedAt: true },
+  });
+  res.json({ devices: list });
+});
+
+router.post("/desktop-biometric/enroll", requireAuth, requireSuperAdminStepUp, async (req, res) => {
+  const u = (req as any).user;
+  const isDesktop = req.get("x-hinest-desktop") === "1";
+  if (!isDesktop) return res.status(400).json({ error: "데스크톱 앱에서만 등록할 수 있어요" });
+
+  const deviceId = String(req.body?.deviceId ?? "").trim();
+  const deviceName = String(req.body?.deviceName ?? "").trim() || null;
+  if (!deviceId || deviceId.length < 8) return res.status(400).json({ error: "invalid deviceId" });
+
+  const row = await prisma.desktopBiometric.upsert({
+    where: { userId_deviceId: { userId: u.id, deviceId } },
+    create: { userId: u.id, deviceId, deviceName },
+    update: { deviceName: deviceName ?? undefined },
+  });
+  await writeLog(u.id, "DESKTOP_BIO_ENROLL", row.id.slice(0, 8), deviceName ?? undefined, req.ip);
+  res.json({ ok: true, id: row.id });
+});
+
+router.delete("/desktop-biometric/:id", requireAuth, async (req, res) => {
+  const u = (req as any).user;
+  const row = await prisma.desktopBiometric.findUnique({ where: { id: req.params.id } });
+  if (!row || row.userId !== u.id) return res.status(404).json({ error: "not found" });
+  await prisma.desktopBiometric.delete({ where: { id: row.id } });
+  await writeLog(u.id, "DESKTOP_BIO_REMOVE", row.id.slice(0, 8), row.deviceName ?? undefined, req.ip);
+  res.json({ ok: true });
+});
+
+router.post("/desktop-biometric/stepup", requireAuth, async (req, res) => {
+  const u = (req as any).user;
+  const isDesktop = req.get("x-hinest-desktop") === "1";
+  if (!isDesktop) return res.status(400).json({ error: "데스크톱 앱에서만 사용할 수 있어요" });
+
+  const user = await prisma.user.findUnique({ where: { id: u.id } });
+  if (!user || !user.superAdmin) return res.status(403).json({ error: "forbidden" });
+
+  const deviceId = String(req.body?.deviceId ?? "").trim();
+  if (!deviceId) return res.status(400).json({ error: "invalid deviceId" });
+
+  const row = await prisma.desktopBiometric.findUnique({
+    where: { userId_deviceId: { userId: u.id, deviceId } },
+  });
+  if (!row) {
+    await writeLog(user.id, "SUPER_STEPUP_FAIL_DESKTOP_BIO", deviceId.slice(0, 8), "not_enrolled", req.ip);
+    return res.status(403).json({ error: "이 기기는 Touch ID 등록이 되어있지 않아요", code: "NOT_ENROLLED" });
+  }
+
+  await prisma.desktopBiometric.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } });
+  const token = signSuper(user.id);
+  setSuperCookie(res, token);
+  await writeLog(user.id, "SUPER_STEPUP_OK_DESKTOP_BIO", row.id.slice(0, 8), row.deviceName ?? undefined, req.ip);
+  res.json({ ok: true, expiresAt: Date.now() + SUPER_TTL_SEC * 1000 });
+});
+
+router.post("/step-down", requireAuth, async (req, res) => {
+  const u = (req as any).user;
+  clearSuperCookie(res);
+  await writeLog(u.id, "SUPER_STEPDOWN", undefined, undefined, req.ip);
+  res.json({ ok: true });
+});
+
+router.get("/super-session", requireAuth, async (req, res) => {
+  const u = (req as any).user;
+  if (!u.superAdmin) return res.json({ active: false });
+  const v = verifySuperToken(req, u.id);
+  if (!v) return res.json({ active: false });
+  res.json({ active: true, expiresAt: v.exp });
 });
 
 export default router;

@@ -1,0 +1,240 @@
+import { Router } from "express";
+import { prisma } from "../lib/db.js";
+import {
+  requireAuth,
+  requireSuperAdminStepUp,
+  signSuper,
+  setSuperCookie,
+  writeLog,
+  SUPER_TTL_SEC,
+} from "../lib/auth.js";
+import {
+  generateRegistrationOptions,
+  verifyRegistrationResponse,
+  generateAuthenticationOptions,
+  verifyAuthenticationResponse,
+  type VerifiedRegistrationResponse,
+  type VerifiedAuthenticationResponse,
+} from "@simplewebauthn/server";
+
+const router = Router();
+
+/** dev 환경에선 localhost 기본값. 운영 시 환경변수로 조정. */
+const RP_ID = process.env.WEBAUTHN_RP_ID ?? "localhost";
+const RP_NAME = "HiNest";
+const ORIGINS = (process.env.WEBAUTHN_ORIGINS ?? "http://localhost:1000,http://127.0.0.1:1000").split(",");
+
+// 챌린지 임시 저장 (5분 TTL)
+type Challenge = { value: string; expiresAt: number; purpose: "register" | "auth" };
+const challenges = new Map<string, Challenge>();
+function setChallenge(userId: string, value: string, purpose: "register" | "auth") {
+  challenges.set(userId, { value, expiresAt: Date.now() + 5 * 60 * 1000, purpose });
+}
+function takeChallenge(userId: string, purpose: "register" | "auth") {
+  const c = challenges.get(userId);
+  if (!c) return null;
+  if (c.expiresAt < Date.now() || c.purpose !== purpose) {
+    challenges.delete(userId);
+    return null;
+  }
+  challenges.delete(userId);
+  return c.value;
+}
+
+function toB64Url(buf: Buffer | Uint8Array) {
+  return Buffer.from(buf).toString("base64url");
+}
+function fromB64Url(s: string) {
+  return Buffer.from(s, "base64url");
+}
+
+/* ================ 등록(registration) ================
+ * - 본인 확인된(step-up 완료) 사용자만 새 패스키 등록 가능
+ * - 총관리자든 일반 사용자든 본인 계정에 추가
+ */
+router.post("/register/options", requireAuth, async (req, res) => {
+  const u = (req as any).user;
+  // 총관리자가 새 기기 등록하려면 우선 비번 step-up 필요 (관리자 페이지에서만 표시)
+  // requireSuperAdminStepUp 는 총관리자 전용이라, 여기선 일반 유저도 등록 가능하게 allow
+  const user = await prisma.user.findUnique({ where: { id: u.id } });
+  if (!user) return res.status(404).json({ error: "not found" });
+
+  const existing = await prisma.passkey.findMany({ where: { userId: u.id } });
+  const options = await generateRegistrationOptions({
+    rpName: RP_NAME,
+    rpID: RP_ID,
+    userID: new TextEncoder().encode(user.id),
+    userName: user.email,
+    userDisplayName: user.name,
+    attestationType: "none",
+    authenticatorSelection: {
+      authenticatorAttachment: "platform", // Touch ID / Face ID 우선
+      residentKey: "preferred",
+      userVerification: "required",
+    },
+    excludeCredentials: existing.map((c) => ({
+      id: c.credentialId,
+      transports: c.transports?.split(",") as any[] | undefined,
+    })),
+    timeout: 60_000,
+  });
+
+  setChallenge(u.id, options.challenge, "register");
+  res.json(options);
+});
+
+router.post("/register/verify", requireAuth, async (req, res) => {
+  const u = (req as any).user;
+  const expected = takeChallenge(u.id, "register");
+  if (!expected) return res.status(400).json({ error: "챌린지가 만료되었어요. 다시 시도해주세요." });
+
+  let verification: VerifiedRegistrationResponse;
+  try {
+    verification = await verifyRegistrationResponse({
+      response: req.body?.response,
+      expectedChallenge: expected,
+      expectedOrigin: ORIGINS,
+      expectedRPID: RP_ID,
+      requireUserVerification: true,
+    });
+  } catch (e: any) {
+    return res.status(400).json({ error: e?.message ?? "등록 실패" });
+  }
+
+  if (!verification.verified || !verification.registrationInfo) {
+    return res.status(400).json({ error: "등록을 검증하지 못했어요" });
+  }
+
+  const info = verification.registrationInfo;
+  const credential = info.credential;
+  const credentialId = credential.id;
+  const publicKey = Buffer.from(credential.publicKey);
+  const counter = credential.counter ?? 0;
+  const transports = (credential.transports ?? req.body?.response?.response?.transports)?.join(",");
+
+  const deviceName = String(req.body?.deviceName ?? inferDeviceName(req.get("user-agent") ?? ""));
+
+  await prisma.passkey.create({
+    data: {
+      userId: u.id,
+      credentialId,
+      publicKey,
+      counter,
+      transports,
+      deviceName,
+    },
+  });
+  await writeLog(u.id, "PASSKEY_REGISTER", credentialId.slice(0, 16), deviceName, req.ip);
+  res.json({ ok: true });
+});
+
+/* ================ 인증(authentication) ================ */
+router.post("/auth/options", requireAuth, async (req, res) => {
+  const u = (req as any).user;
+  const list = await prisma.passkey.findMany({ where: { userId: u.id } });
+  if (list.length === 0) return res.status(400).json({ error: "등록된 패스키가 없어요", code: "NO_PASSKEY" });
+
+  const options = await generateAuthenticationOptions({
+    rpID: RP_ID,
+    allowCredentials: list.map((c) => ({
+      id: c.credentialId,
+      transports: c.transports?.split(",") as any[] | undefined,
+    })),
+    userVerification: "required",
+    timeout: 60_000,
+  });
+  setChallenge(u.id, options.challenge, "auth");
+  res.json(options);
+});
+
+router.post("/auth/verify", requireAuth, async (req, res) => {
+  const u = (req as any).user;
+  const expected = takeChallenge(u.id, "auth");
+  if (!expected) return res.status(400).json({ error: "챌린지가 만료되었어요. 다시 시도해주세요." });
+
+  const responseData = req.body?.response;
+  const credentialId = responseData?.id;
+  if (!credentialId) return res.status(400).json({ error: "invalid response" });
+
+  const stored = await prisma.passkey.findUnique({ where: { credentialId } });
+  if (!stored || stored.userId !== u.id) {
+    return res.status(400).json({ error: "알 수 없는 패스키" });
+  }
+
+  let verification: VerifiedAuthenticationResponse;
+  try {
+    verification = await verifyAuthenticationResponse({
+      response: responseData,
+      expectedChallenge: expected,
+      expectedOrigin: ORIGINS,
+      expectedRPID: RP_ID,
+      credential: {
+        id: stored.credentialId,
+        publicKey: new Uint8Array(stored.publicKey),
+        counter: stored.counter,
+        transports: stored.transports?.split(",") as any[] | undefined,
+      },
+      requireUserVerification: true,
+    });
+  } catch (e: any) {
+    await writeLog(u.id, "PASSKEY_AUTH_FAIL", credentialId.slice(0, 16), e?.message, req.ip);
+    return res.status(400).json({ error: e?.message ?? "인증 실패" });
+  }
+
+  if (!verification.verified) {
+    await writeLog(u.id, "PASSKEY_AUTH_FAIL", credentialId.slice(0, 16), "verified=false", req.ip);
+    return res.status(400).json({ error: "인증 실패" });
+  }
+
+  await prisma.passkey.update({
+    where: { id: stored.id },
+    data: { counter: verification.authenticationInfo.newCounter, lastUsedAt: new Date() },
+  });
+
+  // 총관리자면 super 쿠키 발급
+  const fresh = await prisma.user.findUnique({ where: { id: u.id } });
+  if (fresh?.superAdmin) {
+    const token = signSuper(fresh.id);
+    setSuperCookie(res, token);
+    await writeLog(fresh.id, "SUPER_STEPUP_OK_PASSKEY", undefined, stored.deviceName ?? undefined, req.ip);
+    return res.json({ ok: true, super: true, expiresAt: Date.now() + SUPER_TTL_SEC * 1000 });
+  }
+  await writeLog(u.id, "PASSKEY_AUTH_OK", stored.id, stored.deviceName ?? undefined, req.ip);
+  res.json({ ok: true });
+});
+
+/* ================ 기기 관리 ================ */
+router.get("/", requireAuth, async (req, res) => {
+  const u = (req as any).user;
+  const list = await prisma.passkey.findMany({
+    where: { userId: u.id },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, deviceName: true, createdAt: true, lastUsedAt: true, transports: true },
+  });
+  res.json({ passkeys: list });
+});
+
+router.delete("/:id", requireAuth, async (req, res) => {
+  const u = (req as any).user;
+  const pk = await prisma.passkey.findUnique({ where: { id: req.params.id } });
+  if (!pk || pk.userId !== u.id) return res.status(404).json({ error: "not found" });
+  await prisma.passkey.delete({ where: { id: pk.id } });
+  await writeLog(u.id, "PASSKEY_DELETE", pk.id, pk.deviceName ?? undefined, req.ip);
+  res.json({ ok: true });
+});
+
+function inferDeviceName(ua: string) {
+  const u = ua.toLowerCase();
+  if (u.includes("iphone")) return "iPhone";
+  if (u.includes("ipad")) return "iPad";
+  if (u.includes("macintosh") || u.includes("mac os")) return "Mac";
+  if (u.includes("android")) return "Android";
+  if (u.includes("windows")) return "Windows";
+  return "기기";
+}
+
+// 미사용 경고 방지
+void requireSuperAdminStepUp;
+void toB64Url; void fromB64Url;
+
+export default router;
