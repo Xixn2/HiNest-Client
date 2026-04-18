@@ -63,6 +63,14 @@ export function LongPress({
         firedRef.current = true;
         onLongPress();
       }}
+      // 롱프레스가 발동된 직후 따라오는 click 은 자식(이미지 뷰어 등)으로 내려가지 않게 차단
+      onClickCapture={(e) => {
+        if (firedRef.current) {
+          e.preventDefault();
+          e.stopPropagation();
+          firedRef.current = false;
+        }
+      }}
       style={{
         userSelect: "none",
         WebkitUserSelect: "none",
