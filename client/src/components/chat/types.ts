@@ -34,6 +34,8 @@ export type Message = {
   fileType?: string | null;
   fileSize?: number | null;
   deletedAt?: string | null;
+  pinnedAt?: string | null;
+  pinnedById?: string | null;
   createdAt: string;
   sender: { id: string; name: string; avatarColor?: string };
   reactions?: Reaction[];

@@ -405,6 +405,30 @@ router.patch("/messages/:id", async (req, res) => {
 });
 
 /**
+ * 메시지 고정/해제 토글. 방 멤버 누구나.
+ */
+router.post("/messages/:id/pin", async (req, res) => {
+  const u = (req as any).user;
+  const msg = await prisma.chatMessage.findUnique({ where: { id: req.params.id } });
+  if (!msg) return res.status(404).json({ error: "not found" });
+  const membership = await prisma.roomMember.findUnique({
+    where: { roomId_userId: { roomId: msg.roomId, userId: u.id } },
+  });
+  if (!membership) return res.status(403).json({ error: "방 멤버만 가능" });
+
+  const pin = !msg.pinnedAt;
+  const updated = await prisma.chatMessage.update({
+    where: { id: msg.id },
+    data: {
+      pinnedAt: pin ? new Date() : null,
+      pinnedById: pin ? u.id : null,
+    },
+    include: { sender: { select: { id: true, name: true, avatarColor: true } } },
+  });
+  res.json({ message: updated });
+});
+
+/**
  * 메시지 삭제(소프트). 본인만.
  */
 router.delete("/messages/:id", async (req, res) => {
