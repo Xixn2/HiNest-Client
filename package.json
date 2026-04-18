@@ -4,13 +4,20 @@
   "private": true,
   "description": "HiNest - Internal company management tool",
   "scripts": {
-    "install:all": "npm install && npm --prefix server install && npm --prefix client install",
+    "install:all": "npm install && npm --prefix server install && npm --prefix client install && npm --prefix desktop install",
     "db:setup": "npm --prefix server run db:setup",
     "dev": "concurrently -n server,client -c blue,green \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "dev:desktop": "concurrently -n server,client,desktop -c blue,green,magenta \"npm --prefix server run dev\" \"npm --prefix client run dev\" \"wait-on http://localhost:1000 && npm --prefix desktop run dev\"",
     "build": "npm --prefix client run build && npm --prefix server run build",
+    "desktop:build": "npm --prefix desktop run build",
+    "desktop:pack": "npm --prefix desktop run pack",
+    "desktop:dist": "npm --prefix desktop run dist",
+    "desktop:dist:mac": "npm --prefix desktop run dist:mac",
+    "desktop:dist:win": "npm --prefix desktop run dist:win",
     "start": "npm --prefix server run start"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "wait-on": "^8.0.5"
   }
 }

@@ -1,176 +1,275 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import Logo from "./Logo";
+import NotificationBell from "./NotificationBell";
+import SearchModal from "./SearchModal";
+import ChatFab from "./ChatFab";
+import { NotificationProvider } from "../notifications";
 
-const NAV = [
-  { to: "/", label: "홈", icon: HomeIcon, end: true },
+type NavItem = { to: string; label: string; icon: (p: { active?: boolean }) => JSX.Element; end?: boolean };
+
+const WORK_NAV: NavItem[] = [
+  { to: "/", label: "개요", icon: HomeIcon, end: true },
   { to: "/schedule", label: "일정", icon: CalendarIcon },
   { to: "/attendance", label: "근태·월차", icon: ClockIcon },
   { to: "/journal", label: "업무일지", icon: NoteIcon },
-  { to: "/notice", label: "공지", icon: MegaIcon },
+  { to: "/approvals", label: "전자결재", icon: ApprovalIcon },
+];
+
+const COMM_NAV: NavItem[] = [
+  { to: "/notice", label: "공지사항", icon: MegaIcon },
   { to: "/chat", label: "사내톡", icon: ChatIcon },
+  { to: "/directory", label: "팀원", icon: PeopleIcon },
+  { to: "/org", label: "조직도", icon: OrgIcon },
+];
+
+const RESOURCE_NAV: NavItem[] = [
+  { to: "/documents", label: "문서함", icon: DocsIcon },
   { to: "/expense", label: "법인카드", icon: CardIcon },
 ];
 
 export default function AppLayout() {
+  return (
+    <NotificationProvider>
+      <AppLayoutInner />
+    </NotificationProvider>
+  );
+}
+
+function AppLayoutInner() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
+  const isMacDesktop = !!window.hinest?.isDesktop && window.hinest?.platform === "darwin";
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    if (!isMacDesktop || !window.hinest?.onFullscreenChange) return;
+    const off = window.hinest.onFullscreenChange((fs) => setIsFullscreen(fs));
+    return () => {
+      try { off?.(); } catch {}
+    };
+  }, [isMacDesktop]);
+
+  // 창모드에서만 신호등 버튼 여백 필요, 전체화면에선 숨어있으므로 여백 제거
+  const showTitlebarSpace = isMacDesktop && !isFullscreen;
 
   return (
-    <div className="min-h-screen flex bg-ink-50">
-      <aside className="w-[236px] bg-white border-r border-ink-100 flex flex-col flex-shrink-0">
-        <div className="px-6 py-6">
-          <Logo />
+    <div className="h-screen flex bg-ink-50 overflow-hidden">
+      <aside className="w-[232px] bg-white border-r border-ink-150 flex flex-col flex-shrink-0">
+        {/* 신호등 영역용 드래그 가능 상단바 — 사이드바 배경과 통일 */}
+        {showTitlebarSpace && (
+          <div
+            style={{
+              height: 28,
+              // @ts-expect-error drag region
+              WebkitAppRegion: "drag",
+            }}
+          />
+        )}
+        <div className="h-[56px] px-5 flex items-center border-b border-ink-150">
+          <Logo size={20} />
         </div>
 
-        <nav className="flex-1 px-3 space-y-0.5">
-          {NAV.map((n) => {
-            const Icon = n.icon;
-            return (
-              <NavLink
-                key={n.to}
-                to={n.to}
-                end={n.end}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-3 rounded-xl text-[15px] font-bold transition ${
-                    isActive
-                      ? "bg-brand-50 text-brand-600"
-                      : "text-ink-700 hover:bg-ink-50"
-                  }`
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <Icon active={isActive} />
-                    <span>{n.label}</span>
-                  </>
-                )}
-              </NavLink>
-            );
-          })}
+        <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-5">
+          <NavSection label="워크스페이스" items={WORK_NAV} />
+          <NavSection label="커뮤니케이션" items={COMM_NAV} />
+          <NavSection label="자료·재무" items={RESOURCE_NAV} />
 
           {user?.role === "ADMIN" && (
-            <NavLink
-              to="/admin"
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-3 rounded-xl text-[15px] font-bold transition mt-2 ${
-                  isActive ? "bg-ink-900 text-white" : "text-ink-700 hover:bg-ink-50"
-                }`
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <ShieldIcon active={isActive} />
-                  <span>관리자</span>
-                </>
+            <div>
+              <SectionLabel>관리</SectionLabel>
+              <NavLink to="/admin" className={({ isActive }) => navClass(isActive)}>
+                {({ isActive }) => (<><ShieldIcon active={isActive} /><span>관리자</span></>)}
+              </NavLink>
+              {user?.superAdmin && (
+                <NavLink to="/super-admin" className={({ isActive }) => navClass(isActive)}>
+                  {({ isActive }) => (<><CrownIcon active={isActive} /><span>총관리자</span></>)}
+                </NavLink>
               )}
-            </NavLink>
+            </div>
           )}
         </nav>
 
-        <div className="p-3 border-t border-ink-100">
-          <div className="flex items-center gap-3 px-2 py-2">
-            <div
-              className="w-10 h-10 rounded-full grid place-items-center text-white font-extrabold"
-              style={{ background: user?.avatarColor ?? "#3182F6" }}
+        <div className="border-t border-ink-150 p-2">
+          <div className="flex items-center gap-2.5 px-2 py-2 rounded-md hover:bg-ink-50">
+            <NavLink to="/profile" className="flex items-center gap-2.5 flex-1 min-w-0" title="프로필">
+              <div
+                className="avatar avatar-sm"
+                style={{ background: user?.avatarColor ?? "#3B5CF0" }}
+              >
+                {user?.name?.[0] ?? "?"}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] font-semibold text-ink-900 truncate">{user?.name}</div>
+                <div className="text-[11px] text-ink-500 truncate">{user?.email}</div>
+              </div>
+            </NavLink>
+            <button
+              onClick={async () => {
+                await logout();
+                nav("/login");
+              }}
+              className="btn-icon"
+              title="로그아웃"
             >
-              {user?.name?.[0] ?? "?"}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-[14px] font-extrabold text-ink-900 truncate tracking-tight">
-                {user?.name}
-              </div>
-              <div className="text-xs text-ink-500 truncate">
-                {user?.position ?? user?.role}
-              </div>
-            </div>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" />
+                <path d="m16 17 5-5-5-5" />
+                <path d="M21 12H9" />
+              </svg>
+            </button>
           </div>
-          <button
-            onClick={async () => {
-              await logout();
-              nav("/login");
-            }}
-            className="w-full mt-2 py-2.5 rounded-xl text-[13px] font-bold text-ink-600 hover:bg-ink-50"
-          >
-            로그아웃
-          </button>
         </div>
       </aside>
 
-      <main className="flex-1 min-w-0">
-        <div className="max-w-[1400px] mx-auto px-10 py-10">
-          <Outlet />
-        </div>
-      </main>
+      <div className="flex-1 min-w-0 flex flex-col">
+        {/* 창모드의 상단 여백을 TopBar 배경과 통합해 자연스럽게 — 색 동일 */}
+        {showTitlebarSpace && (
+          <div
+            className="bg-white border-b border-ink-150"
+            style={{
+              height: 28,
+              // @ts-expect-error drag region
+              WebkitAppRegion: "drag",
+            }}
+          />
+        )}
+        <TopBar />
+        <main className="flex-1 overflow-y-auto">
+          <div className="max-w-[1400px] mx-auto px-8 py-6">
+            <Outlet />
+          </div>
+        </main>
+      </div>
+      <ChatFab />
     </div>
   );
 }
 
-/* ---------- icons (flat toss-style) ---------- */
-type I = { active?: boolean };
-const stroke = (a?: boolean) => (a ? "#3182F6" : "#4E5968");
-const strokeInv = (a?: boolean) => (a ? "#fff" : "#4E5968");
+function NavSection({ label, items }: { label: string; items: NavItem[] }) {
+  return (
+    <div>
+      <SectionLabel>{label}</SectionLabel>
+      <div className="space-y-0.5">
+        {items.map((n) => {
+          const Icon = n.icon;
+          return (
+            <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => navClass(isActive)}>
+              {({ isActive }) => (
+                <>
+                  <Icon active={isActive} />
+                  <span>{n.label}</span>
+                </>
+              )}
+            </NavLink>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
-function HomeIcon({ active }: I) {
+function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={stroke(active)} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 10.5 12 3l9 7.5" />
-      <path d="M5 9v11h14V9" />
+    <div className="px-2.5 mb-1.5 text-[10px] font-bold text-ink-500 uppercase tracking-[0.08em]">
+      {children}
+    </div>
+  );
+}
+
+function navClass(active: boolean) {
+  return [
+    "flex items-center gap-2.5 h-[34px] px-3 rounded-full text-[13px] font-bold transition",
+    active ? "nav-active" : "text-ink-700 hover:bg-ink-100 hover:text-ink-900",
+  ].join(" ");
+}
+
+/* ---------- TopBar ---------- */
+const BREADCRUMB: Record<string, string> = {
+  "/": "개요",
+  "/schedule": "일정",
+  "/attendance": "근태·월차",
+  "/journal": "업무일지",
+  "/notice": "공지사항",
+  "/chat": "사내톡",
+  "/directory": "팀원",
+  "/org": "조직도",
+  "/documents": "문서함",
+  "/approvals": "전자결재",
+  "/expense": "법인카드",
+  "/admin": "관리자",
+  "/super-admin": "총관리자",
+  "/profile": "내 프로필",
+};
+
+function TopBar() {
+  const loc = useLocation();
+  const label = BREADCRUMB[loc.pathname] ?? "";
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+      if (e.key === "Escape" && searchOpen) setSearchOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [searchOpen]);
+
+  return (
+    <>
+      <header className="h-[56px] flex items-center justify-between px-6 border-b border-ink-150 bg-white">
+        <div className="flex items-center gap-2 text-[13px]">
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--c-brand)" }} />
+          <span className="text-ink-900 font-bold">{label || "HiNest"}</span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="hidden md:flex items-center gap-2 h-[34px] px-4 rounded-full bg-ink-50 border border-ink-150 text-ink-500 text-[12px] hover:bg-ink-100 hover:border-ink-200 min-w-[260px]"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
+            </svg>
+            <span className="flex-1 text-left">검색</span>
+            <span className="kbd">⌘K</span>
+          </button>
+          <NotificationBell />
+        </div>
+      </header>
+      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+    </>
+  );
+}
+
+/* ---------- Icons ---------- */
+type I = { active?: boolean };
+const swInv = (a?: boolean) => (a ? "#fff" : "#6B7280");
+
+function svgBase(_active: boolean, path: React.ReactNode) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {path}
     </svg>
   );
 }
-function CalendarIcon({ active }: I) {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={stroke(active)} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="5" width="18" height="16" rx="3" />
-      <path d="M3 10h18M8 3v4M16 3v4" />
-    </svg>
-  );
-}
-function ClockIcon({ active }: I) {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={stroke(active)} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3 2" />
-    </svg>
-  );
-}
-function NoteIcon({ active }: I) {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={stroke(active)} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 4h12l4 4v12H4z" />
-      <path d="M8 12h8M8 16h6M8 8h5" />
-    </svg>
-  );
-}
-function MegaIcon({ active }: I) {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={stroke(active)} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 11v2a2 2 0 0 0 2 2h2l8 5V4L7 9H5a2 2 0 0 0-2 2Z" />
-      <path d="M19 8a5 5 0 0 1 0 8" />
-    </svg>
-  );
-}
-function ChatIcon({ active }: I) {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={stroke(active)} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 5h16v12H8l-4 4z" />
-    </svg>
-  );
-}
-function CardIcon({ active }: I) {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={stroke(active)} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="6" width="18" height="13" rx="2.5" />
-      <path d="M3 11h18M7 16h4" />
-    </svg>
-  );
-}
-function ShieldIcon({ active }: I) {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={strokeInv(active)} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z" />
-      <path d="m9 12 2 2 4-4" />
-    </svg>
-  );
-}
+function HomeIcon({ active }: I) { return svgBase(!!active, <><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V20h4v-6h6v6h4V9.5" /></>); }
+function CalendarIcon({ active }: I) { return svgBase(!!active, <><rect x="3" y="5" width="18" height="16" rx="2.5" /><path d="M3 10h18M8 3v4M16 3v4" /></>); }
+function ClockIcon({ active }: I) { return svgBase(!!active, <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></>); }
+function NoteIcon({ active }: I) { return svgBase(!!active, <><path d="M5 4h10l4 4v12H5z" /><path d="M14 4v5h5M8 13h8M8 16h5" /></>); }
+function MegaIcon({ active }: I) { return svgBase(!!active, <><path d="M3 10v4a2 2 0 0 0 2 2h2l8 5V3L7 8H5a2 2 0 0 0-2 2Z" /><path d="M19 8a5 5 0 0 1 0 8" /></>); }
+function ChatIcon({ active }: I) { return svgBase(!!active, <><path d="M4 5h16v11H9l-4 4z" /></>); }
+function PeopleIcon({ active }: I) { return svgBase(!!active, <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>); }
+function OrgIcon({ active }: I) { return svgBase(!!active, <><rect x="8" y="3" width="8" height="6" rx="1" /><rect x="3" y="15" width="6" height="6" rx="1" /><rect x="15" y="15" width="6" height="6" rx="1" /><path d="M12 9v3M6 15v-3h12v3" /></>); }
+function DocsIcon({ active }: I) { return svgBase(!!active, <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M8 13h8M8 17h5" /></>); }
+function ApprovalIcon({ active }: I) { return svgBase(!!active, <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="m9 14 2 2 4-4" /></>); }
+function CardIcon({ active }: I) { return svgBase(!!active, <><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 11h18M7 16h4" /></>); }
+function ShieldIcon({ active }: I) { return svgBase(!!active, <><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z" /><path d="m9 12 2 2 4-4" /></>); }
+function CrownIcon({ active }: I) { return svgBase(!!active, <><path d="M3 18h18" /><path d="M3 8l4 5 5-8 5 8 4-5v10H3z" /></>); }
+const _unused_swInv = swInv;
