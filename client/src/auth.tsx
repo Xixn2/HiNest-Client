@@ -9,6 +9,7 @@ export type User = {
   team?: string | null;
   position?: string | null;
   avatarColor?: string;
+  superAdmin?: boolean;
 };
 
 type Ctx = {
