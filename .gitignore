@@ -3,6 +3,12 @@ dist
 .DS_Store
 *.log
 
+# build artifacts
+*.tsbuildinfo
+
+# runtime uploads (user-generated)
+server/uploads/
+
 # envs
 .env
 .env.local

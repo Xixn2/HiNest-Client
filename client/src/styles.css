@@ -4,172 +4,548 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================ */
+/*                    SEMANTIC TOKENS (CSS vars)                 */
+/*  라이트/다크 모두 이 토큰 하나로 제어 → 대비 일관성           */
+/* ============================================================ */
 :root {
   color-scheme: light;
+
+  --c-bg:         #F5F6F8;  /* app bg */
+  --c-surface:    #FFFFFF;  /* card / panel */
+  --c-surface-2:  #FAFBFC;  /* subtle surface (hover, thead 등) */
+  --c-surface-3:  #F2F4F6;
+  --c-border:     #E6E8EC;
+  --c-border-strong: #DDE0E4;
+
+  --c-text:       #14161B;  /* primary text */
+  --c-text-2:     #343942;  /* secondary */
+  --c-text-3:     #6B7280;  /* tertiary / caption */
+  --c-text-muted: #8E959E;
+  --c-text-inverse: #FFFFFF;
+
+  --c-brand:      #3B5CF0;
+  --c-brand-hover:#2547DB;
+  --c-brand-fg:   #FFFFFF;
+  --c-brand-soft: #EEF3FF;   /* brand-50 */
+  --c-brand-soft-fg: #1D3AB8;/* brand-700 */
+
+  --c-danger:     #DC2626;
+  --c-success:    #16A34A;
+  --c-warning:    #D97706;
+
+  --ring:         0 0 0 3px rgba(59, 92, 240, 0.22);
 }
 
-html,
-body,
-#root {
+html.dark {
+  color-scheme: dark;
+
+  --c-bg:         #0E1014;
+  --c-surface:    #171A20;
+  --c-surface-2:  #1C2027;
+  --c-surface-3:  #23272F;
+  --c-border:     #2A2F38;
+  --c-border-strong: #363B45;
+
+  --c-text:       #F2F4F7;  /* 라이트의 ink-900 → 이제 흰 */
+  --c-text-2:     #D4D8DE;
+  --c-text-3:     #A6ADB7;
+  --c-text-muted: #7F8792;
+  --c-text-inverse: #14161B;
+
+  --c-brand:      #7896FF;   /* 다크에서 더 밝게 */
+  --c-brand-hover:#92ACFF;
+  --c-brand-fg:   #0E1014;
+  --c-brand-soft: #23305E;
+  --c-brand-soft-fg: #B8C6FF;
+
+  --c-danger:     #FF6B6B;
+  --c-success:    #4ADE80;
+  --c-warning:    #FBBF24;
+
+  --ring:         0 0 0 3px rgba(120, 150, 255, 0.32);
+}
+
+/* ============================================================ */
+/*                           BASE                                */
+/* ============================================================ */
+html, body, #root {
   height: 100%;
-  background: #f9fafb;
-  color: #191f28;
-  font-feature-settings: "tnum" 1, "ss01" 1;
-  letter-spacing: -0.01em;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-feature-settings: "tnum" 1, "ss01" 1, "cv11" 1;
+  letter-spacing: -0.005em;
   -webkit-font-smoothing: antialiased;
+  font-size: 14px;
 }
-
 body {
   font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
-    system-ui, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    Inter, system-ui, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+}
+* { -webkit-tap-highlight-color: transparent; }
+.font-mono, code, pre, .tabular {
+  font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, Monaco, monospace;
+  font-feature-settings: "tnum" 1;
 }
 
-* {
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* ----- Buttons ----- */
+/* ============================================================ */
+/*                           BUTTONS                             */
+/* ============================================================ */
 .btn {
-  @apply inline-flex items-center justify-center gap-2 font-bold transition active:scale-[.98] disabled:opacity-40 disabled:cursor-not-allowed select-none;
-  height: 48px;
-  padding: 0 20px;
-  border-radius: 12px;
-  font-size: 15px;
-  letter-spacing: -0.02em;
-}
-.btn-sm {
+  @apply inline-flex items-center justify-center gap-1.5 font-bold transition active:scale-[.98] disabled:opacity-40 disabled:cursor-not-allowed select-none;
   height: 36px;
   padding: 0 14px;
+  border-radius: 8px;
   font-size: 13px;
-  border-radius: 10px;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1;
 }
+.btn > svg { flex-shrink: 0; }
+.btn-lg { height: 44px; padding: 0 20px; font-size: 14px; border-radius: 10px; }
+.btn-xs { height: 28px; padding: 0 10px; font-size: 12px; border-radius: 6px; }
+
 .btn-primary {
-  @apply btn bg-brand-500 text-white hover:bg-brand-600;
+  @apply btn;
+  background: var(--c-brand);
+  color: var(--c-brand-fg);
 }
+.btn-primary:hover { background: var(--c-brand-hover); }
+
 .btn-ghost {
-  @apply btn bg-ink-100 text-ink-800 hover:bg-ink-200;
+  @apply btn;
+  background: var(--c-surface);
+  color: var(--c-text-2);
+  border: 1px solid var(--c-border);
 }
-.btn-outline {
-  @apply btn bg-white text-ink-800 border border-ink-200 hover:bg-ink-50;
+.btn-ghost:hover {
+  background: var(--c-surface-2);
+  border-color: var(--c-border-strong);
+  color: var(--c-text);
 }
+
+.btn-subtle {
+  @apply btn;
+  background: var(--c-surface-3);
+  color: var(--c-text);
+}
+.btn-subtle:hover { filter: brightness(.96); }
+
 .btn-danger {
-  @apply btn bg-danger text-white hover:brightness-95;
+  @apply btn;
+  background: var(--c-danger);
+  color: #fff;
 }
+.btn-danger:hover { filter: brightness(.95); }
 
-/* ----- Card ----- */
-.card {
-  @apply bg-white border border-ink-100;
-  border-radius: 20px;
-  padding: 24px;
+.btn-icon {
+  @apply inline-flex items-center justify-center w-8 h-8 rounded-md transition;
+  color: var(--c-text-3);
 }
-.card-tight {
-  @apply bg-white border border-ink-100;
-  border-radius: 16px;
-  padding: 16px;
-}
+.btn-icon:hover { background: var(--c-surface-3); color: var(--c-text); }
 
-/* ----- Inputs ----- */
-.input {
-  @apply w-full bg-ink-100 border border-transparent text-ink-900 placeholder:text-ink-500 outline-none transition;
-  height: 52px;
-  padding: 0 16px;
+/* ============================================================ */
+/*                        PANEL / CARD                           */
+/* ============================================================ */
+.panel {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
   border-radius: 12px;
-  font-size: 15px;
-  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 2px 6px rgba(0,0,0,0.04);
 }
+html.dark .panel {
+  box-shadow: 0 1px 2px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.25);
+}
+.card { @apply panel; padding: 20px; }
+.card-tight { @apply panel; padding: 14px; }
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--c-border);
+}
+.section-head .title {
+  font-size: 14px; font-weight: 700;
+  color: var(--c-text);
+  letter-spacing: -0.015em;
+}
+
+/* ============================================================ */
+/*                           INPUTS                              */
+/* ============================================================ */
+.input {
+  width: 100%;
+  background: var(--c-surface);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  outline: none;
+  transition: border-color .15s, box-shadow .15s, background .15s;
+}
+.input::placeholder { color: var(--c-text-muted); }
+.input:hover { border-color: var(--c-text-muted); }
 .input:focus {
-  @apply bg-white border-brand-500;
-  box-shadow: 0 0 0 3px rgba(49, 130, 246, 0.15);
+  border-color: var(--c-brand);
+  box-shadow: var(--ring);
+}
+.input:disabled {
+  background: var(--c-surface-2);
+  color: var(--c-text-muted);
 }
 textarea.input {
-  padding: 14px 16px;
+  padding: 10px 12px;
   height: auto;
   line-height: 1.55;
 }
-
-/* ----- Label ----- */
-.label {
-  @apply block font-bold text-ink-800 mb-2;
-  font-size: 13px;
-  letter-spacing: -0.02em;
+select.input {
+  padding-right: 30px;
+  appearance: none;
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='none' stroke='%236B7280' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round' d='M3 4.5 6 7.5 9 4.5'/></svg>");
+}
+html.dark select.input {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='none' stroke='%23A6ADB7' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round' d='M3 4.5 6 7.5 9 4.5'/></svg>");
 }
 
-/* ----- Chip ----- */
+.field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--c-text-2);
+  margin-bottom: 6px;
+  letter-spacing: -0.01em;
+}
+.label { @apply field-label; }
+
+/* ============================================================ */
+/*                       CHIPS / BADGES                          */
+/* ============================================================ */
 .chip {
-  @apply inline-flex items-center font-bold;
-  padding: 4px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 22px;
+  padding: 0 10px;
   border-radius: 999px;
-  font-size: 12px;
-  letter-spacing: -0.02em;
-}
-
-/* ----- Tables ----- */
-table.toss {
-  @apply w-full;
-  border-collapse: separate;
-  border-spacing: 0;
-}
-table.toss thead th {
-  @apply text-ink-500 font-bold text-left;
-  font-size: 12px;
-  padding: 14px 16px;
-  border-bottom: 1px solid #f2f4f6;
-  background: #fafbfc;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: middle;
   letter-spacing: -0.01em;
 }
-table.toss tbody td {
-  padding: 16px;
-  border-bottom: 1px solid #f2f4f6;
-  font-size: 14px;
-  color: #333d4b;
+/* 짧은(한글 1~2자) 칩도 정사각처럼 보이지 않도록 최소 가로폭 확보 */
+.chip {
+  min-width: 36px;
 }
-table.toss tbody tr:last-child td {
-  border-bottom: 0;
+.chip > .badge-dot {
+  position: relative;
+  margin-left: 0;
 }
-table.toss tbody tr:hover td {
-  background: #fafbfc;
+.badge-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  align-self: center;
+  background-clip: padding-box;
 }
 
-/* ----- Heading helper ----- */
-.h-display {
-  @apply font-extrabold text-ink-900;
-  font-size: 28px;
-  line-height: 1.25;
-  letter-spacing: -0.03em;
+/* 모든 chip-* 는 .chip 베이스(라운드·여백·정렬) 를 강제로 상속 */
+.chip-gray, .chip-brand, .chip-green, .chip-amber, .chip-red, .chip-blue {
+  @apply chip;
 }
-.h-title {
-  @apply font-extrabold text-ink-900;
-  font-size: 20px;
-  line-height: 1.3;
-  letter-spacing: -0.025em;
-}
-.h-sub {
-  @apply font-bold text-ink-900;
-  font-size: 17px;
+.chip-gray  { background: var(--c-surface-3); color: var(--c-text-2); }
+.chip-brand { background: var(--c-brand-soft); color: var(--c-brand-soft-fg); }
+.chip-green { background: rgba(22,163,74,.10); color: #15803D; }
+.chip-amber { background: rgba(217,119,6,.12); color: #B45309; }
+.chip-red   { background: rgba(220,38,38,.10); color: #B91C1C; }
+.chip-blue  { background: rgba(59,92,240,.08); color: #2547DB; }
+
+html.dark .chip-gray  { background: rgba(255,255,255,.08); color: #D4D8DE; }
+html.dark .chip-green { background: rgba(74,222,128,.15); color: #86EFAC; }
+html.dark .chip-amber { background: rgba(251,191,36,.15); color: #FCD34D; }
+html.dark .chip-red   { background: rgba(255,107,107,.18); color: #FCA5A5; }
+html.dark .chip-blue  { background: rgba(120,150,255,.2);  color: #B8C6FF; }
+
+/* ============================================================ */
+/*                           AVATARS                             */
+/* ============================================================ */
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  flex-shrink: 0;
+  border-radius: 9999px;
   letter-spacing: -0.02em;
 }
-.t-body {
-  @apply text-ink-700;
-  font-size: 15px;
-  line-height: 1.55;
-  letter-spacing: -0.01em;
+.avatar-sm { width: 28px; height: 28px; font-size: 11px; }
+.avatar-md { width: 36px; height: 36px; font-size: 13px; }
+.avatar-lg { width: 44px; height: 44px; font-size: 16px; }
+.avatar-xl { width: 64px; height: 64px; font-size: 22px; }
+
+/* ============================================================ */
+/*                           TABLES                              */
+/* ============================================================ */
+table.pro { width: 100%; text-align: left; border-collapse: separate; border-spacing: 0; }
+table.pro thead th {
+  color: var(--c-text-3);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-surface-2);
+  white-space: nowrap;
 }
-.t-caption {
-  @apply text-ink-500;
+table.pro tbody td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--c-border);
   font-size: 13px;
-  letter-spacing: -0.01em;
+  color: var(--c-text-2);
+}
+table.pro tbody tr:last-child td { border-bottom: 0; }
+table.pro tbody tr:hover td { background: var(--c-surface-2); }
+table.pro tbody td .tabular,
+table.pro tbody td.tabular {
+  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  font-size: 12.5px;
 }
 
-/* Scrollbar */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+/* ============================================================ */
+/*                         HEADINGS                              */
+/* ============================================================ */
+.h-display { color: var(--c-text); font-weight: 700; font-size: 20px; line-height: 28px; letter-spacing: -0.02em; }
+.h-title   { color: var(--c-text); font-weight: 700; font-size: 16px; line-height: 22px; letter-spacing: -0.015em; }
+.h-sub     { color: var(--c-text); font-weight: 700; font-size: 14px; letter-spacing: -0.01em; }
+.t-body    { color: var(--c-text-2); font-size: 13px; line-height: 20px; }
+.t-caption { color: var(--c-text-3); font-size: 12px; line-height: 16px; }
+.t-mono    { font-family: "JetBrains Mono", Menlo, monospace; font-size: 12px; letter-spacing: 0; }
+
+/* ============================================================ */
+/*                            KBD                                */
+/* ============================================================ */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--c-surface-3);
+  color: var(--c-text-2);
+  font-family: "JetBrains Mono", Menlo, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--c-border);
+  box-shadow: inset 0 -1px 0 var(--c-border);
 }
+
+/* ============================================================ */
+/*                         SCROLLBAR                             */
+/* ============================================================ */
+::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb {
-  background: #e5e8eb;
+  background: var(--c-border-strong);
   border-radius: 999px;
-  border: 2px solid #f9fafb;
+  border: 2px solid var(--c-bg);
 }
-::-webkit-scrollbar-thumb:hover {
-  background: #d1d6db;
+::-webkit-scrollbar-thumb:hover { background: var(--c-text-muted); }
+
+.divide-y-pro > * + * { border-top: 1px solid var(--c-border); }
+
+/* ============================================================ */
+/*                            TABS                               */
+/* ============================================================ */
+.tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--c-surface-3);
+  border-radius: 999px;
 }
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  height: 28px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--c-text-3);
+  border-radius: 999px;
+  transition: background .15s, color .15s;
+}
+.tab:hover { color: var(--c-text); }
+.tab-active {
+  background: var(--c-surface);
+  color: var(--c-text);
+  box-shadow: 0 0 0 1px var(--c-border);
+}
+html.dark .tab-active {
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-border-strong);
+}
+
+/* NAVER WORKS 스타일 언더라인 탭 */
+.uline-tabs { display: flex; align-items: center; gap: 16px; border-bottom: 1px solid var(--c-border); }
+.uline-tab {
+  position: relative;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--c-text-3);
+  transition: color .15s;
+}
+.uline-tab:hover { color: var(--c-text-2); }
+.uline-tab.active { color: var(--c-text); }
+.uline-tab.active::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 2px;
+  background: var(--c-brand);
+  border-radius: 2px;
+}
+
+/* ============================================================ */
+/*                    TAILWIND CLASS OVERRIDES                    */
+/*  기존 코드는 bg-white / text-ink-900 등을 직접 사용 중.       */
+/*  다크에서도 자연스럽게 보이도록 토큰으로 덮어씀.              */
+/* ============================================================ */
+
+/* Light surfaces → 토큰으로 */
+.bg-white             { background-color: var(--c-surface) !important; }
+.bg-ink-25            { background-color: var(--c-surface-2) !important; }
+.bg-ink-50            { background-color: var(--c-bg) !important; }
+.bg-ink-100           { background-color: var(--c-surface-3) !important; }
+.bg-ink-150           { background-color: var(--c-border) !important; }
+.bg-ink-200           { background-color: var(--c-border-strong) !important; }
+
+/* Dark에선 어두운 surfaces 위에 얹힌 overlay 는 더 진하게 */
+html.dark .bg-ink-900\/30 { background-color: rgba(0,0,0,0.6) !important; }
+html.dark .bg-ink-900\/40 { background-color: rgba(0,0,0,0.7) !important; }
+html.dark .bg-ink-900\/70 { background-color: rgba(0,0,0,0.85) !important; }
+
+/* 특수: 다크 강조 패널 (total session banner 등) */
+.bg-ink-900 { background-color: var(--c-text) !important; color: var(--c-text-inverse) !important; }
+html.dark .bg-ink-900 { background-color: var(--c-surface-3) !important; color: var(--c-text) !important; }
+
+/* Text colors → 토큰으로 */
+.text-ink-900 { color: var(--c-text) !important; }
+.text-ink-800 { color: var(--c-text) !important; }
+.text-ink-700 { color: var(--c-text-2) !important; }
+.text-ink-600 { color: var(--c-text-2) !important; }
+.text-ink-500 { color: var(--c-text-3) !important; }
+.text-ink-400 { color: var(--c-text-muted) !important; }
+.text-ink-300 { color: var(--c-text-muted) !important; }
+.text-white   { color: #FFFFFF !important; } /* 원래 의미 보존 */
+
+/* Borders */
+.border-ink-100 { border-color: var(--c-border) !important; }
+.border-ink-150 { border-color: var(--c-border) !important; }
+.border-ink-200 { border-color: var(--c-border-strong) !important; }
+.border-ink-300 { border-color: var(--c-text-muted) !important; }
+.divide-ink-100 > * + *, .divide-ink-150 > * + * { border-color: var(--c-border) !important; }
+
+/* Ring / hover helpers */
+.hover\:bg-ink-25:hover   { background-color: var(--c-surface-2) !important; }
+.hover\:bg-ink-50:hover   { background-color: var(--c-surface-2) !important; }
+.hover\:bg-ink-100:hover  { background-color: var(--c-surface-3) !important; }
+.hover\:bg-ink-150:hover  { background-color: var(--c-border) !important; }
+.hover\:border-ink-200:hover { border-color: var(--c-border-strong) !important; }
+.hover\:border-ink-300:hover { border-color: var(--c-text-muted) !important; }
+
+/* Brand 관련 – 다크에선 소프트 버전 */
+.bg-brand-50  { background-color: var(--c-brand-soft) !important; }
+.bg-brand-100 { background-color: var(--c-brand-soft) !important; }
+.text-brand-500 { color: var(--c-brand) !important; }
+.text-brand-600 { color: var(--c-brand-hover) !important; }
+.text-brand-700 { color: var(--c-brand-soft-fg) !important; }
+.text-brand-800 { color: var(--c-brand-soft-fg) !important; }
+.text-brand-900 { color: var(--c-brand-soft-fg) !important; }
+.border-brand-200 { border-color: var(--c-brand) !important; opacity: .6; }
+.border-brand-300 { border-color: var(--c-brand) !important; }
+.border-brand-500 { border-color: var(--c-brand) !important; }
+
+/* Alert color cells (red/green/amber/sky) — 다크 대응 */
+html.dark .bg-red-50     { background: rgba(255,107,107,.12) !important; }
+html.dark .border-red-100{ border-color: rgba(255,107,107,.35) !important; }
+html.dark .border-red-200{ border-color: rgba(255,107,107,.45) !important; }
+html.dark .text-red-600, html.dark .text-red-700 { color: #FCA5A5 !important; }
+
+html.dark .bg-emerald-50 { background: rgba(74,222,128,.12) !important; }
+html.dark .border-emerald-100 { border-color: rgba(74,222,128,.35) !important; }
+html.dark .text-emerald-600, html.dark .text-emerald-700 { color: #86EFAC !important; }
+
+html.dark .bg-amber-50   { background: rgba(251,191,36,.12) !important; }
+html.dark .bg-amber-100  { background: rgba(251,191,36,.2) !important; }
+html.dark .border-amber-200 { border-color: rgba(251,191,36,.4) !important; }
+html.dark .border-amber-300 { border-color: rgba(251,191,36,.5) !important; }
+html.dark .text-amber-600, html.dark .text-amber-700, html.dark .text-amber-800, html.dark .text-amber-900 { color: #FCD34D !important; }
+
+html.dark .bg-sky-50     { background: rgba(14,165,233,.12) !important; }
+html.dark .text-sky-600, html.dark .text-sky-700 { color: #7DD3FC !important; }
+
+html.dark .bg-slate-900\/40 { background: rgba(0,0,0,.7) !important; }
+
+/* 그라디언트 파스텔 → 다크에선 약하게 */
+html.dark .bg-gradient-to-r.from-brand-50,
+html.dark .bg-gradient-to-r.from-amber-50,
+html.dark .bg-gradient-to-r.from-amber-50\/70 {
+  background: linear-gradient(90deg, rgba(255,255,255,.04), transparent) !important;
+}
+
+/* 검색 input 포커스 링 (custom) */
+.ring-brand-500\/20 { --tw-ring-color: rgba(59, 92, 240, 0.2); }
+html.dark .ring-brand-500\/20 { --tw-ring-color: rgba(120, 150, 255, 0.32); }
+
+/* Accent 체크박스 */
+.accent-brand-500 { accent-color: var(--c-brand); }
+
+/* 채팅 composer 박스 — 도구 버튼 + textarea 를 한 상자로 */
+.composer-box {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 12px;
+  transition: border-color .15s, box-shadow .15s;
+  min-height: 44px;
+}
+.composer-box:focus-within {
+  border-color: var(--c-brand);
+  box-shadow: var(--ring);
+}
+.composer-input::placeholder { color: var(--c-text-muted); }
+.composer-input { color: var(--c-text); }
+
+/* Sidebar active pill (브랜드 블루) */
+.nav-active {
+  background: var(--c-brand);
+  color: var(--c-brand-fg);
+}
+.nav-active svg { stroke: var(--c-brand-fg); }
+
+/* 다크에선 soft 버전으로 (너무 쨍하지 않게) */
+html.dark .nav-active {
+  background: var(--c-brand-soft);
+  color: var(--c-brand-soft-fg);
+}
+html.dark .nav-active svg { stroke: var(--c-brand-soft-fg); }
