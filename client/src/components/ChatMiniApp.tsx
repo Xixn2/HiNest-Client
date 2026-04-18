@@ -62,6 +62,7 @@ export default function ChatMiniApp({
   const [rooms, setRooms] = useState<Room[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [readStates, setReadStates] = useState<{ userId: string; lastReadAt: string | null }[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [attachment, setAttachment] = useState<Attachment | null>(null);
@@ -109,8 +110,12 @@ export default function ChatMiniApp({
   };
   const loadMessages = async (roomId: string) => {
     try {
-      const res = await api<{ messages: Message[] }>(`/api/chat/rooms/${roomId}/messages`);
+      const res = await api<{
+        messages: Message[];
+        readStates?: { userId: string; lastReadAt: string | null }[];
+      }>(`/api/chat/rooms/${roomId}/messages`);
       setMessages(res.messages);
+      setReadStates(res.readStates ?? []);
       // 스크롤은 RoomView 의 useLayoutEffect 에서 페인트 전에 수행 (플래시 방지)
     } catch {}
   };
@@ -361,6 +366,7 @@ export default function ChatMiniApp({
           onClearAttachment={() => setAttachment(null)}
           onReact={reactToMessage}
           onPin={pinMessage}
+          readStates={readStates}
         />
       ) : (
         <ListView
@@ -1093,7 +1099,7 @@ function buildMessageActions(m: Message, onPin: (id: string) => void): MessageAc
 /* ======================= 대화방 ======================= */
 function RoomView({
   room, messages, meId, onBack, input, setInput, onSend, sending, scrollRef,
-  attachment, uploading, onPickFile, onClearAttachment, onReact, onPin,
+  attachment, uploading, onPickFile, onClearAttachment, onReact, onPin, readStates,
 }: {
   room: Room; messages: Message[]; meId: string; onBack: () => void;
   input: string; setInput: (v: string) => void; onSend: () => void; sending: boolean;
@@ -1102,6 +1108,7 @@ function RoomView({
   onPickFile: (file: File) => void; onClearAttachment: () => void;
   onReact: (messageId: string, emoji: string) => void;
   onPin: (messageId: string) => void;
+  readStates: { userId: string; lastReadAt: string | null }[];
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [reactingId, setReactingId] = useState<string | null>(null);
@@ -1160,9 +1167,18 @@ function RoomView({
         || new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() > 5 * 60_000;
       const isLast = i === messages.length - 1;
       const isLastFromOther = i === lastFromOtherIdx;
-      return { ...m, showMeta, isLast, isLastFromOther };
+
+      // 안읽음 카운트 — 발신자 본인은 제외, lastReadAt 이 메시지 createdAt 보다 이전인 멤버 수
+      const sent = new Date(m.createdAt).getTime();
+      let unread = 0;
+      for (const r of readStates) {
+        if (r.userId === m.sender.id) continue;
+        const readAt = r.lastReadAt ? new Date(r.lastReadAt).getTime() : 0;
+        if (readAt < sent) unread++;
+      }
+      return { ...m, showMeta, isLast, isLastFromOther, unread };
     });
-  }, [messages, meId]);
+  }, [messages, meId, readStates]);
   // 헤더는 상위 ChatFab이 렌더링 — 여기서는 메시지 + 입력만
   void room; void onBack; // 시그니처 유지
 
@@ -1220,29 +1236,54 @@ function RoomView({
                       {m.sender.name}
                     </div>
                   )}
-                  {m.deletedAt ? (
-                    <div
-                      style={{
-                        padding: "9px 13px", fontSize: 14, fontWeight: 500,
-                        lineHeight: 1.4, letterSpacing: "-0.01em",
-                        color: mine ? "#fff" : C.ink,
-                        background: mine ? C.blue : C.gray100,
-                        borderRadius: 16, fontStyle: "italic", opacity: 0.6,
-                      }}
-                    >
-                      삭제된 메시지
-                    </div>
-                  ) : (
-                    <LongPress
-                      onLongPress={() => setReactingId(m.id)}
-                      style={{
-                        transition: "transform .12s ease",
-                        transform: isPicking ? "scale(.97)" : "scale(1)",
-                      }}
-                    >
-                      <MessageBubble msg={m} mine={mine} />
-                    </LongPress>
-                  )}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-end",
+                      gap: 4,
+                      flexDirection: mine ? "row" : "row-reverse",
+                      justifyContent: "flex-end",
+                    }}
+                  >
+                    {/* 카톡식 안읽음 숫자 — 버블 옆에 작게 */}
+                    {m.unread > 0 && (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: "#FFB800",
+                          marginBottom: 2,
+                          fontVariantNumeric: "tabular-nums",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {m.unread}
+                      </span>
+                    )}
+                    {m.deletedAt ? (
+                      <div
+                        style={{
+                          padding: "9px 13px", fontSize: 14, fontWeight: 500,
+                          lineHeight: 1.4, letterSpacing: "-0.01em",
+                          color: mine ? "#fff" : C.ink,
+                          background: mine ? C.blue : C.gray100,
+                          borderRadius: 16, fontStyle: "italic", opacity: 0.6,
+                        }}
+                      >
+                        삭제된 메시지
+                      </div>
+                    ) : (
+                      <LongPress
+                        onLongPress={() => setReactingId(m.id)}
+                        style={{
+                          transition: "transform .12s ease",
+                          transform: isPicking ? "scale(.97)" : "scale(1)",
+                        }}
+                      >
+                        <MessageBubble msg={m} mine={mine} />
+                      </LongPress>
+                    )}
+                  </div>
 
                   {/* 리액션 칩 */}
                   {m.reactions && m.reactions.length > 0 && (

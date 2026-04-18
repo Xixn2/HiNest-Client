@@ -240,11 +240,26 @@ router.get("/rooms/:id/messages", async (req, res) => {
     return m;
   });
 
+  // 읽음 처리: 방 멤버가 조회하면 내 lastReadAt 을 now 로 갱신
+  if (member) {
+    await prisma.roomMember.update({
+      where: { id: member.id },
+      data: { lastReadAt: now },
+    }).catch(() => { /* best-effort */ });
+  }
+
+  // 멤버별 lastReadAt → 클라이언트에서 메시지별 안읽음 카운트 계산
+  const readStates = await prisma.roomMember.findMany({
+    where: { roomId: room.id },
+    select: { userId: true, lastReadAt: true },
+  });
+
   res.json({
     messages,
     auditMode: !member && u.superAdmin,
     roomType: room.type,
     serverTime: now.toISOString(),
+    readStates,
   });
 });
 
@@ -308,6 +323,14 @@ router.post("/rooms/:id/messages", async (req, res) => {
       reactions: { select: { userId: true, emoji: true, user: { select: { name: true } } } },
     },
   });
+
+  // 보낸 사람은 곧바로 읽은 상태 — 자기 메시지가 안읽음으로 표시되지 않게
+  if (!scheduledAt) {
+    await prisma.roomMember.update({
+      where: { id: member.id },
+      data: { lastReadAt: msg.createdAt },
+    }).catch(() => {});
+  }
 
   // 알림 정책
   // - DIRECT: 상대에게 DM 알림
