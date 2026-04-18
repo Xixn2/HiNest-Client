@@ -17,6 +17,7 @@ router.get("/", requireAuth, async (req, res) => {
       team: user.team,
       position: user.position,
       avatarColor: user.avatarColor,
+      superAdmin: user.superAdmin,
     },
   });
 });
