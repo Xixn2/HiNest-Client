@@ -75,6 +75,155 @@ export function LongPress({
   );
 }
 
+/* ===== 이미지 썸네일 + 라이트박스 (뷰포트 안에 contain) ===== */
+function ImageThumb({ src, alt }: { src: string; alt: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen(true);
+        }}
+        style={{
+          display: "block",
+          lineHeight: 0,
+          borderRadius: 16,
+          overflow: "hidden",
+          maxWidth: 220,
+          border: 0,
+          padding: 0,
+          background: "transparent",
+          cursor: "zoom-in",
+        }}
+      >
+        <img
+          src={src}
+          alt={alt}
+          style={{
+            display: "block",
+            maxWidth: 220,
+            maxHeight: 220,
+            width: "auto",
+            height: "auto",
+            borderRadius: 16,
+          }}
+        />
+      </button>
+      {open && <ImageLightbox src={src} alt={alt} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+function ImageLightbox({
+  src,
+  alt,
+  onClose,
+}: {
+  src: string;
+  alt: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      role="dialog"
+      onMouseDown={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 9999,
+        background: "rgba(0, 0, 0, .82)",
+        display: "grid",
+        placeItems: "center",
+        padding: 24,
+        animation: "hinest-fade .12s ease",
+      }}
+    >
+      <style>{`@keyframes hinest-fade { from { opacity: 0 } to { opacity: 1 } }`}</style>
+      <img
+        src={src}
+        alt={alt}
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{
+          maxWidth: "min(92vw, 1200px)",
+          maxHeight: "90vh",
+          width: "auto",
+          height: "auto",
+          objectFit: "contain",
+          borderRadius: 8,
+          boxShadow: "0 16px 48px rgba(0,0,0,.4)",
+        }}
+      />
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="닫기"
+        style={{
+          position: "absolute",
+          top: 16,
+          right: 16,
+          width: 40,
+          height: 40,
+          borderRadius: 999,
+          background: "rgba(255,255,255,.12)",
+          border: 0,
+          color: "#fff",
+          cursor: "pointer",
+          display: "grid",
+          placeItems: "center",
+          backdropFilter: "blur(8px)",
+        }}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 6 6 18M6 6l12 12" />
+        </svg>
+      </button>
+      <a
+        href={src}
+        download={alt || undefined}
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        aria-label="다운로드"
+        style={{
+          position: "absolute",
+          top: 16,
+          right: 64,
+          width: 40,
+          height: 40,
+          borderRadius: 999,
+          background: "rgba(255,255,255,.12)",
+          color: "#fff",
+          textDecoration: "none",
+          display: "grid",
+          placeItems: "center",
+          backdropFilter: "blur(8px)",
+        }}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <path d="M7 10l5 5 5-5" />
+          <path d="M12 15V3" />
+        </svg>
+      </a>
+    </div>
+  );
+}
+
 /* ===== 메시지 컨텍스트 메뉴(이모지 + 액션) ===== */
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
@@ -324,31 +473,7 @@ export function MessageBubble({ msg, mine }: { msg: Message; mine: boolean }) {
           gap: 4,
         }}
       >
-        <a
-          href={fileUrl!}
-          target="_blank"
-          rel="noreferrer"
-          style={{
-            display: "block",
-            lineHeight: 0,
-            borderRadius: 16,
-            overflow: "hidden",
-            maxWidth: 220,
-          }}
-        >
-          <img
-            src={fileUrl!}
-            alt={msg.fileName ?? ""}
-            style={{
-              display: "block",
-              maxWidth: 220,
-              maxHeight: 220,
-              width: "auto",
-              height: "auto",
-              borderRadius: 16,
-            }}
-          />
-        </a>
+        <ImageThumb src={fileUrl!} alt={msg.fileName ?? ""} />
         {hasText && <TextBubble content={msg.content} mine={mine} />}
       </div>
     );
