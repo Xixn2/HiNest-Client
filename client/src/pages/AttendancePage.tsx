@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import PageHeader from "../components/PageHeader";
 import { useAuth } from "../auth";
+import MonthPicker from "../components/MonthPicker";
+import DateTimePicker from "../components/DateTimePicker";
 
 type Attendance = {
   id: string;
@@ -81,7 +83,7 @@ export default function AttendancePage() {
         description="월별 출퇴근 기록과 휴가 신청을 관리합니다."
         right={
           <div className="flex gap-2">
-            <input type="month" className="input" value={month} onChange={(e) => setMonth(e.target.value)} />
+            <MonthPicker value={month} onChange={setMonth} />
             <button className="btn-primary" onClick={() => setOpen(true)}>
               + 휴가 신청
             </button>
@@ -211,11 +213,11 @@ export default function AttendancePage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">시작일</label>
-                  <input type="date" className="input" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} required />
+                  <DateTimePicker mode="date" value={form.startDate} onChange={(v) => setForm({ ...form, startDate: v })} />
                 </div>
                 <div>
                   <label className="label">종료일</label>
-                  <input type="date" className="input" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} required />
+                  <DateTimePicker mode="date" value={form.endDate} onChange={(v) => setForm({ ...form, endDate: v })} min={form.startDate} />
                 </div>
               </div>
               <div>
