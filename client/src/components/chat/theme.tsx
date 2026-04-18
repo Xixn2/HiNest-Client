@@ -73,6 +73,16 @@ export function formatRelative(d: Date): string {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
+/** 시:분 포맷 — "오후 3:24" */
+export function formatClock(d: Date): string {
+  const h = d.getHours();
+  const m = d.getMinutes();
+  const period = h < 12 ? "오전" : "오후";
+  const hh = ((h + 11) % 12) + 1;
+  const mm = m < 10 ? `0${m}` : `${m}`;
+  return `${period} ${hh}:${mm}`;
+}
+
 /** 이름 첫 글자 기반 원형 아바타 */
 export function Avatar({
   name,

@@ -7,6 +7,7 @@ import {
   FONT,
   Avatar,
   formatBytes,
+  formatClock,
   formatRelative,
   loadAllRoomSettings,
   previewForMessage,
@@ -1144,7 +1145,8 @@ function RoomView({
     const prev = messages[i - 1];
     const showMeta = !prev || prev.sender.id !== m.sender.id
       || new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() > 5 * 60_000;
-    return { ...m, showMeta };
+    const isLast = i === messages.length - 1;
+    return { ...m, showMeta, isLast };
   }), [messages]);
   // 헤더는 상위 ChatFab이 렌더링 — 여기서는 메시지 + 입력만
   void room; void onBack; // 시그니처 유지
@@ -1263,12 +1265,28 @@ function RoomView({
                     </div>
                   )}
 
+                  {/* 마지막 메시지 — 보낸 시각 표시 */}
+                  {m.isLast && (
+                    <div
+                      style={{
+                        marginTop: 4,
+                        fontSize: 11,
+                        color: C.gray500,
+                        fontWeight: 500,
+                        textAlign: mine ? "right" : "left",
+                      }}
+                    >
+                      {formatClock(new Date(m.createdAt))}
+                    </div>
+                  )}
+
                   {/* 컨텍스트 메뉴: 이모지 + 액션 */}
                   {isPicking && (
                     <ReactionPicker
                       mine={mine}
                       onPick={(e) => { onReact(m.id, e); setReactingId(null); }}
                       onDismiss={() => setReactingId(null)}
+                      header={formatClock(new Date(m.createdAt))}
                       actions={buildMessageActions(m, onPin)}
                     />
                   )}

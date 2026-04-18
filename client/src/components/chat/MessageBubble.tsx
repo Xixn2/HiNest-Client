@@ -248,11 +248,14 @@ export function ReactionPicker({
   onPick,
   onDismiss,
   actions = [],
+  header,
 }: {
   mine: boolean;
   onPick: (emoji: string) => void;
   onDismiss: () => void;
   actions?: MessageAction[];
+  /** 액션 메뉴 상단에 표시할 부가 정보(예: 보낸 시각) */
+  header?: string;
 }) {
   // 버블 위에 띄움. 바깥 클릭 시 닫기.
   useEffect(() => {
@@ -359,7 +362,7 @@ export function ReactionPicker({
       </div>
 
       {/* 액션 메뉴 */}
-      {actions.length > 0 && (
+      {(actions.length > 0 || header) && (
         <div
           style={{
             background: "#fff",
@@ -372,6 +375,21 @@ export function ReactionPicker({
             overflow: "hidden",
           }}
         >
+          {header && (
+            <div
+              style={{
+                padding: "8px 12px 6px",
+                fontSize: 11,
+                fontWeight: 600,
+                color: C.gray500,
+                fontFamily: FONT,
+                borderBottom: `1px solid ${C.gray100}`,
+                marginBottom: 2,
+              }}
+            >
+              {header}
+            </div>
+          )}
           {actions.map((a, i) => (
             <button
               key={a.key}
