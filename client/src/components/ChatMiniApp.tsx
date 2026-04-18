@@ -1148,13 +1148,21 @@ function RoomView({
     const distanceFromBottom = el.scrollHeight - (el.scrollTop + el.clientHeight);
     stuckToBottomRef.current = distanceFromBottom < 40;
   };
-  const rendered = useMemo(() => messages.map((m, i) => {
-    const prev = messages[i - 1];
-    const showMeta = !prev || prev.sender.id !== m.sender.id
-      || new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() > 5 * 60_000;
-    const isLast = i === messages.length - 1;
-    return { ...m, showMeta, isLast };
-  }), [messages]);
+  const rendered = useMemo(() => {
+    // 상대방이 보낸 메시지 중 가장 최근 것의 인덱스
+    let lastFromOtherIdx = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].sender.id !== meId) { lastFromOtherIdx = i; break; }
+    }
+    return messages.map((m, i) => {
+      const prev = messages[i - 1];
+      const showMeta = !prev || prev.sender.id !== m.sender.id
+        || new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() > 5 * 60_000;
+      const isLast = i === messages.length - 1;
+      const isLastFromOther = i === lastFromOtherIdx;
+      return { ...m, showMeta, isLast, isLastFromOther };
+    });
+  }, [messages, meId]);
   // 헤더는 상위 ChatFab이 렌더링 — 여기서는 메시지 + 입력만
   void room; void onBack; // 시그니처 유지
 
@@ -1272,15 +1280,16 @@ function RoomView({
                     </div>
                   )}
 
-                  {/* 마지막 메시지 — 간결 상대 시각 */}
-                  {m.isLast && (
+                  {/* 상대방이 마지막으로 보낸 메시지 — 상대 시각 표시
+                      내가 그 뒤에 답장했으면 내 메시지엔 따로 표시 안 함 */}
+                  {!mine && m.isLastFromOther && (
                     <div
                       style={{
                         marginTop: 4,
                         fontSize: 11,
                         color: C.gray500,
                         fontWeight: 500,
-                        textAlign: mine ? "right" : "left",
+                        textAlign: "left",
                       }}
                     >
                       {formatRelative(new Date(m.createdAt))}
