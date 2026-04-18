@@ -163,11 +163,12 @@ model ChatRoom {
 }
 
 model RoomMember {
-  id     String   @id @default(cuid())
-  roomId String
-  userId String
-  room   ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String    @id @default(cuid())
+  roomId     String
+  userId     String
+  lastReadAt DateTime?
+  room       ChatRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([roomId, userId])
 }
