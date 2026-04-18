@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth";
+import UpdateBanner from "./components/UpdateBanner";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import AppLayout from "./components/AppLayout";
@@ -9,8 +10,14 @@ import AttendancePage from "./pages/AttendancePage";
 import JournalPage from "./pages/JournalPage";
 import NoticePage from "./pages/NoticePage";
 import ChatPage from "./pages/ChatPage";
+import DirectoryPage from "./pages/DirectoryPage";
+import DocumentsPage from "./pages/DocumentsPage";
+import ApprovalsPage from "./pages/ApprovalsPage";
+import OrgChartPage from "./pages/OrgChartPage";
+import ProfilePage from "./pages/ProfilePage";
 import ExpensePage from "./pages/ExpensePage";
 import AdminPage from "./pages/AdminPage";
+import SuperAdminPage from "./pages/SuperAdminPage";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -30,8 +37,16 @@ function AdminOnly({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function SuperOnly({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (!user?.superAdmin) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
 export default function App() {
   return (
+    <>
+    <UpdateBanner />
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
@@ -49,6 +64,11 @@ export default function App() {
         <Route path="journal" element={<JournalPage />} />
         <Route path="notice" element={<NoticePage />} />
         <Route path="chat" element={<ChatPage />} />
+        <Route path="directory" element={<DirectoryPage />} />
+        <Route path="documents" element={<DocumentsPage />} />
+        <Route path="approvals" element={<ApprovalsPage />} />
+        <Route path="org" element={<OrgChartPage />} />
+        <Route path="profile" element={<ProfilePage />} />
         <Route path="expense" element={<ExpensePage />} />
         <Route
           path="admin"
@@ -58,8 +78,17 @@ export default function App() {
             </AdminOnly>
           }
         />
+        <Route
+          path="super-admin"
+          element={
+            <SuperOnly>
+              <SuperAdminPage />
+            </SuperOnly>
+          }
+        />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   );
 }
