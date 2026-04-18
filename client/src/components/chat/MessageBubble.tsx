@@ -100,7 +100,7 @@ function ImageThumb({ src, alt }: { src: string; alt: string }) {
           lineHeight: 0,
           borderRadius: 16,
           overflow: "hidden",
-          maxWidth: 220,
+          maxWidth: 140,
           border: 0,
           padding: 0,
           background: "transparent",
@@ -112,8 +112,8 @@ function ImageThumb({ src, alt }: { src: string; alt: string }) {
           alt={alt}
           style={{
             display: "block",
-            maxWidth: 220,
-            maxHeight: 220,
+            maxWidth: 140,
+            maxHeight: 160,
             width: "auto",
             height: "auto",
             borderRadius: 16,
@@ -503,8 +503,8 @@ export function MessageBubble({ msg, mine }: { msg: Message; mine: boolean }) {
           controls
           style={{
             display: "block",
-            maxWidth: 220,
-            maxHeight: 220,
+            maxWidth: 180,
+            maxHeight: 200,
             borderRadius: 16,
             background: "#000",
           }}
