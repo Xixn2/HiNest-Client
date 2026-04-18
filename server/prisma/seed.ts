@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
-  // 기본 관리자
+  // 기본 관리자 (Super Admin)
   const email = "admin@hinest.local";
   let admin = await prisma.user.findUnique({ where: { email } });
   if (!admin) {
@@ -15,6 +15,7 @@ async function main() {
         name: "관리자",
         passwordHash,
         role: "ADMIN",
+        superAdmin: true,
         position: "시스템관리자",
         team: "경영지원",
         avatarColor: "#36D7B7",
@@ -50,28 +51,75 @@ async function main() {
 
     console.log("Seeded admin:", email, "/ password: admin1234");
   } else {
-    console.log("Admin already exists:", email);
+    // 기존 admin 계정을 Super Admin 으로 승격(멱등)
+    if (!admin.superAdmin) {
+      await prisma.user.update({ where: { id: admin.id }, data: { superAdmin: true } });
+      console.log("Promoted admin to Super Admin:", email);
+    } else {
+      console.log("Admin already exists (Super Admin):", email);
+    }
   }
 
-  // 임시 테스트 관리자 계정
-  const testEmail = "test1234@hinest.local";
-  const testExisting = await prisma.user.findUnique({ where: { email: testEmail } });
-  if (!testExisting) {
-    const hash = await bcrypt.hash("test1234!", 10);
-    await prisma.user.create({
-      data: {
-        email: testEmail,
-        name: "테스트관리자",
+  // --- 테스트 계정 3종 ---
+  const accounts = [
+    {
+      email: "admin1",
+      name: "김하나",
+      password: "admin1234",
+      role: "ADMIN" as const,
+      superAdmin: true,
+      position: "이사",
+      team: "경영지원",
+      avatarColor: "#273990",
+    },
+    {
+      email: "admin2",
+      name: "이관리",
+      password: "admin1234",
+      role: "ADMIN" as const,
+      superAdmin: false,
+      position: "팀장",
+      team: "경영지원",
+      avatarColor: "#3D54C4",
+    },
+    {
+      email: "admin3",
+      name: "박직원",
+      password: "admin1234",
+      role: "MEMBER" as const,
+      superAdmin: false,
+      position: "사원",
+      team: "개발",
+      avatarColor: "#6278D0",
+    },
+  ];
+
+  for (const a of accounts) {
+    const hash = await bcrypt.hash(a.password, 10);
+    await prisma.user.upsert({
+      where: { email: a.email },
+      update: {
+        name: a.name,
         passwordHash: hash,
-        role: "ADMIN",
-        position: "테스터",
-        team: "QA",
-        avatarColor: "#1fbda0",
+        role: a.role,
+        superAdmin: a.superAdmin,
+        position: a.position,
+        team: a.team,
+        avatarColor: a.avatarColor,
+        active: true,
+      },
+      create: {
+        email: a.email,
+        name: a.name,
+        passwordHash: hash,
+        role: a.role,
+        superAdmin: a.superAdmin,
+        position: a.position,
+        team: a.team,
+        avatarColor: a.avatarColor,
       },
     });
-    console.log("Seeded test admin:", testEmail, "/ password: test1234!");
-  } else {
-    console.log("Test admin already exists:", testEmail);
+    console.log(`Upserted ${a.email} / ${a.password} (${a.role}${a.superAdmin ? "+SUPER" : ""})`);
   }
 }
 

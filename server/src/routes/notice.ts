@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/db.js";
 import { requireAuth, writeLog } from "../lib/auth.js";
+import { notifyAllUsers } from "../lib/notify.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -30,6 +31,16 @@ router.post("/", async (req, res) => {
     data: { title: d.title, content: d.content, pinned: !!d.pinned, authorId: u.id },
   });
   await writeLog(u.id, "NOTICE_CREATE", n.id, d.title);
+  await notifyAllUsers(
+    {
+      type: "NOTICE",
+      title: d.pinned ? `📌 ${d.title}` : d.title,
+      body: d.content.slice(0, 120),
+      linkUrl: `/notice`,
+      actorName: u.name,
+    },
+    u.id
+  );
   res.json({ notice: n });
 });
 
