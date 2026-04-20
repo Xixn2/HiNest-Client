@@ -60,33 +60,68 @@ router.delete("/invites/:id", async (req, res) => {
 });
 
 /* ===== 유저 ===== */
+// HR 상세까지 포함해 전 필드 반환. 엑셀 업/다운로드 기반.
+const HR_SELECT = {
+  id: true,
+  email: true,
+  name: true,
+  role: true,
+  team: true,
+  position: true,
+  active: true,
+  avatarColor: true,
+  createdAt: true,
+  hrCode: true,
+  affiliation: true,
+  employeeNo: true,
+  workplace: true,
+  department: true,
+  jobDuty: true,
+  employmentType: true,
+  employmentCategory: true,
+  contractType: true,
+  birthDate: true,
+  gender: true,
+  disabilityType: true,
+  disabilityLevel: true,
+  hireDate: true,
+  phone: true,
+  note: true,
+} as const;
+
 router.get("/users", async (req, res) => {
   const u = (req as any).user;
   const users = await prisma.user.findMany({
     where: u.superAdmin ? {} : { superAdmin: false }, // 일반 관리자에겐 총관리자 계정 은닉
     orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      role: true,
-      team: true,
-      position: true,
-      active: true,
-      avatarColor: true,
-      createdAt: true,
-      // superAdmin 필드는 의도적으로 반환하지 않음
-    },
+    select: HR_SELECT,
   });
   res.json({ users });
 });
 
+const nullableStr = z.string().optional().nullable();
 const updateUserSchema = z.object({
   role: z.enum(["ADMIN", "MANAGER", "MEMBER"]).optional(),
-  team: z.string().optional().nullable(),
-  position: z.string().optional().nullable(),
+  team: nullableStr,
+  position: nullableStr,
   active: z.boolean().optional(),
   name: z.string().optional(),
+  hrCode: nullableStr,
+  affiliation: nullableStr,
+  employeeNo: nullableStr,
+  workplace: nullableStr,
+  department: nullableStr,
+  jobDuty: nullableStr,
+  employmentType: nullableStr,
+  employmentCategory: nullableStr,
+  contractType: nullableStr,
+  birthDate: nullableStr,
+  gender: nullableStr,
+  disabilityType: nullableStr,
+  disabilityLevel: nullableStr,
+  hireDate: nullableStr,
+  phone: nullableStr,
+  note: nullableStr,
 });
 
 router.patch("/users/:id", async (req, res) => {
@@ -102,10 +137,81 @@ router.patch("/users/:id", async (req, res) => {
   const updated = await prisma.user.update({
     where: { id: req.params.id },
     data: parsed.data,
-    select: { id: true, email: true, name: true, role: true, team: true, position: true, active: true },
+    select: HR_SELECT,
   });
   await writeLog(u.id, "USER_UPDATE", req.params.id, JSON.stringify(parsed.data));
   res.json({ user: updated });
+});
+
+/* ===== 엑셀 일괄 업로드 — HR 필드 업서트 =====
+ * 클라이언트에서 xlsx 파일 파싱 후 행 배열 전달.
+ * 식별자: email(우선) 또는 employeeNo 또는 hrCode 중 먼저 매치되는 기존 유저를 업데이트.
+ * 매치 안 되면 무시 (잘못된 비밀번호로 신규 유저 만들지 않음).
+ */
+const importRowSchema = z.object({
+  email: z.string().optional(),
+  hrCode: z.string().optional(),
+  employeeNo: z.string().optional(),
+  name: z.string().optional(),
+  affiliation: z.string().optional(),
+  workplace: z.string().optional(),
+  department: z.string().optional(),
+  jobDuty: z.string().optional(),
+  position: z.string().optional(),
+  employmentType: z.string().optional(),
+  employmentCategory: z.string().optional(),
+  contractType: z.string().optional(),
+  birthDate: z.string().optional(),
+  gender: z.string().optional(),
+  disabilityType: z.string().optional(),
+  disabilityLevel: z.string().optional(),
+  hireDate: z.string().optional(),
+  phone: z.string().optional(),
+  note: z.string().optional(),
+  team: z.string().optional(),
+});
+router.post("/users/import", async (req, res) => {
+  const u = (req as any).user;
+  const rows = Array.isArray(req.body?.rows) ? req.body.rows : null;
+  if (!rows) return res.status(400).json({ error: "rows 배열이 필요합니다." });
+
+  let updated = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+
+  for (const [i, raw] of rows.entries()) {
+    const parsed = importRowSchema.safeParse(raw);
+    if (!parsed.success) {
+      skipped++;
+      errors.push(`행 ${i + 2}: 형식 오류`);
+      continue;
+    }
+    const d = parsed.data;
+    // 식별자 순서: email → employeeNo → hrCode
+    let target: { id: string; superAdmin: boolean } | null = null;
+    if (d.email) target = await prisma.user.findUnique({ where: { email: d.email }, select: { id: true, superAdmin: true } });
+    if (!target && d.employeeNo) target = await prisma.user.findFirst({ where: { employeeNo: d.employeeNo }, select: { id: true, superAdmin: true } });
+    if (!target && d.hrCode) target = await prisma.user.findFirst({ where: { hrCode: d.hrCode }, select: { id: true, superAdmin: true } });
+    if (!target) {
+      skipped++;
+      errors.push(`행 ${i + 2}: 일치하는 유저 없음 (email/사번/HR번호 중 하나 필요)`);
+      continue;
+    }
+    if (target.superAdmin && !u.superAdmin) {
+      skipped++;
+      continue;
+    }
+    // undefined 값은 무시되도록 필터링
+    const data: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(d)) {
+      if (k === "email") continue; // 식별자로만 쓰고 변경은 안 함
+      if (v !== undefined && v !== "") data[k] = v;
+    }
+    await prisma.user.update({ where: { id: target.id }, data });
+    updated++;
+  }
+  await writeLog(u.id, "USER_IMPORT", "", JSON.stringify({ updated, skipped }));
+  res.json({ updated, skipped, errors: errors.slice(0, 20) });
 });
 
 router.delete("/users/:id", async (req, res) => {
@@ -221,6 +327,48 @@ router.get("/logs", requireSuperAdminStepUp, async (req, res) => {
     include: { user: { select: { name: true, email: true } } },
   });
   res.json({ logs });
+});
+
+/* ===== 출근 기록 조회 — 특정 유저의 특정 날짜 ===== */
+router.get("/users/:id/attendance", async (req, res) => {
+  const { id } = req.params;
+  const d = new Date();
+  const defaultDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const qdate = typeof req.query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date) ? req.query.date : defaultDate;
+  const rec = await prisma.attendance.findUnique({
+    where: { userId_date: { userId: id, date: qdate } },
+  });
+  res.json({ attendance: rec });
+});
+
+/* ===== 출근 기록 관리 — 특정 유저의 특정 날짜 출퇴근 시각 수정 ===== */
+// body: { date?: "YYYY-MM-DD" 생략시 오늘, checkIn?: ISO|null, checkOut?: ISO|null }
+// 문자열 생략 → 미변경, null 명시 → 해당 필드 지움.
+router.patch("/users/:id/attendance", async (req, res) => {
+  const { id } = req.params;
+  const user = await prisma.user.findUnique({ where: { id } });
+  if (!user) return res.status(404).json({ error: "not found" });
+  const body = req.body ?? {};
+  const d = new Date();
+  const defaultDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const date = typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : defaultDate;
+  const parseTime = (v: unknown): Date | null | undefined => {
+    if (v === null) return null;
+    if (typeof v !== "string" || !v) return undefined;
+    const dt = new Date(v);
+    return isNaN(dt.getTime()) ? undefined : dt;
+  };
+  const checkIn = parseTime(body.checkIn);
+  const checkOut = parseTime(body.checkOut);
+  const data: { checkIn?: Date | null; checkOut?: Date | null } = {};
+  if (checkIn !== undefined) data.checkIn = checkIn;
+  if (checkOut !== undefined) data.checkOut = checkOut;
+  const rec = await prisma.attendance.upsert({
+    where: { userId_date: { userId: id, date } },
+    update: data,
+    create: { userId: id, date, checkIn: checkIn ?? null, checkOut: checkOut ?? null },
+  });
+  res.json({ attendance: rec });
 });
 
 export default router;
