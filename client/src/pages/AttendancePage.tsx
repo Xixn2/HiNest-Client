@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
+import { api, apiSWR } from "../api";
 import PageHeader from "../components/PageHeader";
 import { useAuth } from "../auth";
 import MonthPicker from "../components/MonthPicker";
@@ -51,9 +51,24 @@ export default function AttendancePage() {
     }
   }
 
+  // SWR — 월별 출퇴근과 휴가 목록은 탭 재진입 시 캐시로 즉시 채움.
+  const isReviewer = user?.role === "ADMIN" || user?.role === "MANAGER";
   useEffect(() => {
-    load();
-  }, [month]);
+    apiSWR<{ attendances: Attendance[] }>(`/api/attendance/month?month=${month}`, {
+      onCached: (d) => setRecords(d.attendances),
+      onFresh: (d) => setRecords(d.attendances),
+    });
+    apiSWR<{ leaves: Leave[] }>("/api/attendance/leave", {
+      onCached: (d) => setLeaves(d.leaves),
+      onFresh: (d) => setLeaves(d.leaves),
+    });
+    if (isReviewer) {
+      apiSWR<{ leaves: Leave[] }>("/api/attendance/leave?all=1", {
+        onCached: (d) => setAllLeaves(d.leaves),
+        onFresh: (d) => setAllLeaves(d.leaves),
+      });
+    }
+  }, [month, isReviewer]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

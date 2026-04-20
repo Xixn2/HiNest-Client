@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { api } from "../api";
+import { api, apiSWR } from "../api";
 import { useAuth } from "../auth";
 import { useNotifications } from "../notifications";
 import PageHeader from "../components/PageHeader";
@@ -41,8 +41,12 @@ export default function NoticePage() {
     setList(res.notices);
   }
 
+  // 첫 진입은 SWR — 이전 캐시가 있으면 즉시 렌더하고, 네트워크로 최신값 병합.
   useEffect(() => {
-    load();
+    apiSWR<{ notices: Notice[] }>("/api/notice", {
+      onCached: (d) => setList(d.notices),
+      onFresh: (d) => setList(d.notices),
+    });
   }, []);
 
   // 알림 등에서 ?id=... 로 들어왔을 때 자동 선택

@@ -110,6 +110,8 @@ function ImageThumb({ src, alt }: { src: string; alt: string }) {
         <img
           src={src}
           alt={alt}
+          loading="lazy"
+          decoding="async"
           style={{
             display: "block",
             maxWidth: 140,
@@ -725,6 +727,8 @@ export function AttachmentPreview({
       <img
         src={att.url}
         alt={att.name}
+        loading="lazy"
+        decoding="async"
         style={{ display: "block", width: 72, height: 72, objectFit: "cover" }}
       />
     );
