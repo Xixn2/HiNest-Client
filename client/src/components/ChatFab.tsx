@@ -61,7 +61,6 @@ export default function ChatFab() {
   const [openRoomReq, setOpenRoomReq] = useState<{ id: number; roomId: string } | null>(null);
 
   const hidden =
-    loc.pathname.startsWith("/chat") ||
     loc.pathname.startsWith("/login") ||
     loc.pathname.startsWith("/signup");
 

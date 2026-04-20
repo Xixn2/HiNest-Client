@@ -123,11 +123,22 @@ export function showDesktopNotification(opts: {
     n.onclick = () => {
       try { window.focus(); } catch {}
       if (opts.url) {
-        // SPA 네비게이션을 위해 history.pushState + popstate 트리거
-        try {
-          window.history.pushState({}, "", opts.url);
-          window.dispatchEvent(new PopStateEvent("popstate"));
-        } catch {}
+        // /chat 페이지 제거됨 — room 링크는 우하단 사내톡 팝업으로 돌린다
+        const chatMatch = /^\/chat(?:\?|#).*?room=([^&]+)/.exec(opts.url);
+        if (chatMatch) {
+          try {
+            window.dispatchEvent(new CustomEvent("chat:open"));
+            window.dispatchEvent(new CustomEvent("chat:open-room", { detail: { roomId: chatMatch[1] } }));
+          } catch {}
+        } else if (opts.url.startsWith("/chat")) {
+          try { window.dispatchEvent(new CustomEvent("chat:open")); } catch {}
+        } else {
+          // SPA 네비게이션을 위해 history.pushState + popstate 트리거
+          try {
+            window.history.pushState({}, "", opts.url);
+            window.dispatchEvent(new PopStateEvent("popstate"));
+          } catch {}
+        }
       }
       n.close();
     };
