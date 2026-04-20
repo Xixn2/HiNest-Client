@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { useNotifications } from "../notifications";
+import { resolvePresence } from "../lib/presence";
 import {
   C,
   FONT,
@@ -42,6 +43,7 @@ export default function ChatMiniApp({
   active: isPanelOpen,
   onActiveRoomChange,
   createGroupRequestId,
+  openRoomRequest,
 }: {
   active: boolean;
   /** 대화방 진입/뒤로가기를 ChatFab 헤더가 알 수 있게 알림 */
@@ -55,6 +57,8 @@ export default function ChatMiniApp({
   } | null) => void;
   /** 이 값이 변할 때마다 그룹 생성 뷰를 엶 */
   createGroupRequestId?: number;
+  /** 외부(검색 등)에서 특정 방을 강제로 열고 싶을 때 — id 가 바뀔 때마다 해당 roomId 로 진입 */
+  openRoomRequest?: { id: number; roomId: string } | null;
 }) {
   const { user } = useAuth();
   const { items: notifItems, markRoomRead } = useNotifications();
@@ -65,7 +69,9 @@ export default function ChatMiniApp({
   const [readStates, setReadStates] = useState<{ userId: string; lastReadAt: string | null }[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [attachment, setAttachment] = useState<Attachment | null>(null);
+  // 한 메시지에 여러 첨부를 붙일 수 있도록 배열로 관리.
+  // 전송 시 첨부가 N개면: 첫 메시지에 텍스트+첫 첨부, 이어지는 첨부는 각각 별도 메시지로 전송.
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [q, setQ] = useState("");
   const [showSettings, setShowSettings] = useState(false);
@@ -73,6 +79,31 @@ export default function ChatMiniApp({
   // 방별 로컬 설정(별명/음소거) — localStorage 보관
   const [roomSettings, setRoomSettings] = useState<Record<string, RoomLocalSetting>>(() => loadAllRoomSettings());
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // 유저별 업무 상태 매핑 — 아바타 프레즌스 점용. 주기적으로 /api/users 갱신.
+  const [presenceMap, setPresenceMap] = useState<Record<string, { presenceStatus: string | null; workStatus: string | null; presenceMessage: string | null }>>({});
+  useEffect(() => {
+    if (!isPanelOpen) return;
+    let cancelled = false;
+    const fetchPresence = async () => {
+      try {
+        const res = await api<{ users: Array<{ id: string; presenceStatus?: string | null; workStatus?: string | null; presenceMessage?: string | null }> }>("/api/users");
+        if (cancelled) return;
+        const m: Record<string, { presenceStatus: string | null; workStatus: string | null; presenceMessage: string | null }> = {};
+        for (const u of res.users) {
+          m[u.id] = {
+            presenceStatus: u.presenceStatus ?? null,
+            workStatus: u.workStatus ?? null,
+            presenceMessage: u.presenceMessage ?? null,
+          };
+        }
+        setPresenceMap(m);
+      } catch {}
+    };
+    fetchPresence();
+    const t = setInterval(fetchPresence, 30_000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [isPanelOpen]);
 
   const patchRoomSetting = (roomId: string, patch: { nickname?: string; muted?: boolean }) => {
     setRoomSettings((prev) => {
@@ -120,7 +151,30 @@ export default function ChatMiniApp({
     } catch {}
   };
 
+  // 현재 채팅이 사용자에게 실제로 보이는지 — 창이 포커스 잃었거나 탭이 백그라운드면 읽음 처리 금지
+  const isChatVisible = () =>
+    isPanelOpen &&
+    typeof document !== "undefined" &&
+    document.visibilityState === "visible" &&
+    (typeof document.hasFocus !== "function" || document.hasFocus());
+
+  const markRead = async (roomId: string) => {
+    try {
+      await api(`/api/chat/rooms/${roomId}/read`, { method: "POST" });
+    } catch {}
+  };
+
   useEffect(() => { if (isPanelOpen) loadRooms(); }, [isPanelOpen]);
+
+  // 외부(검색 모달 등)에서 openRoomRequest 가 바뀌면 해당 방으로 진입
+  useEffect(() => {
+    if (!openRoomRequest?.id || !openRoomRequest.roomId) return;
+    setShowSettings(false);
+    setCreatingGroup(false);
+    setActiveId(openRoomRequest.roomId);
+    // 방 목록에 아직 없을 수도 있으니 새로고침
+    loadRooms();
+  }, [openRoomRequest?.id]);
   useEffect(() => {
     if (!isPanelOpen) return;
     const t = setInterval(loadRooms, 5000);
@@ -131,10 +185,34 @@ export default function ChatMiniApp({
     // 새 방 진입 시 이전 메시지 즉시 제거 → 이전 방의 메시지가 잠깐 보이는 현상 방지
     setMessages([]);
     loadMessages(activeId);
-    markRoomRead(activeId);
-    const t = setInterval(() => loadMessages(activeId), 3000);
+    if (isChatVisible()) {
+      markRead(activeId);
+      markRoomRead(activeId);
+    }
+    // 더 빠른 업데이트를 위해 1.5초 주기
+    const t = setInterval(() => {
+      loadMessages(activeId);
+      if (isChatVisible()) markRead(activeId);
+    }, 1500);
     return () => clearInterval(t);
-  }, [activeId]);
+  }, [activeId, isPanelOpen]);
+
+  // 창이 다시 포커스/visibility 복귀할 때 즉시 읽음 처리
+  useEffect(() => {
+    if (!activeId) return;
+    const onFocus = () => {
+      if (isChatVisible()) {
+        markRead(activeId);
+        markRoomRead(activeId);
+      }
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [activeId, isPanelOpen]);
 
   // 상위 ChatFab 헤더가 방 정보를 보여줄 수 있도록 알림
   const activeRoomObj = useMemo(() => rooms.find((r) => r.id === activeId) ?? null, [rooms, activeId]);
@@ -211,7 +289,11 @@ export default function ChatMiniApp({
 
   async function pickAndUpload(file: File) {
     const att = await uploadFile(file);
-    if (att) setAttachment(att);
+    if (att) setAttachments((prev) => [...prev, att]);
+  }
+
+  function removeAttachmentAt(index: number) {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function reactToMessage(messageId: string, emoji: string) {
@@ -254,25 +336,29 @@ export default function ChatMiniApp({
   async function send() {
     if (!activeId || sending) return;
     const content = input.trim();
-    if (!content && !attachment) return;
+    if (!content && attachments.length === 0) return;
     const prevInput = input;
-    const prevAttachment = attachment;
+    const prevAttachments = attachments;
     setInput("");
-    setAttachment(null);
+    setAttachments([]);
     setSending(true);
     try {
-      if (prevAttachment) {
-        await api(`/api/chat/rooms/${activeId}/messages`, {
-          method: "POST",
-          json: {
-            content,
-            kind: prevAttachment.kind,
-            fileUrl: prevAttachment.url,
-            fileName: prevAttachment.name,
-            fileType: prevAttachment.type,
-            fileSize: prevAttachment.size,
-          },
-        });
+      if (prevAttachments.length > 0) {
+        // 첫 첨부에 텍스트를 같이 실어 보내고, 나머지는 첨부만 순차 전송.
+        for (let i = 0; i < prevAttachments.length; i++) {
+          const a = prevAttachments[i];
+          await api(`/api/chat/rooms/${activeId}/messages`, {
+            method: "POST",
+            json: {
+              content: i === 0 ? content : "",
+              kind: a.kind,
+              fileUrl: a.url,
+              fileName: a.name,
+              fileType: a.type,
+              fileSize: a.size,
+            },
+          });
+        }
       } else {
         await api(`/api/chat/rooms/${activeId}/messages`, {
           method: "POST",
@@ -282,7 +368,7 @@ export default function ChatMiniApp({
       await loadMessages(activeId);
     } catch {
       setInput(prevInput);
-      setAttachment(prevAttachment);
+      setAttachments(prevAttachments);
     } finally {
       setSending(false);
     }
@@ -326,7 +412,7 @@ export default function ChatMiniApp({
       style={{
         width: "100%", height: "100%",
         display: "flex", flexDirection: "column",
-        background: "#fff",
+        background: C.surface,
         fontFamily: FONT,
         color: C.ink,
         letterSpacing: "-0.01em",
@@ -360,13 +446,14 @@ export default function ChatMiniApp({
           onSend={send}
           sending={sending}
           scrollRef={scrollRef}
-          attachment={attachment}
+          attachments={attachments}
           uploading={uploading}
           onPickFile={pickAndUpload}
-          onClearAttachment={() => setAttachment(null)}
+          onRemoveAttachment={removeAttachmentAt}
           onReact={reactToMessage}
           onPin={pinMessage}
           readStates={readStates}
+          presenceMap={presenceMap}
         />
       ) : (
         <ListView
@@ -379,6 +466,7 @@ export default function ChatMiniApp({
           messageHits={messageHits}
           searching={searching}
           roomSettings={roomSettings}
+          presenceMap={presenceMap}
         />
       )}
     </div>
@@ -387,12 +475,13 @@ export default function ChatMiniApp({
 
 /* ======================= 목록 ======================= */
 function ListView({
-  rooms, meId, unread, q, setQ, onOpen, messageHits, searching, roomSettings,
+  rooms, meId, unread, q, setQ, onOpen, messageHits, searching, roomSettings, presenceMap,
 }: {
   rooms: Room[]; meId: string; unread: Record<string, number>;
   q: string; setQ: (v: string) => void; onOpen: (id: string) => void;
   messageHits: MessageHit[]; searching: boolean;
   roomSettings: Record<string, RoomLocalSetting>;
+  presenceMap: Record<string, { presenceStatus: string | null; workStatus: string | null; presenceMessage: string | null }>;
 }) {
   const displayTitle = (r: Room) => roomSettings[r.id]?.nickname || roomTitle(r, meId);
   const isSearching = q.trim().length > 0;
@@ -466,6 +555,21 @@ function ListView({
           const mine = !!last && last.senderId === meId;
           const preview = last ? previewForMessage(last) : "새로운 대화를 시작해보세요";
           const prefix = last && mine ? "나: " : undefined;
+          // 1:1 방이면 상대방의 presence 점을 아바타 우하단에 표시
+          let presenceColor: string | undefined;
+          let presenceTitle: string | undefined;
+          if (r.type === "DIRECT") {
+            const other = r.members.find((m) => m.user.id !== meId);
+            if (other) {
+              const p = presenceMap[other.user.id];
+              const info = resolvePresence(
+                (p?.presenceStatus ?? null) as any,
+                (p?.workStatus ?? null) as any,
+              );
+              presenceColor = info.color;
+              presenceTitle = p?.presenceMessage ? `${info.label} · ${p.presenceMessage}` : info.label;
+            }
+          }
           return (
             <ListRow
               key={r.id}
@@ -478,6 +582,8 @@ function ListView({
               rightTop={last ? formatRelative(new Date(last.createdAt)) : null}
               unread={u}
               muted={muted}
+              presenceColor={presenceColor}
+              presenceTitle={presenceTitle}
             />
           );
         })}
@@ -538,7 +644,7 @@ function EmptyRow({ children }: { children: React.ReactNode }) {
 
 /* ===== 범용 리스트 행 ===== */
 function ListRow({
-  onClick, avatar, title, titleHighlight, subtitle, subtitleHighlight, subtitlePrefix, rightTop, unread, muted,
+  onClick, avatar, title, titleHighlight, subtitle, subtitleHighlight, subtitlePrefix, rightTop, unread, muted, presenceColor, presenceTitle,
 }: {
   onClick: () => void;
   avatar: { name: string; color: string };
@@ -550,6 +656,8 @@ function ListRow({
   rightTop: string | null;
   unread: number;
   muted?: boolean;
+  presenceColor?: string;
+  presenceTitle?: string;
 }) {
   return (
     <button
@@ -567,7 +675,7 @@ function ListRow({
       onMouseEnter={(e) => (e.currentTarget.style.background = C.gray100)}
       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
     >
-      <Avatar name={avatar.name} color={avatar.color} size={46} />
+      <Avatar name={avatar.name} color={avatar.color} size={46} presenceColor={presenceColor} presenceTitle={presenceTitle} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div
@@ -717,7 +825,7 @@ function CreateGroupView({
   }
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "#fff" }}>
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", background: C.surface }}>
       {/* 스크롤 영역 */}
       <div style={{ flex: 1, overflowY: "auto", padding: "4px 18px 12px" }}>
         {/* 그룹 이름 */}
@@ -855,7 +963,7 @@ function CreateGroupView({
       </div>
 
       {/* 하단 액션 바 */}
-      <div style={{ padding: "12px 18px 16px", background: "#fff", display: "flex", gap: 8 }}>
+      <div style={{ padding: "12px 18px 16px", background: C.surface, display: "flex", gap: 8 }}>
         {err && (
           <div style={{ alignSelf: "center", fontSize: 12.5, fontWeight: 600, color: C.red }}>{err}</div>
         )}
@@ -912,7 +1020,7 @@ function SettingsView({
   };
 
   return (
-    <div style={{ flex: 1, overflowY: "auto", padding: "6px 18px 18px", background: "#fff" }}>
+    <div style={{ flex: 1, overflowY: "auto", padding: "6px 18px 18px", background: C.surface }}>
       {/* 프로필 블록 — 중앙 정렬 */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "12px 0 20px" }}>
         <Avatar name={settings.nickname || originalTitle} color={roomColor(room, meId)} size={72} />
@@ -980,7 +1088,7 @@ function SettingsView({
               onClick={() => { setDraft(settings.nickname ?? ""); setEditing(true); }}
               style={{
                 padding: "6px 12px", borderRadius: 8,
-                background: "#fff", color: C.ink,
+                background: C.surface, color: C.ink,
                 border: `1px solid ${C.gray300}`, cursor: "pointer",
                 fontSize: 13, fontWeight: 600, fontFamily: FONT,
               }}
@@ -1040,7 +1148,7 @@ function SettingsView({
               position: "absolute",
               top: 2, left: muted ? 20 : 2,
               width: 24, height: 24, borderRadius: "50%",
-              background: "#fff",
+              background: C.surface,
               boxShadow: "0 1px 3px rgba(0,0,0,.15)",
               transition: "left .18s ease",
             }}
@@ -1099,18 +1207,20 @@ function buildMessageActions(m: Message, onPin: (id: string) => void): MessageAc
 /* ======================= 대화방 ======================= */
 function RoomView({
   room, messages, meId, onBack, input, setInput, onSend, sending, scrollRef,
-  attachment, uploading, onPickFile, onClearAttachment, onReact, onPin, readStates,
+  attachments, uploading, onPickFile, onRemoveAttachment, onReact, onPin, readStates, presenceMap,
 }: {
   room: Room; messages: Message[]; meId: string; onBack: () => void;
   input: string; setInput: (v: string) => void; onSend: () => void; sending: boolean;
   scrollRef: React.RefObject<HTMLDivElement>;
-  attachment: Attachment | null; uploading: boolean;
-  onPickFile: (file: File) => void; onClearAttachment: () => void;
+  attachments: Attachment[]; uploading: boolean;
+  onPickFile: (file: File) => void; onRemoveAttachment: (index: number) => void;
   onReact: (messageId: string, emoji: string) => void;
   onPin: (messageId: string) => void;
   readStates: { userId: string; lastReadAt: string | null }[];
+  presenceMap: Record<string, { presenceStatus: string | null; workStatus: string | null; presenceMessage: string | null }>;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [reactingId, setReactingId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const prevCountRef = useRef(0);
@@ -1155,6 +1265,32 @@ function RoomView({
     const distanceFromBottom = el.scrollHeight - (el.scrollTop + el.clientHeight);
     stuckToBottomRef.current = distanceFromBottom < 40;
   };
+
+  // 이미지/첨부가 늦게 로드되어 scrollHeight 가 나중에 커질 때도 하단 유지
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      if (stuckToBottomRef.current) {
+        el.scrollTop = el.scrollHeight;
+      }
+    });
+    // 스크롤 영역 자체 + 내부 자식들 관찰
+    ro.observe(el);
+    for (const child of Array.from(el.children)) ro.observe(child as Element);
+    // 이미지 개별 load 이벤트 — ResizeObserver 가 못 잡는 브라우저 대비
+    const imgs = el.querySelectorAll("img");
+    const onLoad = () => {
+      if (stuckToBottomRef.current) el.scrollTop = el.scrollHeight;
+    };
+    imgs.forEach((img) => {
+      if (!(img as HTMLImageElement).complete) img.addEventListener("load", onLoad);
+    });
+    return () => {
+      ro.disconnect();
+      imgs.forEach((img) => img.removeEventListener("load", onLoad));
+    };
+  }, [room.id, messages.length]);
   const rendered = useMemo(() => {
     // 상대방이 보낸 메시지 중 가장 최근 것의 인덱스
     let lastFromOtherIdx = -1;
@@ -1171,12 +1307,17 @@ function RoomView({
       // 안읽음 카운트 — 발신자 본인은 제외, lastReadAt 이 메시지 createdAt 보다 이전인 멤버 수
       const sent = new Date(m.createdAt).getTime();
       let unread = 0;
+      const unreadNames: string[] = [];
       for (const r of readStates) {
         if (r.userId === m.sender.id) continue;
         const readAt = r.lastReadAt ? new Date(r.lastReadAt).getTime() : 0;
-        if (readAt < sent) unread++;
+        if (readAt < sent) {
+          unread++;
+          const mem = room.members.find((rm) => rm.user.id === r.userId);
+          if (mem) unreadNames.push(mem.user.name);
+        }
       }
-      return { ...m, showMeta, isLast, isLastFromOther, unread };
+      return { ...m, showMeta, isLast, isLastFromOther, unread, unreadNames };
     });
   }, [messages, meId, readStates]);
   // 헤더는 상위 ChatFab이 렌더링 — 여기서는 메시지 + 입력만
@@ -1191,7 +1332,7 @@ function RoomView({
         style={{
           flex: 1, overflowY: "auto",
           padding: "4px 14px 10px",
-          background: "#fff",
+          background: C.surface,
           // 첫 로드 완료 전에는 감춰서 "위에서 아래로 스크롤되는" 플래시를 숨김
           visibility: ready || messages.length === 0 ? "visible" : "hidden",
         }}
@@ -1226,13 +1367,28 @@ function RoomView({
             <div key={m.id} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", marginBottom: 4 }}>
               <div style={{ display: "flex", alignItems: "flex-end", gap: 8, maxWidth: "78%", flexDirection: mine ? "row-reverse" : "row" }}>
                 {!mine && m.showMeta ? (
-                  <Avatar name={m.sender.name} color={m.sender.avatarColor ?? C.blue} size={26} />
+                  (() => {
+                    const p = presenceMap[m.sender.id];
+                    const info = resolvePresence(
+                      (p?.presenceStatus ?? null) as any,
+                      (p?.workStatus ?? null) as any,
+                    );
+                    return (
+                      <Avatar
+                        name={m.sender.name}
+                        color={m.sender.avatarColor ?? C.blue}
+                        size={26}
+                        presenceColor={info.color}
+                        presenceTitle={info.label + (p?.presenceMessage ? ` · ${p.presenceMessage}` : "")}
+                      />
+                    );
+                  })()
                 ) : !mine ? (
-                  <div style={{ width: 26 }} />
+                  <div style={{ width: 26, flexShrink: 0 }} />
                 ) : null}
-                <div style={{ minWidth: 0, position: "relative" }}>
+                <div style={{ minWidth: 0, flex: "0 1 auto", position: "relative" }}>
                   {!mine && m.showMeta && (
-                    <div style={{ fontSize: 11.5, fontWeight: 600, color: C.gray600, marginLeft: 12, marginBottom: 3 }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 600, color: C.gray600, marginLeft: 4, marginBottom: 3 }}>
                       {m.sender.name}
                     </div>
                   )}
@@ -1243,18 +1399,22 @@ function RoomView({
                       gap: 4,
                       flexDirection: mine ? "row" : "row-reverse",
                       justifyContent: "flex-end",
+                      minWidth: 0,
+                      maxWidth: "100%",
                     }}
                   >
-                    {/* 카톡식 안읽음 숫자 — 버블 옆에 작게 */}
+                    {/* 안읽음 숫자 — 버블 옆에 작게 (테마 따라 톤 변경) */}
                     {m.unread > 0 && (
                       <span
+                        title={m.unreadNames?.length ? `안 읽음: ${m.unreadNames.join(", ")}` : undefined}
                         style={{
                           fontSize: 11,
                           fontWeight: 700,
-                          color: "#FFB800",
+                          color: C.blue,
                           marginBottom: 2,
                           fontVariantNumeric: "tabular-nums",
                           whiteSpace: "nowrap",
+                          cursor: "help",
                         }}
                       >
                         {m.unread}
@@ -1265,7 +1425,7 @@ function RoomView({
                         style={{
                           padding: "9px 13px", fontSize: 14, fontWeight: 500,
                           lineHeight: 1.4, letterSpacing: "-0.01em",
-                          color: mine ? "#fff" : C.ink,
+                          color: mine ? C.brandFg : C.ink,
                           background: mine ? C.blue : C.gray100,
                           borderRadius: 16, fontStyle: "italic", opacity: 0.6,
                         }}
@@ -1354,44 +1514,79 @@ function RoomView({
         })}
       </div>
 
-      {/* 숨김 파일 인풋 */}
+      {/* 숨김 파일 인풋 — 다중 선택 허용 */}
       <input
         ref={fileInputRef}
         type="file"
         accept="image/*,video/*,*/*"
+        multiple
         style={{ display: "none" }}
         onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) onPickFile(f);
+          const files = Array.from(e.target.files ?? []);
+          for (const f of files) onPickFile(f);
           e.target.value = "";
+          // 파일 인풋에 포커스가 남아있으면 엔터가 다시 파일 선택창을 열어버림.
+          // 명시적으로 텍스트 입력창으로 포커스 이동.
+          setTimeout(() => textareaRef.current?.focus(), 0);
         }}
       />
 
-      {/* 첨부 미리보기 — 파일 선택 시 입력바 위에 표시 */}
-      {attachment && (
+      {/* 첨부 미리보기 — 파일 선택 시 입력바 위에 표시 (여러 개 가로 나열 + 좌측 '+' 로 추가) */}
+      {(attachments.length > 0 || uploading) && (
         <div
           style={{
             padding: "0 14px 8px",
-            background: "#fff",
+            background: C.surface,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            overflowX: "auto",
           }}
         >
-          <AttachmentPreview att={attachment} onClear={onClearAttachment} />
-        </div>
-      )}
-      {uploading && !attachment && (
-        <div style={{ padding: "0 14px 8px", fontSize: 12, color: C.gray600, fontWeight: 500 }}>
-          업로드 중…
+          {/* 추가 버튼 — 첨부가 있을 때만 좌측에 표시 */}
+          {attachments.length > 0 && (
+            <button
+              type="button"
+              title="파일 더 추가"
+              aria-label="파일 더 추가"
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                width: 72, height: 72, flexShrink: 0,
+                borderRadius: 14,
+                border: `1.5px dashed ${C.gray300 ?? "#D1D5DB"}`,
+                background: C.gray100,
+                color: C.gray600,
+                cursor: "pointer",
+                display: "grid", placeItems: "center",
+                transition: "background .12s ease, color .12s ease",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = C.gray200 ?? "#E5E7EB"; e.currentTarget.style.color = C.ink; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = C.gray100; e.currentTarget.style.color = C.gray600; }}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </button>
+          )}
+          {attachments.map((a, i) => (
+            <AttachmentPreview key={i} att={a} onClear={() => onRemoveAttachment(i)} />
+          ))}
+          {uploading && (
+            <div style={{ fontSize: 12, color: C.gray600, fontWeight: 500, flexShrink: 0 }}>
+              업로드 중…
+            </div>
+          )}
         </div>
       )}
 
       {/* 입력바 — 필(내부 클립) + 외부 전송 버튼(입력/첨부 시 슬라이드 인) */}
       {(() => {
-        const hasContent = !!input.trim() || !!attachment;
+        const hasContent = !!input.trim() || attachments.length > 0;
         return (
           <div
             style={{
               padding: "10px 14px 14px",
-              background: "#fff",
+              background: C.surface,
               display: "flex", alignItems: "flex-end", gap: 8,
             }}
           >
@@ -1406,6 +1601,7 @@ function RoomView({
               }}
             >
               <textarea
+                ref={textareaRef}
                 rows={1}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}

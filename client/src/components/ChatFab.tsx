@@ -35,11 +35,30 @@ type ActiveRoomInfo = {
 
 export default function ChatFab() {
   const loc = useLocation();
-  const { chatUnread } = useNotifications();
+  const { chatUnread, ready } = useNotifications();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  // 새 채팅 알림이 들어올 때 파란 펄스.
+  // - 단순 새로고침/재오픈만으론 발동하지 않음 (localStorage 에 저장된 마지막으로 본 카운트와 비교).
+  // - 앱이 꺼진 사이 알림이 쌓였다면 켤 때 1회 발동.
+  const [pulsing, setPulsing] = useState(false);
+  useEffect(() => {
+    if (!ready) return; // 최초 서버 동기화 전엔 비교 무의미
+    const KEY = "hinest:lastSeenChatUnread";
+    const lastSeen = Number(localStorage.getItem(KEY) ?? "0");
+    if (chatUnread > lastSeen) {
+      setPulsing(true);
+      const t = setTimeout(() => setPulsing(false), 2800);
+      localStorage.setItem(KEY, String(chatUnread));
+      return () => clearTimeout(t);
+    }
+    // 내려갔거나 같을 땐 펄스 없이 최신 값으로만 동기화
+    localStorage.setItem(KEY, String(chatUnread));
+  }, [chatUnread, ready]);
   const [activeRoom, setActiveRoom] = useState<ActiveRoomInfo | null>(null);
   const [createReq, setCreateReq] = useState(0);
+  // 외부에서 특정 방을 열어달라고 요청하면 여기에 담아 ChatMiniApp 으로 프롭 전달
+  const [openRoomReq, setOpenRoomReq] = useState<{ id: number; roomId: string } | null>(null);
 
   const hidden =
     loc.pathname.startsWith("/chat") ||
@@ -53,6 +72,29 @@ export default function ChatFab() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
+
+  // 전역 Cmd+K 시 AppLayout 이 "chat:toggle" 이벤트를 날려줌 — 여기서 받아서 토글
+  useEffect(() => {
+    const onToggle = () => setOpen((s) => { const n = !s; if (n) setMounted(true); return n; });
+    const onOpen = () => { setMounted(true); setOpen(true); };
+    const onOpenRoom = (e: Event) => {
+      const ev = e as CustomEvent<{ roomId?: string }>;
+      const rid = ev.detail?.roomId;
+      if (!rid) return;
+      // 팝업이 닫혀 있으면 먼저 열고, 프롭으로 타겟 방 전달
+      setMounted(true);
+      setOpen(true);
+      setOpenRoomReq((prev) => ({ id: (prev?.id ?? 0) + 1, roomId: rid }));
+    };
+    window.addEventListener("chat:toggle", onToggle);
+    window.addEventListener("chat:open", onOpen);
+    window.addEventListener("chat:open-room", onOpenRoom);
+    return () => {
+      window.removeEventListener("chat:toggle", onToggle);
+      window.removeEventListener("chat:open", onOpen);
+      window.removeEventListener("chat:open-room", onOpenRoom);
+    };
+  }, []);
 
   // 팝업 닫힐 때 방 상태도 초기화
   useEffect(() => { if (!open) setActiveRoom(null); }, [open]);
@@ -105,7 +147,7 @@ export default function ChatFab() {
               background: "#fff",
             }}
           >
-            <ChatMiniApp active={open} onActiveRoomChange={setActiveRoom} createGroupRequestId={createReq} />
+            <ChatMiniApp active={open} onActiveRoomChange={setActiveRoom} createGroupRequestId={createReq} openRoomRequest={openRoomReq} />
           </div>
         </div>
       )}
@@ -117,7 +159,7 @@ export default function ChatFab() {
         title={open ? "사내톡 닫기" : "사내톡 열기"}
         aria-label={chatUnread > 0 ? `사내톡 · 안 읽은 메시지 ${chatUnread}건` : "사내톡"}
         aria-expanded={open}
-        className="fixed z-40 flex items-center justify-center active:scale-[.94]"
+        className={`fixed z-40 flex items-center justify-center active:scale-[.94]${pulsing ? " siri-pulse" : ""}`}
         style={{
           right: 28, bottom: 28, width: 60, height: 60,
           borderRadius: 999,

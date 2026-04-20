@@ -318,7 +318,7 @@ export function ReactionPicker({
       {/* 이모지 행 */}
       <div
         style={{
-          background: "#fff",
+          background: C.surface,
           border: `1px solid ${C.gray200}`,
           borderRadius: 999,
           padding: "4px 6px",
@@ -365,7 +365,7 @@ export function ReactionPicker({
       {(actions.length > 0 || header) && (
         <div
           style={{
-            background: "#fff",
+            background: C.surface,
             border: `1px solid ${C.gray200}`,
             borderRadius: 14,
             minWidth: 200,
@@ -554,7 +554,7 @@ export function MessageBubble({ msg, mine }: { msg: Message; mine: boolean }) {
             gap: 10,
             padding: "10px 12px",
             background: mine ? C.blue : C.gray100,
-            color: mine ? "#fff" : C.ink,
+            color: mine ? C.brandFg : C.ink,
             borderRadius: 14,
             textDecoration: "none",
             maxWidth: 240,
@@ -565,8 +565,8 @@ export function MessageBubble({ msg, mine }: { msg: Message; mine: boolean }) {
               width: 36,
               height: 36,
               borderRadius: 10,
-              background: mine ? "rgba(255,255,255,.2)" : "#fff",
-              color: mine ? "#fff" : C.gray700,
+              background: mine ? "rgba(255,255,255,.2)" : C.surface,
+              color: mine ? C.brandFg : C.gray700,
               display: "grid",
               placeItems: "center",
               flexShrink: 0,
@@ -622,6 +622,55 @@ export function MessageBubble({ msg, mine }: { msg: Message; mine: boolean }) {
   return <TextBubble content={msg.content} mine={mine} />;
 }
 
+// URL 자동 링크화 — http(s):// 또는 www. 로 시작하는 문자열을 <a> 로 변환.
+// 안전 조치: href 는 반드시 http/https 로만 구성하고, rel=noopener noreferrer + target=_blank.
+const URL_REGEX = /(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+)/gi;
+
+function renderWithLinks(content: string, mine: boolean): React.ReactNode[] {
+  const nodes: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  URL_REGEX.lastIndex = 0;
+  while ((match = URL_REGEX.exec(content)) !== null) {
+    const raw = match[0];
+    const start = match.index;
+    if (start > lastIndex) nodes.push(content.slice(lastIndex, start));
+    // 문장 끝 구두점은 링크에서 제외
+    const trailing = raw.match(/[).,!?;:]+$/);
+    const clean = trailing ? raw.slice(0, raw.length - trailing[0].length) : raw;
+    const href = clean.startsWith("http") ? clean : `https://${clean}`;
+    nodes.push(
+      <a
+        key={start}
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          color: mine ? "#fff" : C.blue,
+          textDecoration: "underline",
+          textUnderlineOffset: 2,
+          wordBreak: "break-all",
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          // Electron 데스크톱 앱 안에서는 OS 기본 브라우저로 강제 열기
+          const bridge = (window as any).hinest;
+          if (bridge && typeof bridge.openExternal === "function") {
+            e.preventDefault();
+            bridge.openExternal(href);
+          }
+        }}
+      >
+        {clean}
+      </a>
+    );
+    if (trailing) nodes.push(trailing[0]);
+    lastIndex = start + raw.length;
+  }
+  if (lastIndex < content.length) nodes.push(content.slice(lastIndex));
+  return nodes;
+}
+
 export function TextBubble({
   content,
   mine,
@@ -638,14 +687,17 @@ export function TextBubble({
         lineHeight: 1.4,
         letterSpacing: "-0.01em",
         wordBreak: "break-word",
+        overflowWrap: "anywhere",
         whiteSpace: "pre-wrap",
-        color: mine ? "#fff" : C.ink,
+        minWidth: 0,
+        maxWidth: "100%",
+        color: mine ? C.brandFg : C.ink,
         background: mine ? C.blue : C.gray100,
         borderRadius: 16,
         fontFamily: FONT,
       }}
     >
-      {content}
+      {renderWithLinks(content, mine)}
     </div>
   );
 }
@@ -738,7 +790,7 @@ export function AttachmentPreview({
             width: 32,
             height: 32,
             borderRadius: 8,
-            background: "#fff",
+            background: C.surface,
             color: C.gray700,
             display: "grid",
             placeItems: "center",
