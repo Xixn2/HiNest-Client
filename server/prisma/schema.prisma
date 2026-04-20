@@ -4,8 +4,12 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
+  // Supabase 는 connection pooling(pgBouncer) 과 direct connection 을 분리 제공.
+  // - DATABASE_URL   : 앱 런타임용 (pgBouncer, port 6543)
+  // - DIRECT_URL     : 마이그레이션용 (direct, port 5432)
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
