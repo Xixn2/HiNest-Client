@@ -77,6 +77,47 @@ function pickBody(payload: any): string | null {
  *   push, pull_request, issues, issue_comment, pull_request_review,
  *   pull_request_review_comment, create, delete, release, fork, star/watch, ping
  */
+/**
+ * payload 만으로 GitHub 전달인지 판별. repository + sender 조합은 모든 GitHub
+ * 이벤트 공통. (push 에도, pull_request 에도, ping 에도 둘 다 존재)
+ */
+function isLikelyGitHub(p: any): boolean {
+  return !!(
+    p &&
+    typeof p === "object" &&
+    p.repository &&
+    typeof p.repository === "object" &&
+    (p.sender || p.hook || p.commits || p.pull_request || p.issue)
+  );
+}
+
+/**
+ * X-GitHub-Event 헤더가 누락됐을 때 payload 고유 키로 이벤트 타입 역추론.
+ * 모호한 경우는 빈 문자열 반환 → 상위에서 generic fallback 탄다.
+ */
+function inferGitHubEvent(p: any): string {
+  if (p?.zen && p?.hook) return "ping";
+  if (Array.isArray(p?.commits) && typeof p?.ref === "string") return "push";
+  if (p?.pull_request && p?.comment) return "pull_request_review_comment";
+  if (p?.pull_request && p?.review) return "pull_request_review";
+  if (p?.pull_request) return "pull_request";
+  if (p?.issue && p?.comment) return "issue_comment";
+  if (p?.issue) return "issues";
+  if (p?.release) return "release";
+  if (p?.forkee) return "fork";
+  // create/delete 는 둘 다 ref + ref_type 을 가짐. payload 에 commits/head_commit 없고
+  // deleted==true 면 delete, 아니면 create 로 가정. (GitHub 는 실제로 created 플래그도 씀)
+  if (p?.ref_type && typeof p?.ref === "string") {
+    if (p?.deleted === true) return "delete";
+    if (p?.created === true) return "create";
+    return p?.pusher ? "create" : "delete";
+  }
+  if (p?.starred_at !== undefined || (p?.action && p?.sender && p?.repository && Object.keys(p).length <= 4)) {
+    return "star";
+  }
+  return "";
+}
+
 function pickGitHubTitleBody(event: string, p: any): { title: string; body: string | null } {
   const repo = p?.repository?.full_name || p?.repository?.name || "unknown";
   const sender = p?.sender?.login ? ` · @${p.sender.login}` : "";
@@ -248,9 +289,23 @@ router.post(
     const payload: any = req.body ?? {};
     const raw = typeof payload === "string" ? payload : JSON.stringify(payload);
 
-    // GitHub 는 `X-GitHub-Event` 헤더로 이벤트 종류를 전달. 헤더가 있으면
-    // GitHub 전용 포맷터로 풍부한 title/body 구성. 없으면 일반 parser 사용.
-    const ghEvent = String(req.header("x-github-event") ?? "").trim();
+    // GitHub 는 `X-GitHub-Event` 헤더로 이벤트 종류를 전달. 다만 Vercel rewrites/
+    // 프록시를 거치면서 커스텀 헤더가 누락되는 케이스가 관측됨 → 헤더가 비었으면
+    // payload 모양으로 이벤트 타입을 역추론한다 (GitHub payload 는 이벤트별로
+    // 고유한 top-level 키를 갖고 있어 충분히 신뢰 가능).
+    let ghEvent = String(req.header("x-github-event") ?? "").trim();
+    const ghHeaderSeen = !!ghEvent;
+    if (!ghEvent && isLikelyGitHub(payload)) {
+      ghEvent = inferGitHubEvent(payload);
+    }
+    // 프록시에서 커스텀 헤더가 누락되는지 한 번에 보이도록 짧게 로그.
+    // payload 본문은 출력하지 않음 (민감 데이터).
+    if (isLikelyGitHub(payload) || ghHeaderSeen) {
+      console.log(
+        `[webhook] gh header=${ghHeaderSeen ? "yes" : "no"} inferred=${ghEvent || "?"} ` +
+        `delivery=${req.header("x-github-delivery") ?? "-"}`
+      );
+    }
     let title: string;
     let body: string | null;
     if (ghEvent) {
