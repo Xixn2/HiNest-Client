@@ -81,7 +81,7 @@ export default function EmojiPicker({
     if (!onClose) return;
     function onDoc(e: MouseEvent) {
       if (!ref.current) return;
-      if (!ref.current.contains(e.target as Node)) onClose();
+      if (!ref.current.contains(e.target as Node)) onClose?.();
     }
     // 다음 tick에 등록해서 여는 클릭이 바로 닫지 않게
     const t = setTimeout(() => document.addEventListener("mousedown", onDoc), 50);

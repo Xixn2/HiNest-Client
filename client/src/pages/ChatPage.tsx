@@ -256,7 +256,9 @@ export default function ChatPage() {
     setMentionIdx(0);
   }
 
-  function pickMention(user: DirectoryUser) {
+  // 호출자는 두 종류 — Directory 의 DirectoryUser, Room 멤버 객체(email 없음).
+  // 실제 사용하는 필드는 id/name 뿐이라 최소 shape 으로 받아 양쪽 다 호환되게.
+  function pickMention(user: { id: string; name: string }) {
     const el = textareaRef.current;
     if (!el) return;
     const cursor = el.selectionStart ?? el.value.length;
