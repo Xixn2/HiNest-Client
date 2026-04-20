@@ -86,6 +86,10 @@ app.use((req, res, next) => {
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
+// 전역 API 레이트 리밋 — 라우트별 특수 limiter 는 그 뒤에 추가로 씌운다.
+// (login/upload 는 더 엄격한 limiter 가 먼저 적용됨)
+app.use("/api", apiLimiter);
+
 app.use("/api/auth", loginLimiter, authRouter);
 app.use("/api/me", meRouter);
 app.use("/api/admin", adminRouter);
