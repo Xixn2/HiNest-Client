@@ -17,7 +17,10 @@ services:
     rootDir: server         # 모노레포 — server/ 하위에서 빌드
     # postinstall 에 prisma generate 가 이미 걸려 있으므로 install 만 해도 client 생성됨.
     # 빌드 후 prisma migrate deploy 로 프로덕션 스키마 반영.
-    buildCommand: npm install && npm run build && npx prisma migrate deploy
+    # NODE_ENV=production 때문에 npm install 이 devDependencies 를 스킵 →
+    # @types/node, @types/express, typescript, prisma CLI 가 설치 안 돼 tsc 빌드가 터짐.
+    # --include=dev 로 명시적으로 devDeps 도 포함시켜야 빌드 가능.
+    buildCommand: npm install --include=dev && npm run build && npx prisma migrate deploy
     startCommand: npm run start
     healthCheckPath: /api/health
     autoDeploy: true        # main 브랜치 push 시 자동 재배포
