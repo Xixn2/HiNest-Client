@@ -6,8 +6,8 @@ import Logo from "../components/Logo";
 export default function LoginPage() {
   const { user, login } = useAuth();
   const nav = useNavigate();
-  const [email, setEmail] = useState("admin1");
-  const [password, setPassword] = useState("admin1234");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -46,7 +46,7 @@ export default function LoginPage() {
               <input
                 className="input"
                 type="text"
-                placeholder="name@company.com 또는 admin1"
+                placeholder="name@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -85,11 +85,6 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <div className="mt-5 text-center">
-          <p className="text-[11px] text-ink-500 tabular">
-            TEST · admin1 / admin2 / admin3 · password: admin1234
-          </p>
-        </div>
       </div>
     </div>
   );
