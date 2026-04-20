@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
@@ -22,7 +21,6 @@ type ViewMode = "grid" | "list";
 
 export default function DirectoryPage() {
   const { user } = useAuth();
-  const nav = useNavigate();
   const [users, setUsers] = useState<DirectoryUser[]>([]);
   const [q, setQ] = useState("");
   const [teamFilter, setTeamFilter] = useState("");
@@ -68,11 +66,14 @@ export default function DirectoryPage() {
 
   async function startDM(target: DirectoryUser) {
     if (target.id === user?.id) return;
+    // /chat 페이지를 없앴기 때문에 DM 시작은 우하단 사내톡 팝업을 띄우고
+    // 해당 방으로 이동시킨다. ChatFab 이 chat:open-room 이벤트를 구독 중.
     const res = await api<{ room: { id: string } }>("/api/chat/rooms", {
       method: "POST",
       json: { type: "DIRECT", memberIds: [target.id] },
     });
-    nav(`/chat?room=${res.room.id}`);
+    window.dispatchEvent(new CustomEvent("chat:open"));
+    window.dispatchEvent(new CustomEvent("chat:open-room", { detail: { roomId: res.room.id } }));
   }
 
   const me = useMemo(() => users.find((u) => u.id === user?.id), [users, user?.id]);

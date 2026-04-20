@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
@@ -20,7 +19,6 @@ const RANK_HINTS = ["이사", "부장", "팀장", "과장", "대리", "사원"];
 
 export default function OrgChartPage() {
   const { user } = useAuth();
-  const nav = useNavigate();
   const [users, setUsers] = useState<DirUser[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
 
@@ -77,7 +75,8 @@ export default function OrgChartPage() {
       method: "POST",
       json: { type: "DIRECT", memberIds: [target.id] },
     });
-    nav(`/chat?room=${res.room.id}`);
+    window.dispatchEvent(new CustomEvent("chat:open"));
+    window.dispatchEvent(new CustomEvent("chat:open-room", { detail: { roomId: res.room.id } }));
   }
 
   return (

@@ -19,7 +19,6 @@ const PAGES: PageEntry[] = [
   { label: "업무일지", desc: "일일 업무 기록", path: "/journal", aliases: ["journal", "diary", "업무일지", "일지"], emoji: "📝" },
   { label: "전자결재", desc: "결재 요청·검토", path: "/approvals", aliases: ["approval", "결재", "승인"], emoji: "✅" },
   { label: "공지사항", desc: "회사 공지", path: "/notice", aliases: ["notice", "notification", "공지"], emoji: "📢" },
-  { label: "사내톡", desc: "팀원과 메시지", path: "/chat", aliases: ["chat", "message", "사내톡", "채팅", "메시지"], emoji: "💬" },
   { label: "팀원", desc: "구성원 디렉토리", path: "/directory", aliases: ["directory", "member", "people", "팀원", "디렉토리"], emoji: "👥" },
   { label: "조직도", desc: "조직 트리", path: "/org", aliases: ["org", "organization", "조직도", "조직"], emoji: "🏢" },
   { label: "문서함", desc: "회사 문서", path: "/documents", aliases: ["document", "file", "문서", "파일"], emoji: "📄" },
@@ -234,7 +233,11 @@ export default function SearchModal({ open, onClose }: { open: boolean; onClose:
               {results.messages && results.messages.length > 0 && (
                 <Section label="메시지">
                   {results.messages.map((m: any) => (
-                    <Row key={`m-${m.id}`} onClick={() => go(`/chat?room=${m.room.id}`)}
+                    <Row key={`m-${m.id}`} onClick={() => {
+                      onClose();
+                      window.dispatchEvent(new CustomEvent("chat:open"));
+                      window.dispatchEvent(new CustomEvent("chat:open-room", { detail: { roomId: m.room.id } }));
+                    }}
                       icon={<Avatar name={m.sender.name} color={m.sender.avatarColor} />}>
                       <div className="text-[13px] font-bold text-ink-900 truncate">{m.sender.name} <span className="text-ink-500 font-medium">· {m.room.name}</span></div>
                       <div className="text-[11px] text-ink-500 line-clamp-1">{m.content}</div>

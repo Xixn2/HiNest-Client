@@ -9,7 +9,6 @@ import SchedulePage from "./pages/SchedulePage";
 import AttendancePage from "./pages/AttendancePage";
 import JournalPage from "./pages/JournalPage";
 import NoticePage from "./pages/NoticePage";
-import ChatPage from "./pages/ChatPage";
 import DirectoryPage from "./pages/DirectoryPage";
 import DocumentsPage from "./pages/DocumentsPage";
 import ApprovalsPage from "./pages/ApprovalsPage";
@@ -64,7 +63,6 @@ export default function App() {
         <Route path="attendance" element={<AttendancePage />} />
         <Route path="journal" element={<JournalPage />} />
         <Route path="notice" element={<NoticePage />} />
-        <Route path="chat" element={<ChatPage />} />
         <Route path="directory" element={<DirectoryPage />} />
         <Route path="documents" element={<DocumentsPage />} />
         <Route path="approvals" element={<ApprovalsPage />} />

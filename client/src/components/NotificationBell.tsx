@@ -22,7 +22,20 @@ export default function NotificationBell() {
 
   async function handleClick(n: Notif) {
     if (!n.readAt) await markRead([n.id]);
-    if (n.linkUrl) nav(n.linkUrl);
+    if (n.linkUrl) {
+      // /chat 페이지가 제거됐으므로 chat 링크는 우하단 사내톡 팝업으로 돌림.
+      // 레거시 알림의 linkUrl 에 "/chat?room=<id>" 가 남아있을 수 있어 호환 처리.
+      const chatMatch = /^\/chat(?:\?|#).*?room=([^&]+)/.exec(n.linkUrl);
+      if (chatMatch) {
+        window.dispatchEvent(new CustomEvent("chat:open"));
+        window.dispatchEvent(new CustomEvent("chat:open-room", { detail: { roomId: chatMatch[1] } }));
+      } else if (n.linkUrl.startsWith("/chat")) {
+        // room 지정 없는 /chat 링크는 그냥 팝업만 연다
+        window.dispatchEvent(new CustomEvent("chat:open"));
+      } else {
+        nav(n.linkUrl);
+      }
+    }
     setOpen(false);
   }
 
