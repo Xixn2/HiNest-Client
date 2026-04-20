@@ -139,14 +139,42 @@ export default function ChatMiniApp({
       setRooms(res.rooms);
     } catch {}
   };
-  const loadMessages = async (roomId: string) => {
+  // 메시지 로더.
+  // - full=true: 전체 재조회 (방 진입/포커스 복귀/주기적 동기화)
+  // - full=false: 마지막 메시지 이후만 증분 조회. 서버가 `?after=<id>` 로 새 메시지만 반환 →
+  //   1.5초 폴링에서 빈 응답이 대부분이라 트래픽·DB 부하 체감상 제로.
+  //   단점: 기존 메시지에 대한 수정/삭제/리액션은 여기서 못 받음 → 포커스 복귀·15초 주기·전송 직후에
+  //   full 갱신으로 보정.
+  const latestIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    latestIdRef.current = messages.length ? messages[messages.length - 1].id : null;
+  }, [messages]);
+
+  const loadMessages = async (roomId: string, opts: { full?: boolean } = {}) => {
+    const full = opts.full ?? false;
+    const after = !full ? latestIdRef.current : null;
     try {
+      const qs = after ? `?after=${encodeURIComponent(after)}` : "";
       const res = await api<{
         messages: Message[];
         readStates?: { userId: string; lastReadAt: string | null }[];
-      }>(`/api/chat/rooms/${roomId}/messages`);
-      setMessages(res.messages);
-      setReadStates(res.readStates ?? []);
+      }>(`/api/chat/rooms/${roomId}/messages${qs}`);
+
+      if (after) {
+        if (res.messages.length > 0) {
+          setMessages((prev) => {
+            // 혹시라도 중복이 오면 dedupe — after 이후지만 정합성 방어
+            const seen = new Set(prev.map((m) => m.id));
+            const fresh = res.messages.filter((m) => !seen.has(m.id));
+            return fresh.length ? [...prev, ...fresh] : prev;
+          });
+        }
+        // readStates 는 가벼워서 매번 교체 — 안읽음 카운트가 실시간으로 갱신돼야 함
+        if (res.readStates) setReadStates(res.readStates);
+      } else {
+        setMessages(res.messages);
+        setReadStates(res.readStates ?? []);
+      }
       // 스크롤은 RoomView 의 useLayoutEffect 에서 페인트 전에 수행 (플래시 방지)
     } catch {}
   };
@@ -177,21 +205,29 @@ export default function ChatMiniApp({
   }, [openRoomRequest?.id]);
   useEffect(() => {
     if (!isPanelOpen) return;
-    const t = setInterval(loadRooms, 5000);
+    // 방 목록은 대화방을 열어두고 있을 땐 10초, 리스트 화면일 땐 5초.
+    // 대화방 안에서는 rooms 가 단순 사이드메타라 덜 자주 폴링해도 체감 무관.
+    const interval = activeId ? 10_000 : 5_000;
+    const t = setInterval(loadRooms, interval);
     return () => clearInterval(t);
-  }, [isPanelOpen]);
+  }, [isPanelOpen, activeId]);
   useEffect(() => {
     if (!activeId) return;
     // 새 방 진입 시 이전 메시지 즉시 제거 → 이전 방의 메시지가 잠깐 보이는 현상 방지
     setMessages([]);
-    loadMessages(activeId);
+    latestIdRef.current = null;
+    loadMessages(activeId, { full: true });
     if (isChatVisible()) {
       markRead(activeId);
       markRoomRead(activeId);
     }
-    // 더 빠른 업데이트를 위해 1.5초 주기
+    // 증분 폴링 — 1.5초 주기로 새 메시지만. 기존 메시지 편집/리액션은
+    // 아래 주기적 full 동기화(15초) 와 focus 이벤트에서 잡힌다.
+    let tick = 0;
     const t = setInterval(() => {
-      loadMessages(activeId);
+      tick++;
+      const full = tick % 10 === 0; // 15초마다 한 번은 full 동기화
+      loadMessages(activeId, { full });
       if (isChatVisible()) markRead(activeId);
     }, 1500);
     return () => clearInterval(t);
@@ -202,6 +238,8 @@ export default function ChatMiniApp({
     if (!activeId) return;
     const onFocus = () => {
       if (isChatVisible()) {
+        // 포커스 복귀 시 full 동기화 — 백그라운드 동안 들어온 편집/삭제/리액션 반영
+        loadMessages(activeId, { full: true });
         markRead(activeId);
         markRoomRead(activeId);
       }
@@ -312,9 +350,9 @@ export default function ChatMiniApp({
         method: "POST",
         json: { emoji },
       });
-      if (activeId) loadMessages(activeId);
+      if (activeId) loadMessages(activeId, { full: true });
     } catch {
-      if (activeId) loadMessages(activeId);
+      if (activeId) loadMessages(activeId, { full: true });
     }
   }
 
@@ -327,9 +365,9 @@ export default function ChatMiniApp({
     ));
     try {
       await api(`/api/chat/messages/${messageId}/pin`, { method: "POST" });
-      if (activeId) loadMessages(activeId);
+      if (activeId) loadMessages(activeId, { full: true });
     } catch {
-      if (activeId) loadMessages(activeId);
+      if (activeId) loadMessages(activeId, { full: true });
     }
   }
 

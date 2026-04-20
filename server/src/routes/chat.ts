@@ -180,14 +180,30 @@ router.get("/search", async (req, res) => {
  */
 router.get("/rooms/:id/messages", async (req, res) => {
   const u = (req as any).user;
-  const room = await prisma.chatRoom.findUnique({ where: { id: req.params.id } });
+  const afterId = req.query.after ? String(req.query.after) : undefined;
+
+  // 1 roundtrip: 방 + 모든 멤버의 lastReadAt + (필요시) after 메시지의 createdAt
+  // findFirst 를 별도로 돌리던 것을 members 안에서 찾아내도록 병합 → DB 왕복 1회 감소.
+  const [room, after] = await Promise.all([
+    prisma.chatRoom.findUnique({
+      where: { id: req.params.id },
+      select: {
+        id: true,
+        type: true,
+        members: { select: { userId: true, lastReadAt: true } },
+      },
+    }),
+    afterId
+      ? prisma.chatMessage.findUnique({
+          where: { id: afterId },
+          select: { createdAt: true, roomId: true },
+        })
+      : Promise.resolve(null),
+  ]);
   if (!room) return res.status(404).json({ error: "not found" });
 
-  const member = await prisma.roomMember.findFirst({
-    where: { roomId: room.id, userId: u.id },
-  });
-
-  if (!member) {
+  const isMember = room.members.some((m) => m.userId === u.id);
+  if (!isMember) {
     if (!u.superAdmin) return res.status(403).json({ error: "forbidden" });
     if (!verifySuperToken(req, u.id)) {
       return res.status(401).json({
@@ -195,11 +211,11 @@ router.get("/rooms/:id/messages", async (req, res) => {
         code: "SUPER_STEPUP_REQUIRED",
       });
     }
+    // 감사 로그는 반드시 content 를 내리기 전에 persist — compliance 요건.
     await writeLog(u.id, "CHAT_AUDIT_READ", room.id, `type=${room.type}`);
   }
 
   const now = new Date();
-  const afterId = req.query.after ? String(req.query.after) : undefined;
   const where: any = {
     roomId: room.id,
     OR: [
@@ -208,9 +224,9 @@ router.get("/rooms/:id/messages", async (req, res) => {
       { senderId: u.id }, // 자기 예약은 자기만 보임
     ],
   };
-  if (afterId) {
-    const after = await prisma.chatMessage.findUnique({ where: { id: afterId } });
-    if (after) where.createdAt = { gt: after.createdAt };
+  // afterId 가 다른 방의 것을 가리키면 무시 — 클라이언트가 방을 막 전환한 상황
+  if (after && after.roomId === room.id) {
+    where.createdAt = { gt: after.createdAt };
   }
 
   const raw = await prisma.chatMessage.findMany({
@@ -240,18 +256,12 @@ router.get("/rooms/:id/messages", async (req, res) => {
     return m;
   });
 
-  // 읽음 처리는 더 이상 여기서 하지 않음 — 백그라운드 폴링으로 읽음이 찍히는 문제 방지.
-  // 클라이언트가 방을 실제로 보고 있을 때만 POST /rooms/:id/read 를 호출.
-
-  // 멤버별 lastReadAt → 클라이언트에서 메시지별 안읽음 카운트 계산
-  const readStates = await prisma.roomMember.findMany({
-    where: { roomId: room.id },
-    select: { userId: true, lastReadAt: true },
-  });
+  // readStates 는 room.members 에서 곧바로 뽑아 재사용 — 별도 쿼리 제거.
+  const readStates = room.members.map((m) => ({ userId: m.userId, lastReadAt: m.lastReadAt }));
 
   res.json({
     messages,
-    auditMode: !member && u.superAdmin,
+    auditMode: !isMember && u.superAdmin,
     roomType: room.type,
     serverTime: now.toISOString(),
     readStates,
