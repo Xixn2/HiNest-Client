@@ -2,12 +2,22 @@ import jwt from "jsonwebtoken";
 import type { Request, Response, NextFunction } from "express";
 import { prisma } from "./db.js";
 
-// 프로덕션에서 JWT_SECRET 이 비어 있으면 즉시 기동 실패 — 기본값 토큰 위조 방지
+// JWT_SECRET 은 언제나 필수. NODE_ENV 누락/오탈자로 프로덕션에서 하드코딩 fallback 이 쓰이는
+// 사고를 막기 위해, 개발 모드에서도 명시적으로 .env 에 지정하도록 강제한다.
+// 다만 개발 편의를 위해 ALLOW_DEV_JWT_SECRET=1 이면 임의 개발 시크릿을 허용.
 const IS_PROD = process.env.NODE_ENV === "production";
 const RAW_SECRET = process.env.JWT_SECRET;
-if (IS_PROD && (!RAW_SECRET || RAW_SECRET.length < 16)) {
-  throw new Error(
-    "JWT_SECRET 환경변수가 없거나 너무 짧습니다. 16자 이상의 강한 시크릿을 지정하세요."
+const ALLOW_DEV_FALLBACK = !IS_PROD && process.env.ALLOW_DEV_JWT_SECRET === "1";
+if (!RAW_SECRET || RAW_SECRET.length < 16) {
+  if (!ALLOW_DEV_FALLBACK) {
+    throw new Error(
+      "JWT_SECRET 환경변수가 없거나 너무 짧습니다. 16자 이상의 강한 시크릿을 .env 에 지정하세요. " +
+      "(개발 편의상 임시로 허용하려면 ALLOW_DEV_JWT_SECRET=1)"
+    );
+  }
+  // eslint-disable-next-line no-console
+  console.warn(
+    "[auth] WARNING: JWT_SECRET 이 없어 개발용 임시 시크릿을 사용합니다. 프로덕션 기동 전에 반드시 .env 에 JWT_SECRET 을 설정하세요."
   );
 }
 const SECRET = RAW_SECRET ?? "hinest-dev-secret-change-me";
