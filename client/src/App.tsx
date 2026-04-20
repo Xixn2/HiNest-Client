@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth";
 import UpdateBanner from "./components/UpdateBanner";
@@ -5,19 +6,30 @@ import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import AppLayout from "./components/AppLayout";
 import DashboardPage from "./pages/DashboardPage";
-import SchedulePage from "./pages/SchedulePage";
-import AttendancePage from "./pages/AttendancePage";
-import JournalPage from "./pages/JournalPage";
-import NoticePage from "./pages/NoticePage";
-import DirectoryPage from "./pages/DirectoryPage";
-import DocumentsPage from "./pages/DocumentsPage";
-import ApprovalsPage from "./pages/ApprovalsPage";
-import OrgChartPage from "./pages/OrgChartPage";
-import ProfilePage from "./pages/ProfilePage";
-import ExpensePage from "./pages/ExpensePage";
-import ProjectPage from "./pages/ProjectPage";
-import AdminPage from "./pages/AdminPage";
-import SuperAdminPage from "./pages/SuperAdminPage";
+import {
+  SchedulePage,
+  AttendancePage,
+  JournalPage,
+  NoticePage,
+  DirectoryPage,
+  DocumentsPage,
+  ApprovalsPage,
+  OrgChartPage,
+  ProfilePage,
+  ExpensePage,
+  ProjectPage,
+  AdminPage,
+  SuperAdminPage,
+} from "./routes";
+
+/**
+ * 페이지 청크 로드 중 짧게 보이는 스켈레톤.
+ * 1) 배경색을 레이아웃과 맞춰 깜빡임 제거
+ * 2) 최소 UI — "불러오는 중" 텍스트 없음 (대부분 체감상 안 보일 만큼 빠름)
+ */
+function RouteFallback() {
+  return <div className="min-h-[60vh]" aria-hidden />;
+}
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -47,48 +59,50 @@ export default function App() {
   return (
     <>
     <UpdateBanner />
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/signup" element={<SignupPage />} />
-      <Route
-        path="/"
-        element={
-          <Protected>
-            <AppLayout />
-          </Protected>
-        }
-      >
-        <Route index element={<DashboardPage />} />
-        <Route path="schedule" element={<SchedulePage />} />
-        <Route path="attendance" element={<AttendancePage />} />
-        <Route path="journal" element={<JournalPage />} />
-        <Route path="notice" element={<NoticePage />} />
-        <Route path="directory" element={<DirectoryPage />} />
-        <Route path="documents" element={<DocumentsPage />} />
-        <Route path="approvals" element={<ApprovalsPage />} />
-        <Route path="org" element={<OrgChartPage />} />
-        <Route path="profile" element={<ProfilePage />} />
-        <Route path="expense" element={<ExpensePage />} />
-        <Route path="projects/:id" element={<ProjectPage />} />
+    <Suspense fallback={<RouteFallback />}>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
         <Route
-          path="admin"
+          path="/"
           element={
-            <AdminOnly>
-              <AdminPage />
-            </AdminOnly>
+            <Protected>
+              <AppLayout />
+            </Protected>
           }
-        />
-        <Route
-          path="super-admin"
-          element={
-            <SuperOnly>
-              <SuperAdminPage />
-            </SuperOnly>
-          }
-        />
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        >
+          <Route index element={<DashboardPage />} />
+          <Route path="schedule" element={<SchedulePage />} />
+          <Route path="attendance" element={<AttendancePage />} />
+          <Route path="journal" element={<JournalPage />} />
+          <Route path="notice" element={<NoticePage />} />
+          <Route path="directory" element={<DirectoryPage />} />
+          <Route path="documents" element={<DocumentsPage />} />
+          <Route path="approvals" element={<ApprovalsPage />} />
+          <Route path="org" element={<OrgChartPage />} />
+          <Route path="profile" element={<ProfilePage />} />
+          <Route path="expense" element={<ExpensePage />} />
+          <Route path="projects/:id" element={<ProjectPage />} />
+          <Route
+            path="admin"
+            element={
+              <AdminOnly>
+                <AdminPage />
+              </AdminOnly>
+            }
+          />
+          <Route
+            path="super-admin"
+            element={
+              <SuperOnly>
+                <SuperAdminPage />
+              </SuperOnly>
+            }
+          />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
     </>
   );
 }

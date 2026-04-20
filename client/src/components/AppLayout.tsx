@@ -7,6 +7,23 @@ import NotificationBell from "./NotificationBell";
 import SearchModal from "./SearchModal";
 import ChatFab from "./ChatFab";
 import { NotificationProvider, useNotifications } from "../notifications";
+import { ROUTE_PREFETCH, loadProject } from "../routes";
+
+/**
+ * 사이드바 hover/focus prefetch — 사용자가 클릭하기 전에 해당 페이지 청크를
+ * 백그라운드로 받아둔다. 같은 dynamic import 는 Vite 가 캐시해서 중복 요청 없음.
+ * 실패해도 실제 네비게이션 시 다시 시도되므로 조용히 무시.
+ */
+function prefetchRoute(to: string) {
+  try {
+    if (to.startsWith("/projects/")) {
+      void loadProject();
+      return;
+    }
+    const fn = ROUTE_PREFETCH[to];
+    if (fn) void fn();
+  } catch {}
+}
 
 type NavItem = { to: string; label: string; icon: (p: { active?: boolean }) => JSX.Element; end?: boolean };
 
@@ -81,11 +98,21 @@ function AppLayoutInner() {
           {user?.role === "ADMIN" && (
             <div>
               <SectionLabel>관리</SectionLabel>
-              <NavLink to="/admin" className={({ isActive }) => navClass(isActive)}>
+              <NavLink
+                to="/admin"
+                className={({ isActive }) => navClass(isActive)}
+                onMouseEnter={() => prefetchRoute("/admin")}
+                onFocus={() => prefetchRoute("/admin")}
+              >
                 {({ isActive }) => (<><ShieldIcon active={isActive} /><span>관리자</span></>)}
               </NavLink>
               {user?.superAdmin && (
-                <NavLink to="/super-admin" className={({ isActive }) => navClass(isActive)}>
+                <NavLink
+                  to="/super-admin"
+                  className={({ isActive }) => navClass(isActive)}
+                  onMouseEnter={() => prefetchRoute("/super-admin")}
+                  onFocus={() => prefetchRoute("/super-admin")}
+                >
                   {({ isActive }) => (<><CrownIcon active={isActive} /><span>총관리자</span></>)}
                 </NavLink>
               )}
@@ -184,6 +211,8 @@ function NavSection({ label, items }: { label: string; items: NavItem[] }) {
               to={n.to}
               end={n.end}
               className={({ isActive }) => navClass(isActive) + (pulseHere ? " siri-pulse-bg" : "")}
+              onMouseEnter={() => prefetchRoute(n.to)}
+              onFocus={() => prefetchRoute(n.to)}
             >
               {({ isActive }) => (
                 <>
@@ -248,6 +277,8 @@ function ProjectsSection() {
             key={p.id}
             to={`/projects/${p.id}`}
             className={({ isActive }) => navClass(isActive)}
+            onMouseEnter={() => prefetchRoute(`/projects/${p.id}`)}
+            onFocus={() => prefetchRoute(`/projects/${p.id}`)}
           >
             <span
               className="w-2 h-2 rounded-full flex-shrink-0"

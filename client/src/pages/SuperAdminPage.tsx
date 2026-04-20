@@ -334,7 +334,7 @@ function ChatAuditPanel() {
 
 function AuditAttachment({ msg }: { msg: Message }) {
   if (!msg.fileUrl) return null;
-  if (msg.kind === "IMAGE") return <img src={msg.fileUrl} alt={msg.fileName ?? ""} className="max-h-56 rounded mb-1" />;
+  if (msg.kind === "IMAGE") return <img src={msg.fileUrl} alt={msg.fileName ?? ""} loading="lazy" decoding="async" className="max-h-56 rounded mb-1" />;
   if (msg.kind === "VIDEO") return <video src={msg.fileUrl} controls className="max-h-56 rounded mb-1" />;
   return (
     <a href={msg.fileUrl} target="_blank" rel="noreferrer"

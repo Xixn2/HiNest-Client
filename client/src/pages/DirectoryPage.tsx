@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api } from "../api";
+import { api, apiSWR } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
 import { resolvePresence, type PresenceStatus, type WorkStatus } from "../lib/presence";
@@ -30,7 +30,13 @@ export default function DirectoryPage() {
     const res = await api<{ users: DirectoryUser[] }>("/api/users");
     setUsers(res.users);
   }
-  useEffect(() => { load(); }, []);
+  // SWR — 팀원 목록은 변동이 느리므로 캐시 히트 효과가 크다.
+  useEffect(() => {
+    apiSWR<{ users: DirectoryUser[] }>("/api/users", {
+      onCached: (d) => setUsers(d.users),
+      onFresh: (d) => setUsers(d.users),
+    });
+  }, []);
 
   const teams = useMemo(
     () => Array.from(new Set(users.map((u) => u.team).filter(Boolean))) as string[],

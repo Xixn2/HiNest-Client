@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
+import compression from "compression";
 import rateLimit from "express-rate-limit";
 import { requireAuth } from "./lib/auth.js";
 import authRouter from "./routes/auth.js";
@@ -40,6 +41,20 @@ app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" }, // /uploads 타 origin 로드 허용
     contentSecurityPolicy: false, // API 서버라 HTML 안 서빙. 필요 시 활성화.
+  })
+);
+
+// gzip/brotli 압축 — JSON 응답 평균 70% 축소. 1KB 미만은 오버헤드라 threshold.
+// SSE 같은 스트림은 compression 이 자동으로 건너뜀 (Content-Type text/event-stream).
+app.use(
+  compression({
+    threshold: 1024,
+    // 이미 압축된 바이너리(이미지·영상)는 건너뜀 — /uploads 스트림 이중 압축 방지.
+    filter: (req, res) => {
+      const ct = String(res.getHeader("Content-Type") || "");
+      if (ct.startsWith("image/") || ct.startsWith("video/") || ct.startsWith("audio/")) return false;
+      return compression.filter(req, res);
+    },
   })
 );
 

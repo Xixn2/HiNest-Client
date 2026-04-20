@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
+import { api, apiSWR } from "../api";
 import PageHeader from "../components/PageHeader";
 import DateTimePicker from "../components/DateTimePicker";
 
@@ -28,8 +28,19 @@ export default function JournalPage() {
     if (res.journals.length && !selected) setSelected(res.journals[0]);
   }
 
+  // SWR — 탭 안에서 재진입 시 즉시 리스트 렌더.
   useEffect(() => {
-    load();
+    apiSWR<{ journals: Journal[] }>("/api/journal", {
+      onCached: (d) => {
+        setList(d.journals);
+        if (d.journals.length && !selected) setSelected(d.journals[0]);
+      },
+      onFresh: (d) => {
+        setList(d.journals);
+        if (d.journals.length && !selected) setSelected(d.journals[0]);
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function create(e: React.FormEvent) {
