@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import crypto from "node:crypto";
 import { prisma } from "../lib/db.js";
-import { requireAdmin, requireAuth, requireSuperAdmin, requireSuperAdminStepUp, writeLog } from "../lib/auth.js";
+import { requireAdmin, requireAuth, requireSuperAdmin, requireSuperAdminStepUp, verifySuperToken, writeLog } from "../lib/auth.js";
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -134,12 +134,39 @@ router.patch("/users/:id", async (req, res) => {
   if (!target) return res.status(404).json({ error: "not found" });
   if (target.superAdmin && !u.superAdmin) return res.status(404).json({ error: "not found" });
 
+  const data = parsed.data;
+
+  // 역할 변경은 민감한 권한 에스컬레이션 경로. superAdmin + step-up 쿠키가 있어야 허용.
+  // ADMIN 이 자신 또는 동료의 role 을 임의로 바꿀 수 없게 함.
+  const isRoleChange = data.role !== undefined && data.role !== target.role;
+  if (isRoleChange) {
+    if (!u.superAdmin) {
+      return res.status(403).json({ error: "역할 변경 권한이 없습니다 (총관리자 전용)" });
+    }
+    const v = verifySuperToken(req, u.id);
+    if (!v) {
+      return res.status(401).json({
+        error: "역할 변경 전에 비밀번호 재확인이 필요합니다",
+        code: "SUPER_STEPUP_REQUIRED",
+      });
+    }
+    // 본인 역할 강등은 사고 방지용 차단 — 필요하면 다른 총관리자가 처리.
+    if (target.id === u.id) {
+      return res.status(400).json({ error: "본인 역할은 변경할 수 없습니다" });
+    }
+  }
+
   const updated = await prisma.user.update({
     where: { id: req.params.id },
-    data: parsed.data,
+    data,
     select: HR_SELECT,
   });
-  await writeLog(u.id, "USER_UPDATE", req.params.id, JSON.stringify(parsed.data));
+  await writeLog(
+    u.id,
+    isRoleChange ? "USER_ROLE_CHANGE" : "USER_UPDATE",
+    req.params.id,
+    JSON.stringify(data)
+  );
   res.json({ user: updated });
 });
 
