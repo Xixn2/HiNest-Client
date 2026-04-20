@@ -19,10 +19,40 @@ import {
 
 const router = Router();
 
-/** dev 환경에선 localhost 기본값. 운영 시 환경변수로 조정. */
-const RP_ID = process.env.WEBAUTHN_RP_ID ?? "localhost";
+/**
+ * WebAuthn RP ID / origin — 명시 환경변수가 없으면 CLIENT_ORIGIN 에서 파생.
+ * Vercel 배포면 CLIENT_ORIGIN=https://team-hivits.vercel.app 하나만 있어도
+ * RP_ID=team-hivits.vercel.app, ORIGINS=[https://team-hivits.vercel.app] 로 자동 설정.
+ * dev 환경 (CLIENT_ORIGIN 미설정) 에선 localhost 기본값.
+ */
+function deriveRpConfig(): { rpId: string; origins: string[] } {
+  const explicitRp = process.env.WEBAUTHN_RP_ID;
+  const explicitOrigins = process.env.WEBAUTHN_ORIGINS;
+  const clientOrigin = process.env.CLIENT_ORIGIN;
+  if (explicitRp && explicitOrigins) {
+    return { rpId: explicitRp, origins: explicitOrigins.split(",").map((s) => s.trim()).filter(Boolean) };
+  }
+  if (clientOrigin) {
+    try {
+      const u = new URL(clientOrigin);
+      return {
+        rpId: explicitRp ?? u.hostname,
+        origins: explicitOrigins
+          ? explicitOrigins.split(",").map((s) => s.trim()).filter(Boolean)
+          : [u.origin],
+      };
+    } catch {
+      /* fallthrough to dev default */
+    }
+  }
+  return {
+    rpId: explicitRp ?? "localhost",
+    origins: (explicitOrigins ?? "http://localhost:1000,http://127.0.0.1:1000")
+      .split(",").map((s) => s.trim()).filter(Boolean),
+  };
+}
+const { rpId: RP_ID, origins: ORIGINS } = deriveRpConfig();
 const RP_NAME = "HiNest";
-const ORIGINS = (process.env.WEBAUTHN_ORIGINS ?? "http://localhost:1000,http://127.0.0.1:1000").split(",");
 
 // 챌린지 임시 저장 (5분 TTL)
 type Challenge = { value: string; expiresAt: number; purpose: "register" | "auth" };
