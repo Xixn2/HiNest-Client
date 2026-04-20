@@ -30,6 +30,7 @@ import mime from "mime-types";
 
 const app = express();
 const PORT = Number(process.env.PORT ?? 4000);
+const IS_PROD = process.env.NODE_ENV === "production";
 const ORIGIN = process.env.CLIENT_ORIGIN ?? "http://localhost:1000";
 
 // 기본 보안 헤더 — CSP 는 프런트 개발 편의상 기본만.
@@ -39,9 +40,14 @@ app.use(
     contentSecurityPolicy: false, // API 서버라 HTML 안 서빙. 필요 시 활성화.
   })
 );
+
+// CORS — 프로덕션은 CLIENT_ORIGIN 만 허용. 개발에선 로컬호스트 편의 허용.
+const CORS_ORIGINS = IS_PROD
+  ? [ORIGIN]
+  : [ORIGIN, "http://localhost:1000", "http://127.0.0.1:1000"];
 app.use(
   cors({
-    origin: [ORIGIN, "http://localhost:1000", "http://127.0.0.1:1000"],
+    origin: CORS_ORIGINS,
     credentials: true,
   })
 );
@@ -124,6 +130,8 @@ app.use("/uploads", requireAuth, (req, res, next) => {
   }
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "no-referrer");
+  // defense-in-depth — /uploads 에서 내려가는 HTML 이 실수로라도 실행되지 않도록 tight CSP
+  res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox; frame-ancestors 'none'");
   // 이미지/영상/오디오가 아니면 인라인 실행 방지 + 강제 다운로드
   const mt = mime.lookup(name) || "application/octet-stream";
   const inline = INLINE_MIME_PREFIXES.some((p) => String(mt).startsWith(p));
