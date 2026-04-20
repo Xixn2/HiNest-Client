@@ -16,7 +16,7 @@
       "destination": "https://hinest-api.onrender.com/uploads/:path*"
     },
     {
-      "source": "/:path*",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ],
