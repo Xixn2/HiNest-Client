@@ -14,6 +14,8 @@ import noticeRouter from "./routes/notice.js";
 import chatRouter from "./routes/chat.js";
 import expenseRouter from "./routes/expense.js";
 import uploadRouter, { UPLOAD_DIR } from "./routes/upload.js";
+import { isStorageEnabled, downloadFile } from "./lib/storage.js";
+import fs from "node:fs";
 import notificationRouter from "./routes/notification.js";
 import searchRouter from "./routes/search.js";
 import documentRouter from "./routes/document.js";
@@ -121,25 +123,52 @@ app.use("/api/webhook", webhookRouter);
 
 // /uploads — 인증된 유저만 접근, 비이미지/비영상은 강제 다운로드로 내려서 브라우저 인라인 실행 차단.
 // 추가로 nosniff 로 MIME 변조 차단, 파일명 traversal 방지.
+// Supabase Storage 활성화 시: 서버가 버킷에서 스트림으로 받아 그대로 중계 (프록시).
+// 비활성화 시: 기존 디스크 정적 서빙 (로컬 dev 용).
 const INLINE_MIME_PREFIXES = ["image/", "video/", "audio/"];
-app.use("/uploads", requireAuth, (req, res, next) => {
+function applyUploadSecurityHeaders(res: express.Response, name: string, contentType: string) {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  // defense-in-depth — /uploads 에서 내려가는 HTML 이 실수로라도 실행되지 않도록 tight CSP
+  res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox; frame-ancestors 'none'");
+  const inline = INLINE_MIME_PREFIXES.some((p) => contentType.startsWith(p));
+  if (!inline) {
+    res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+  }
+}
+
+app.use("/uploads", requireAuth, async (req, res) => {
   const name = req.path.replace(/^\/+/, "");
   // 경로 탈출 / 상대경로 차단
   if (!/^[A-Za-z0-9._-]+$/.test(name)) {
     return res.status(400).json({ error: "invalid filename" });
   }
-  res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("Referrer-Policy", "no-referrer");
-  // defense-in-depth — /uploads 에서 내려가는 HTML 이 실수로라도 실행되지 않도록 tight CSP
-  res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox; frame-ancestors 'none'");
-  // 이미지/영상/오디오가 아니면 인라인 실행 방지 + 강제 다운로드
-  const mt = mime.lookup(name) || "application/octet-stream";
-  const inline = INLINE_MIME_PREFIXES.some((p) => String(mt).startsWith(p));
-  if (!inline) {
-    res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+
+  // 1) Supabase Storage 우선 — 새 업로드는 여기 있음
+  if (isStorageEnabled()) {
+    const file = await downloadFile(name);
+    if (file) {
+      const mt = file.contentType || mime.lookup(name) || "application/octet-stream";
+      applyUploadSecurityHeaders(res, name, String(mt));
+      res.setHeader("Content-Type", String(mt));
+      res.setHeader("Content-Length", String(file.size));
+      res.setHeader("Cache-Control", "private, max-age=86400");
+      return res.end(file.buffer);
+    }
+    // 버킷에 없으면 legacy 디스크 fallback 시도 (마이그레이션 이전 파일)
   }
-  next();
-}, express.static(UPLOAD_DIR, { maxAge: "1d", fallthrough: false }));
+
+  // 2) 디스크 fallback — dev 모드 / legacy 파일
+  const diskPath = path.join(UPLOAD_DIR, name);
+  if (!fs.existsSync(diskPath)) {
+    return res.status(404).json({ error: "not found" });
+  }
+  const mt = mime.lookup(name) || "application/octet-stream";
+  applyUploadSecurityHeaders(res, name, String(mt));
+  res.setHeader("Content-Type", String(mt));
+  res.setHeader("Cache-Control", "private, max-age=86400");
+  res.sendFile(diskPath);
+});
 
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);

@@ -4,6 +4,17 @@ import path from "node:path";
 import fs from "node:fs";
 import crypto from "node:crypto";
 import { requireAuth } from "../lib/auth.js";
+import { isStorageEnabled, uploadFile } from "../lib/storage.js";
+
+/**
+ * 업로드 플로우.
+ *  1. multer 는 memoryStorage — 파일을 메모리로만 받는다 (디스크 미경유).
+ *  2. Supabase Storage 활성화 시 → 버킷에 올림. URL 은 /uploads/<key> 로 반환해
+ *     기존 클라이언트 코드·DB 저장값이 그대로 유지됨. 실제 파일은 서버가 프록시해서 내려줌.
+ *  3. 비활성화 시 (로컬 dev) → 과거와 동일하게 uploads/ 디렉터리에 파일 기록.
+ *
+ * Render Free 디스크는 재시작 시 날아가기 때문에 프로덕션은 반드시 Supabase 경로를 쓴다.
+ */
 
 const UPLOAD_DIR = path.resolve(process.cwd(), "uploads");
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -36,20 +47,12 @@ function safeExt(name: string) {
   return path.extname(base).toLowerCase();
 }
 
-const storage = multer.diskStorage({
-  destination: (_req: any, _file: any, cb: any) => cb(null, UPLOAD_DIR),
-  filename: (_req: any, file: any, cb: any) => {
-    const fixed = fixName(file.originalname || "");
-    file.originalname = fixed;
-    const ext = safeExt(fixed);
-    const id = crypto.randomBytes(12).toString("hex");
-    cb(null, `${Date.now()}-${id}${ext}`);
-  },
-});
+// 메모리 스토리지 — 50MB 제한이라 RAM 부담 적음. 디스크 미경유 정책과 맞물림.
+const storage = multer.memoryStorage();
 
 const upload = multer({
   storage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB (기존 100MB → 축소)
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
   fileFilter: (_req: any, file: any, cb: any) => {
     const ext = safeExt(fixName(file.originalname || ""));
     if (BLOCKED_EXTS.has(ext)) {
@@ -73,19 +76,41 @@ router.post("/", (req, res, next) => {
     }
     next();
   });
-}, (req, res) => {
-  const f = (req as any).file;
+}, async (req, res) => {
+  const f = (req as any).file as {
+    buffer: Buffer;
+    originalname: string;
+    mimetype: string;
+    size: number;
+  } | undefined;
   if (!f) return res.status(400).json({ error: "no file" });
 
-  const mime = String(f.mimetype || "");
+  const originalName = fixName(f.originalname);
+  const ext = safeExt(originalName);
+  const id = crypto.randomBytes(12).toString("hex");
+  const key = `${Date.now()}-${id}${ext}`;
+  const mime = String(f.mimetype || "application/octet-stream");
+
+  try {
+    if (isStorageEnabled()) {
+      await uploadFile(key, f.buffer, mime);
+    } else {
+      // dev fallback — 디스크 기록 (프로덕션은 Supabase 경로를 반드시 씀)
+      await fs.promises.writeFile(path.join(UPLOAD_DIR, key), f.buffer);
+    }
+  } catch (e: any) {
+    console.error("[upload] failed", e);
+    return res.status(500).json({ error: "업로드 저장 실패" });
+  }
+
   let kind: "IMAGE" | "VIDEO" | "FILE" = "FILE";
   if (mime.startsWith("image/")) kind = "IMAGE";
   else if (mime.startsWith("video/")) kind = "VIDEO";
 
   res.json({
-    url: `/uploads/${f.filename}`,
-    name: fixName(f.originalname),
-    type: f.mimetype,
+    url: `/uploads/${key}`,
+    name: originalName,
+    type: mime,
     size: f.size,
     kind,
   });
