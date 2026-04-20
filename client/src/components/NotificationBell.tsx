@@ -31,8 +31,9 @@ export default function NotificationBell() {
       <button
         className="btn-icon relative"
         onClick={() => {
-          setOpen((s) => !s);
-          if (!open) reload();
+          const willOpen = !open;
+          setOpen(willOpen);
+          if (willOpen) reload();
         }}
         title="알림"
       >

@@ -23,6 +23,8 @@ type Ctx = {
   bellItems: Notif[];        // 벨에 표시할 것 (DM/MENTION 제외)
   unread: number;            // 벨 미읽음 (DM/MENTION 제외)
   chatUnread: number;        // 채팅 미읽음 (DM/MENTION)
+  /** 최초 서버에서 알림 목록을 받아온 뒤 true — 펄스 로직이 이 전엔 동작하지 않도록 함 */
+  ready: boolean;
   reload: () => Promise<void>;
   markRead: (ids?: string[], all?: boolean) => Promise<void>;
   /** 특정 채팅방에 들어갔을 때 해당 방의 DM/MENTION 알림 일괄 읽음 처리 */
@@ -34,6 +36,7 @@ const NotificationCtx = createContext<Ctx>({
   bellItems: [],
   unread: 0,
   chatUnread: 0,
+  ready: false,
   reload: async () => {},
   markRead: async () => {},
   markRoomRead: async () => {},
@@ -41,6 +44,7 @@ const NotificationCtx = createContext<Ctx>({
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<Notif[]>([]);
+  const [ready, setReady] = useState(false);
   const initialRef = useRef(true);
   const esRef = useRef<EventSource | null>(null);
 
@@ -58,6 +62,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     try {
       const res = await api<{ notifications: Notif[]; unread: number }>("/api/notification");
       setItems(res.notifications);
+      setReady(true);
       const unreadItems = res.notifications.filter((n) => !n.readAt);
       if (initialRef.current) {
         initialRef.current = false;
@@ -126,6 +131,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             deliverPendingNotifications([
               { id: n.id, title: n.title, body: n.body, linkUrl: n.linkUrl },
             ]);
+            // 서버 정렬/중복제거 기준으로 한 번 더 동기화 — 혹시 SSE 가 한 건도 빠뜨리면
+            // 벨 목록이 카운트만 맞고 항목이 비는 현상을 막기 위함.
+            reload();
           } catch {}
         });
         es.onerror = () => {
@@ -157,7 +165,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, []);
 
   return (
-    <NotificationCtx.Provider value={{ items, bellItems, unread, chatUnread, reload, markRead, markRoomRead }}>
+    <NotificationCtx.Provider value={{ items, bellItems, unread, chatUnread, ready, reload, markRead, markRoomRead }}>
       {children}
     </NotificationCtx.Provider>
   );
