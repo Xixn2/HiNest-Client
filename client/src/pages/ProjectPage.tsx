@@ -53,10 +53,11 @@ export default function ProjectPage() {
     };
   }, [id]);
 
-  if (loading) {
-    return <div className="text-slate-400 text-sm py-10 text-center">불러오는 중…</div>;
-  }
-  if (err || !project) {
+  // project 로딩이 끝나기 전에도 id 만 있으면 자식들이 fetch 를 시작하도록
+  // 껍데기를 먼저 렌더한다. 이렇게 해야 /api/project/:id + events + webhook 3개가
+  // 직렬이 아니라 동시에 나간다 (Render 콜드스타트 + IAD↔SIN 왕복이 직렬로 쌓이면
+  // 체감 3~5초, 병렬이면 ~1초).
+  if (err && !project) {
     return (
       <div className="text-center py-16 text-slate-400">
         <div>프로젝트를 찾을 수 없습니다.</div>
@@ -64,20 +65,29 @@ export default function ProjectPage() {
       </div>
     );
   }
+  if (!id) return null;
+
+  const members = project?.members ?? [];
 
   return (
     <div>
       <PageHeader
-        title={project.name + (project.status === "ARCHIVED" ? " (보관됨)" : "")}
-        description={project.description || "아직 설명이 없습니다."}
+        title={
+          project
+            ? project.name + (project.status === "ARCHIVED" ? " (보관됨)" : "")
+            : loading
+              ? "불러오는 중…"
+              : "프로젝트"
+        }
+        description={project?.description || (loading ? "" : "아직 설명이 없습니다.")}
       />
 
       {/* 캘린더를 전체 폭으로 사용하고, 멤버 리스트는 아래로. */}
       <div className="space-y-6">
         <div className="card">
           <ProjectCalendar
-            projectId={project.id}
-            members={project.members.map((m) => ({
+            projectId={id}
+            members={members.map((m) => ({
               id: m.user.id,
               name: m.user.name,
               avatarColor: m.user.avatarColor,
@@ -88,16 +98,16 @@ export default function ProjectPage() {
         </div>
 
         <div className="card">
-          <ProjectWebhooks projectId={project.id} />
+          <ProjectWebhooks projectId={id} />
         </div>
 
         <div className="card">
           <div className="text-sm font-bold mb-3">
-            멤버 <span className="text-slate-400 font-normal">({project.members.length})</span>
+            멤버 <span className="text-slate-400 font-normal">({members.length})</span>
           </div>
           {/* 가로 그리드 — 넓은 영역을 활용해 카드 형태로 나열 */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {project.members.map((m) => (
+            {members.map((m) => (
               <div key={m.id} className="flex items-center gap-2.5 border border-slate-100 rounded-lg px-3 py-2">
                 <div
                   className="avatar avatar-sm"
