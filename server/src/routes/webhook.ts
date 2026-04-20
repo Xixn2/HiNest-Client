@@ -68,6 +68,127 @@ function pickBody(payload: any): string | null {
 }
 
 /**
+ * GitHub 웹훅은 `X-GitHub-Event` 헤더 + payload 의 action/pull_request/commits 등
+ * 조합으로 의미가 결정됨. 일반 parser 로는 payload.action ("opened") 만 떨궈져서
+ * 무슨 일이 일어났는지 판독 불가 → Discord 처럼 `[repo:branch] N new commits` 같은
+ * 풍부한 라벨로 제목/본문을 만든다.
+ *
+ * 지원 이벤트 (나머지는 `[repo] <event> <action>` 으로 fallback):
+ *   push, pull_request, issues, issue_comment, pull_request_review,
+ *   pull_request_review_comment, create, delete, release, fork, star/watch, ping
+ */
+function pickGitHubTitleBody(event: string, p: any): { title: string; body: string | null } {
+  const repo = p?.repository?.full_name || p?.repository?.name || "unknown";
+  const sender = p?.sender?.login ? ` · @${p.sender.login}` : "";
+  const trunc = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+
+  if (event === "ping") {
+    return { title: `[${repo}] 웹훅 연결됨`, body: p?.zen || null };
+  }
+
+  if (event === "push") {
+    const branch = String(p?.ref ?? "").replace(/^refs\/heads\//, "") || "?";
+    const commits: any[] = Array.isArray(p?.commits) ? p.commits : [];
+    const n = commits.length;
+    const title = `[${repo}:${branch}] ${n} new commit${n === 1 ? "" : "s"}${sender}`;
+    const lines = commits
+      .slice(0, 5)
+      .map((c) => {
+        const sha = String(c?.id ?? "").slice(0, 7);
+        const msg = String(c?.message ?? "").split("\n")[0];
+        const author = c?.author?.name ? ` — ${c.author.name}` : "";
+        return `${sha} ${msg}${author}`;
+      });
+    const body = lines.length ? lines.join("\n") : null;
+    return { title, body };
+  }
+
+  if (event === "pull_request") {
+    const action = p?.action ?? "updated";
+    const num = p?.number ?? p?.pull_request?.number;
+    const prTitle = p?.pull_request?.title ?? "";
+    const merged = action === "closed" && p?.pull_request?.merged === true;
+    const label = merged ? "merged" : action;
+    return {
+      title: `[${repo}] PR #${num} ${label}: ${trunc(prTitle, 120)}${sender}`,
+      body: p?.pull_request?.body ? trunc(String(p.pull_request.body), 1000) : null,
+    };
+  }
+
+  if (event === "issues") {
+    const action = p?.action ?? "updated";
+    const num = p?.issue?.number;
+    const issueTitle = p?.issue?.title ?? "";
+    return {
+      title: `[${repo}] Issue #${num} ${action}: ${trunc(issueTitle, 120)}${sender}`,
+      body: p?.issue?.body ? trunc(String(p.issue.body), 1000) : null,
+    };
+  }
+
+  if (event === "issue_comment") {
+    const num = p?.issue?.number;
+    const issueTitle = p?.issue?.title ?? "";
+    const commentExcerpt = String(p?.comment?.body ?? "").split("\n")[0];
+    return {
+      title: `[${repo}] Comment on #${num}: ${trunc(issueTitle, 100)}${sender}`,
+      body: commentExcerpt ? trunc(commentExcerpt, 1000) : null,
+    };
+  }
+
+  if (event === "pull_request_review") {
+    const num = p?.pull_request?.number;
+    const state = p?.review?.state ?? "";
+    return {
+      title: `[${repo}] PR #${num} review: ${state}${sender}`,
+      body: p?.review?.body ? trunc(String(p.review.body), 1000) : null,
+    };
+  }
+
+  if (event === "pull_request_review_comment") {
+    const num = p?.pull_request?.number;
+    const excerpt = String(p?.comment?.body ?? "").split("\n")[0];
+    return {
+      title: `[${repo}] PR #${num} review comment${sender}`,
+      body: excerpt ? trunc(excerpt, 1000) : null,
+    };
+  }
+
+  if (event === "create" || event === "delete") {
+    const refType = p?.ref_type ?? "ref"; // branch | tag
+    const refName = p?.ref ?? "?";
+    const verb = event === "create" ? "created" : "deleted";
+    return {
+      title: `[${repo}] ${refType} ${verb}: ${refName}${sender}`,
+      body: null,
+    };
+  }
+
+  if (event === "release") {
+    const action = p?.action ?? "released";
+    const tag = p?.release?.tag_name ?? "";
+    const name = p?.release?.name ?? "";
+    return {
+      title: `[${repo}] Release ${action}: ${tag}${name ? ` (${name})` : ""}${sender}`,
+      body: p?.release?.body ? trunc(String(p.release.body), 1000) : null,
+    };
+  }
+
+  if (event === "fork") {
+    const child = p?.forkee?.full_name ?? "";
+    return { title: `[${repo}] forked → ${child}${sender}`, body: null };
+  }
+
+  if (event === "star" || event === "watch") {
+    const action = p?.action ?? "started";
+    return { title: `[${repo}] ⭐ ${action}${sender}`, body: null };
+  }
+
+  // fallback — 알려지지 않은 이벤트는 event + action 조합으로
+  const action = p?.action ? ` ${p.action}` : "";
+  return { title: `[${repo}] ${event}${action}${sender}`, body: null };
+}
+
+/**
  * raw body 를 보존한 채 JSON 파싱. 서명 검증을 위해 요청 원문 문자열이 필요.
  * 전역 `express.json()` 이 이미 걸려 있지만, 더 엄격한 limit 과 rawBody 캡처가 필요해
  * 이 라우터 전용으로 다시 파싱.
@@ -127,8 +248,19 @@ router.post(
     const payload: any = req.body ?? {};
     const raw = typeof payload === "string" ? payload : JSON.stringify(payload);
 
-    const title = pickTitle(payload);
-    const body = pickBody(payload);
+    // GitHub 는 `X-GitHub-Event` 헤더로 이벤트 종류를 전달. 헤더가 있으면
+    // GitHub 전용 포맷터로 풍부한 title/body 구성. 없으면 일반 parser 사용.
+    const ghEvent = String(req.header("x-github-event") ?? "").trim();
+    let title: string;
+    let body: string | null;
+    if (ghEvent) {
+      const r = pickGitHubTitleBody(ghEvent, payload);
+      title = r.title.slice(0, 200);
+      body = r.body ? r.body.slice(0, 4000) : null;
+    } else {
+      title = pickTitle(payload);
+      body = pickBody(payload);
+    }
     const ip =
       (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ||
       req.ip ||
