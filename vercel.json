@@ -4,7 +4,6 @@
   "outputDirectory": "client/dist",
   "installCommand": "echo skipping root install",
   "framework": null,
-  "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
     {
