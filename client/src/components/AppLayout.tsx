@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
+import { api } from "../api";
 import Logo from "./Logo";
 import NotificationBell from "./NotificationBell";
 import SearchModal from "./SearchModal";
 import ChatFab from "./ChatFab";
-import { NotificationProvider } from "../notifications";
+import { NotificationProvider, useNotifications } from "../notifications";
 
 type NavItem = { to: string; label: string; icon: (p: { active?: boolean }) => JSX.Element; end?: boolean };
 
@@ -17,9 +18,9 @@ const WORK_NAV: NavItem[] = [
   { to: "/approvals", label: "전자결재", icon: ApprovalIcon },
 ];
 
+// 사내톡은 사이드바에서 제거 — 우하단 ChatFab 팝업에서만 접근.
 const COMM_NAV: NavItem[] = [
   { to: "/notice", label: "공지사항", icon: MegaIcon },
-  { to: "/chat", label: "사내톡", icon: ChatIcon },
   { to: "/directory", label: "팀원", icon: PeopleIcon },
   { to: "/org", label: "조직도", icon: OrgIcon },
 ];
@@ -75,6 +76,7 @@ function AppLayoutInner() {
           <NavSection label="워크스페이스" items={WORK_NAV} />
           <NavSection label="커뮤니케이션" items={COMM_NAV} />
           <NavSection label="자료·재무" items={RESOURCE_NAV} />
+          <ProjectsSection />
 
           {user?.role === "ADMIN" && (
             <div>
@@ -147,23 +149,118 @@ function AppLayoutInner() {
 }
 
 function NavSection({ label, items }: { label: string; items: NavItem[] }) {
+  // 공지사항 미읽음 알림 개수 — 사이드바에 배지로 표시
+  const { bellItems, ready } = useNotifications();
+  const noticeUnread = bellItems.filter((n) => n.type === "NOTICE" && !n.readAt).length;
+
+  // 새 공지가 들어왔을 때만 파란 펄스.
+  // - 새로고침/재오픈은 localStorage 마지막 본 카운트와 비교해 증가하지 않으면 패스.
+  // - 앱 꺼진 사이 공지가 쌓였다면 켤 때 1회 발동.
+  const [noticePulse, setNoticePulse] = useState(false);
+  useEffect(() => {
+    if (!ready) return;
+    const KEY = "hinest:lastSeenNoticeUnread";
+    const lastSeen = Number(localStorage.getItem(KEY) ?? "0");
+    if (noticeUnread > lastSeen) {
+      setNoticePulse(true);
+      const t = setTimeout(() => setNoticePulse(false), 2800);
+      localStorage.setItem(KEY, String(noticeUnread));
+      return () => clearTimeout(t);
+    }
+    localStorage.setItem(KEY, String(noticeUnread));
+  }, [noticeUnread, ready]);
+
   return (
     <div>
       <SectionLabel>{label}</SectionLabel>
       <div className="space-y-0.5">
         {items.map((n) => {
           const Icon = n.icon;
+          const badgeCount = n.to === "/notice" ? noticeUnread : 0;
+          const pulseHere = n.to === "/notice" && noticePulse;
           return (
-            <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => navClass(isActive)}>
+            <NavLink
+              key={n.to}
+              to={n.to}
+              end={n.end}
+              className={({ isActive }) => navClass(isActive) + (pulseHere ? " siri-pulse-bg" : "")}
+            >
               {({ isActive }) => (
                 <>
                   <Icon active={isActive} />
-                  <span>{n.label}</span>
+                  <span className="flex-1">{n.label}</span>
+                  {badgeCount > 0 && (
+                    <span className="ml-auto min-w-[18px] h-[18px] px-1.5 rounded-full bg-danger text-white text-[10px] font-bold grid place-items-center tabular">
+                      {badgeCount > 99 ? "99+" : badgeCount}
+                    </span>
+                  )}
                 </>
               )}
             </NavLink>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+type ProjectLite = {
+  id: string;
+  name: string;
+  color: string;
+  status: "ACTIVE" | "ARCHIVED";
+};
+
+/**
+ * 사이드바 "팀" 섹션 — 내가 참여중인 프로젝트 목록.
+ * - 아직 참여 프로젝트가 없어도 섹션 자체는 노출해서 "여기가 프로젝트 모이는 곳이다" 를 알 수 있게.
+ * - 활성 프로젝트만 기본 노출, ARCHIVED 는 숨김.
+ */
+function ProjectsSection() {
+  const { user } = useAuth();
+  const [projects, setProjects] = useState<ProjectLite[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  // ADMIN 은 본인이 멤버가 아니어도 전체 프로젝트를 사이드바에서 열람.
+  const isAdmin = user?.role === "ADMIN";
+
+  useEffect(() => {
+    let alive = true;
+    api<{ projects: ProjectLite[] }>(isAdmin ? "/api/project?all=1" : "/api/project")
+      .then((r) => {
+        if (!alive) return;
+        setProjects(r.projects);
+      })
+      .catch(() => {})
+      .finally(() => alive && setLoaded(true));
+    return () => {
+      alive = false;
+    };
+  }, [isAdmin]);
+
+  const active = projects.filter((p) => p.status === "ACTIVE");
+
+  return (
+    <div>
+      <SectionLabel>프로젝트</SectionLabel>
+      <div className="space-y-0.5">
+        {active.map((p) => (
+          <NavLink
+            key={p.id}
+            to={`/projects/${p.id}`}
+            className={({ isActive }) => navClass(isActive)}
+          >
+            <span
+              className="w-2 h-2 rounded-full flex-shrink-0"
+              style={{ background: p.color }}
+            />
+            <span className="flex-1 truncate">{p.name}</span>
+          </NavLink>
+        ))}
+        {loaded && active.length === 0 && (
+          <div className="px-3 py-2 text-[11px] text-ink-400">
+            참여중인 프로젝트가 없습니다.
+          </div>
+        )}
       </div>
     </div>
   );
@@ -204,14 +301,21 @@ const BREADCRUMB: Record<string, string> = {
 
 function TopBar({ draggable = false }: { draggable?: boolean }) {
   const loc = useLocation();
-  const label = BREADCRUMB[loc.pathname] ?? "";
+  const label = loc.pathname.startsWith("/projects/")
+    ? "프로젝트"
+    : BREADCRUMB[loc.pathname] ?? "";
   const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setSearchOpen(true);
+        setSearchOpen((v) => !v);
+      }
+      // Cmd+T — 사내톡 팝업 토글 (ChatFab 이 전역 이벤트로 받음)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "t") {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("chat:toggle"));
       }
       if (e.key === "Escape" && searchOpen) setSearchOpen(false);
     }
