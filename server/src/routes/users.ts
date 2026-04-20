@@ -34,24 +34,27 @@ router.get("/", async (req, res) => {
     },
   });
   const date = todayStr();
-  const attendances = await prisma.attendance.findMany({
-    where: { date, userId: { in: users.map((u) => u.id) } },
-    select: { userId: true, checkIn: true, checkOut: true },
-  });
-  const attMap = new Map(attendances.map((a) => [a.userId, a]));
-
-  // 오늘 승인된 휴가/외근 — 시작~종료 기간에 오늘이 포함된 것만.
+  const ids = users.map((u) => u.id);
   const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
   const endOfToday = new Date(startOfToday); endOfToday.setDate(endOfToday.getDate() + 1);
-  const leaves = await prisma.leave.findMany({
-    where: {
-      status: "APPROVED",
-      userId: { in: users.map((u) => u.id) },
-      startDate: { lt: endOfToday },
-      endDate: { gte: startOfToday },
-    },
-    select: { userId: true, type: true },
-  });
+
+  // attendances 와 leaves 는 users 배열에만 의존 — 병렬로 던져서 왕복 절약.
+  const [attendances, leaves] = await Promise.all([
+    prisma.attendance.findMany({
+      where: { date, userId: { in: ids } },
+      select: { userId: true, checkIn: true, checkOut: true },
+    }),
+    prisma.leave.findMany({
+      where: {
+        status: "APPROVED",
+        userId: { in: ids },
+        startDate: { lt: endOfToday },
+        endDate: { gte: startOfToday },
+      },
+      select: { userId: true, type: true },
+    }),
+  ]);
+  const attMap = new Map(attendances.map((a) => [a.userId, a]));
   // 우선순위: TRIP > HALF > ANNUAL/SICK/OTHER (외근이 가장 구체적인 "업무중" 신호)
   const priority: Record<string, number> = { TRIP: 3, HALF: 2, ANNUAL: 1, SICK: 1, OTHER: 1 };
   const leaveMap = new Map<string, string>();
