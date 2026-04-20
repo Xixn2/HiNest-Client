@@ -10,6 +10,9 @@ export type User = {
   position?: string | null;
   avatarColor?: string;
   superAdmin?: boolean;
+  presenceStatus?: string | null;
+  presenceMessage?: string | null;
+  presenceUpdatedAt?: string | null;
 };
 
 type Ctx = {
