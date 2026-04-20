@@ -96,6 +96,9 @@ model WebhookChannel {
   color       String   @default("#6366F1")
   /// URL 경로용 secret token — `/api/webhook/:token` 로 외부에서 POST
   token       String   @unique
+  /// (선택) HMAC-SHA256 서명 검증용 시크릿. 지정 시 요청에 반드시 X-Signature: sha256=<hex>
+  /// 가 있어야 수락. raw body 기준으로 서명.
+  signingSecret String?
   createdById String
   createdAt   DateTime @default(now())
   events      WebhookEvent[]
