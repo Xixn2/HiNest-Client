@@ -10,12 +10,56 @@ type Results = {
   messages?: any[];
 };
 
+/** 페이지 바로가기 — label/aliases 중 하나가 검색어에 포함되면 노출 */
+type PageEntry = { label: string; desc: string; path: string; aliases: string[]; emoji: string };
+const PAGES: PageEntry[] = [
+  { label: "개요", desc: "대시보드 홈", path: "/", aliases: ["home", "dashboard", "홈", "대시보드"], emoji: "🏠" },
+  { label: "일정", desc: "회사·팀·개인 일정", path: "/schedule", aliases: ["schedule", "calendar", "캘린더"], emoji: "📅" },
+  { label: "근태·월차", desc: "출퇴근 · 연차 신청", path: "/attendance", aliases: ["attendance", "leave", "근태", "월차", "연차", "휴가", "출퇴근"], emoji: "⏰" },
+  { label: "업무일지", desc: "일일 업무 기록", path: "/journal", aliases: ["journal", "diary", "업무일지", "일지"], emoji: "📝" },
+  { label: "전자결재", desc: "결재 요청·검토", path: "/approvals", aliases: ["approval", "결재", "승인"], emoji: "✅" },
+  { label: "공지사항", desc: "회사 공지", path: "/notice", aliases: ["notice", "notification", "공지"], emoji: "📢" },
+  { label: "사내톡", desc: "팀원과 메시지", path: "/chat", aliases: ["chat", "message", "사내톡", "채팅", "메시지"], emoji: "💬" },
+  { label: "팀원", desc: "구성원 디렉토리", path: "/directory", aliases: ["directory", "member", "people", "팀원", "디렉토리"], emoji: "👥" },
+  { label: "조직도", desc: "조직 트리", path: "/org", aliases: ["org", "organization", "조직도", "조직"], emoji: "🏢" },
+  { label: "문서함", desc: "회사 문서", path: "/documents", aliases: ["document", "file", "문서", "파일"], emoji: "📄" },
+  { label: "법인카드", desc: "카드 사용내역", path: "/expense", aliases: ["expense", "card", "카드", "지출", "법카"], emoji: "💳" },
+  { label: "내 프로필", desc: "내 정보 수정", path: "/profile", aliases: ["profile", "me", "프로필", "내정보"], emoji: "🙂" },
+];
+
+function matchPages(q: string): PageEntry[] {
+  const k = q.trim().toLowerCase();
+  if (!k) return [];
+  return PAGES.filter((p) =>
+    p.label.toLowerCase().includes(k) ||
+    p.desc.toLowerCase().includes(k) ||
+    p.aliases.some((a) => a.toLowerCase().includes(k))
+  );
+}
+
 export default function SearchModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const nav = useNavigate();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Results>({});
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // 마운트 유지 + visible 플래그로 enter/exit 애니메이션 분리
+  const [mounted, setMounted] = useState(open);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      // 마운트 직후 다음 프레임에 visible=true 로 전환해서 CSS transition 트리거
+      const r = requestAnimationFrame(() => setVisible(true));
+      return () => cancelAnimationFrame(r);
+    } else {
+      setVisible(false);
+      // transition 끝날 시간만큼 유예 후 언마운트
+      const t = setTimeout(() => setMounted(false), 320);
+      return () => clearTimeout(t);
+    }
+  }, [open]);
 
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 50);
@@ -40,18 +84,68 @@ export default function SearchModal({ open, onClose }: { open: boolean; onClose:
     nav(path);
   }
 
-  const totalCount = useMemo(() => {
-    return Object.values(results).reduce((n: number, arr: any) => n + (arr?.length ?? 0), 0);
-  }, [results]);
+  /** 사람 결과 클릭 시 — 오른쪽 사내톡 팝업에서 해당 유저와 DM 바로 열기 */
+  async function openDirect(userId: string) {
+    try {
+      const res = await api<{ room: { id: string } }>("/api/chat/rooms", {
+        method: "POST",
+        json: { type: "DIRECT", memberIds: [userId] },
+      });
+      onClose();
+      window.dispatchEvent(new CustomEvent("chat:open"));
+      window.dispatchEvent(new CustomEvent("chat:open-room", { detail: { roomId: res.room.id } }));
+    } catch {
+      // 실패 시 fallback — 팀원 페이지로 이동
+      go("/directory");
+    }
+  }
 
-  if (!open) return null;
+  const pageHits = useMemo(() => matchPages(q), [q]);
+  const totalCount = useMemo(() => {
+    const svr = Object.values(results).reduce((n: number, arr: any) => n + (arr?.length ?? 0), 0);
+    return svr + pageHits.length;
+  }, [results, pageHits]);
+
+  if (!mounted) return null;
+  // 스프링 느낌의 이징 — 살짝 튕기며 내려와 안착
+  const SPRING = "cubic-bezier(.34, 1.56, .64, 1)";
+  const OUT = "cubic-bezier(.4, 0, .2, 1)";
   return (
     <div
-      className="fixed inset-0 z-[60] bg-ink-900/40 flex items-start justify-center px-4"
-      style={{ paddingTop: "18vh" }}
+      className="fixed inset-0 z-[60] flex items-start justify-center px-4"
+      style={{
+        paddingTop: "18vh",
+        background: visible
+          ? "rgba(17, 24, 39, 0.32)"
+          : "rgba(17, 24, 39, 0)",
+        backdropFilter: visible ? "blur(3px) saturate(110%)" : "blur(0px) saturate(100%)",
+        WebkitBackdropFilter: visible ? "blur(3px) saturate(110%)" : "blur(0px) saturate(100%)",
+        transition:
+          "background .28s ease, backdrop-filter .32s ease, -webkit-backdrop-filter .32s ease",
+      }}
       onClick={onClose}
     >
-      <div className="w-full max-w-[640px] panel shadow-pop overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="w-full max-w-[640px] panel shadow-pop overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          opacity: visible ? 1 : 0,
+          transform: visible
+            ? "translateY(0) scale(1) rotateX(0deg)"
+            : "translateY(-40px) scale(.9) rotateX(-8deg)",
+          transformOrigin: "top center",
+          transformStyle: "preserve-3d",
+          perspective: 1200,
+          filter: visible ? "blur(0px)" : "blur(6px)",
+          boxShadow: visible
+            ? "0 24px 60px -12px rgba(49, 130, 246, 0.35), 0 12px 28px -8px rgba(0,0,0,.18)"
+            : "0 0 0 rgba(0,0,0,0)",
+          transition: visible
+            ? `opacity .26s ${OUT}, transform .42s ${SPRING}, filter .26s ${OUT}, box-shadow .4s ${OUT}`
+            : `opacity .2s ${OUT}, transform .28s ${OUT}, filter .2s ${OUT}, box-shadow .2s ${OUT}`,
+          willChange: "transform, opacity, filter",
+        }}
+      >
         <div className="flex items-center gap-3 px-5 h-[52px] border-b border-ink-150">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
@@ -68,7 +162,7 @@ export default function SearchModal({ open, onClose }: { open: boolean; onClose:
         <div className="max-h-[60vh] overflow-y-auto">
           {!q.trim() ? (
             <div className="py-12 text-center t-caption">원하는 항목을 검색해보세요.</div>
-          ) : loading ? (
+          ) : loading && totalCount === 0 ? (
             <div className="py-12 text-center t-caption">검색 중…</div>
           ) : totalCount === 0 ? (
             <div className="py-12 text-center">
@@ -77,10 +171,24 @@ export default function SearchModal({ open, onClose }: { open: boolean; onClose:
             </div>
           ) : (
             <div className="py-2">
+              {pageHits.length > 0 && (
+                <Section label="바로가기">
+                  {pageHits.map((p) => (
+                    <Row
+                      key={`pg-${p.path}`}
+                      onClick={() => go(p.path)}
+                      icon={<SmallBadge color="#3182F6">{p.emoji}</SmallBadge>}
+                    >
+                      <div className="text-[13px] font-bold text-ink-900">{p.label}</div>
+                      <div className="text-[11px] text-ink-500">{p.desc}</div>
+                    </Row>
+                  ))}
+                </Section>
+              )}
               {results.people && results.people.length > 0 && (
                 <Section label="사람">
                   {results.people.map((p: any) => (
-                    <Row key={`p-${p.id}`} onClick={() => go(`/directory`)}
+                    <Row key={`p-${p.id}`} onClick={() => openDirect(p.id)}
                       icon={<Avatar name={p.name} color={p.avatarColor ?? "#3D54C4"} />}>
                       <div className="text-[13px] font-bold text-ink-900">{p.name}</div>
                       <div className="text-[11px] text-ink-500">{p.position ?? "—"} {p.team && `· ${p.team}`} · {p.email}</div>
