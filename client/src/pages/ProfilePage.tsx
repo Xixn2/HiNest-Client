@@ -3,6 +3,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
 import { useTheme, type ThemeMode } from "../theme";
+import { PRESENCE_CHOICES, resolvePresence, type PresenceStatus } from "../lib/presence";
 import {
   getDesktopPermission,
   isDesktopEnabled,
@@ -143,6 +144,7 @@ export default function ProfilePage() {
             </form>
           </div>
 
+          <PresencePanel />
           <ThemePanel />
           <DesktopNotifyPanel />
 
@@ -433,6 +435,118 @@ function InlineAlert({ tone, children }: { tone: "error" | "success"; children: 
     <div className={`flex items-start gap-2 p-2.5 rounded-md border text-[12px] font-semibold ${cls}`}>
       <span className="mt-0.5 flex-shrink-0">{Icon}</span>
       {children}
+    </div>
+  );
+}
+
+/* ===== 업무 상태 패널 — 다른 사람에게 내 상태 표시 ===== */
+function PresencePanel() {
+  const { user, refresh } = useAuth();
+  const [status, setStatus] = useState<PresenceStatus | null>(
+    ((user as any)?.presenceStatus ?? null) as PresenceStatus | null
+  );
+  const [message, setMessage] = useState<string>((user as any)?.presenceMessage ?? "");
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  // user 가 뒤늦게 로드되거나 refresh() 후 최신 값으로 동기화
+  useEffect(() => {
+    if (!user) return;
+    setStatus(((user as any).presenceStatus ?? null) as PresenceStatus | null);
+    setMessage((user as any).presenceMessage ?? "");
+  }, [(user as any)?.presenceStatus, (user as any)?.presenceMessage]);
+
+  // 선택된 수동 상태의 톤 — null 이면 회색 "자동" 으로 표시.
+  const cur = status ? resolvePresence(status, null) : { color: "#8E959E", label: "자동" };
+
+  async function save(nextStatus: PresenceStatus | null, nextMessage: string) {
+    setSaving(true);
+    setErrMsg(null);
+    try {
+      await api("/api/me/presence", {
+        method: "PATCH",
+        json: { status: nextStatus, message: nextMessage || null },
+      });
+      setStatus(nextStatus);
+      setMessage(nextMessage);
+      setSavedAt(Date.now());
+      // /api/me 로 사용자 새로고침 → 다른 패널/페이지에도 반영
+      await refresh?.();
+    } catch (e: any) {
+      setErrMsg(e?.message ?? "저장 실패");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="panel p-6">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="h-sub">업무 상태</div>
+          <div className="t-caption mt-0.5">
+            조직도·사내톡·팀원 목록에서 다른 사람들에게 보여지는 상태입니다.
+          </div>
+        </div>
+        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] font-bold"
+          style={{ background: cur.color + "18", color: cur.color }}>
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: cur.color }} />
+          {status ? cur.label : "자동"}
+        </span>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
+        {PRESENCE_CHOICES.map((c) => {
+          const active = (status ?? null) === c.value;
+          return (
+            <button
+              key={c.label}
+              type="button"
+              disabled={saving}
+              onClick={() => save(c.value, message)}
+              className={`px-3 py-2.5 rounded-xl text-[13px] font-semibold border transition ${
+                active
+                  ? "bg-brand-500 text-white border-brand-500 shadow-sm"
+                  : "bg-ink-25 text-ink-700 border-transparent hover:bg-ink-50"
+              }`}
+            >
+              <span className="mr-1.5">{c.emoji}</span>
+              {c.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-4">
+        <label className="field-label">상태 메시지 (선택)</label>
+        <div className="flex gap-2">
+          <input
+            className="input flex-1"
+            value={message}
+            onChange={(e) => setMessage(e.target.value.slice(0, 60))}
+            placeholder="예) 14시까지 외근"
+          />
+          <button
+            className="btn-ghost"
+            disabled={saving}
+            onClick={() => save(status, message)}
+          >
+            저장
+          </button>
+        </div>
+        {errMsg && (
+          <div className="text-[11px] text-red-600 mt-1.5 font-semibold">❌ {errMsg}</div>
+        )}
+        {savedAt && !errMsg && (
+          <div className="text-[11px] text-green-600 mt-1.5">
+            저장됨 · {new Date(savedAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
+          </div>
+        )}
+        <div className="text-[11px] text-ink-500 mt-2">
+          "근무중" · "오프라인" 은 자동 판정이라 여기서 선택할 수 없어요. "자동" 을 선택하면 오늘 출퇴근 여부에 따라 자동으로 표시됩니다.
+        </div>
+      </div>
     </div>
   );
 }
