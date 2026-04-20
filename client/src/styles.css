@@ -176,28 +176,35 @@ html.dark .panel {
 /* ============================================================ */
 /*                           INPUTS                              */
 /* ============================================================ */
-.input {
-  width: 100%;
-  background: var(--c-surface);
-  color: var(--c-text);
-  border: 1px solid var(--c-border-strong);
-  height: 40px;
-  padding: 0 12px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  outline: none;
-  transition: border-color .15s, box-shadow .15s, background .15s;
-}
-.input::placeholder { color: var(--c-text-muted); }
-.input:hover { border-color: var(--c-text-muted); }
-.input:focus {
-  border-color: var(--c-brand);
-  box-shadow: var(--ring);
-}
-.input:disabled {
-  background: var(--c-surface-2);
-  color: var(--c-text-muted);
+/* Toss 스타일 — 두꺼운 보더 대신 soft-filled 배경 + 포커스 시 브랜드 링.
+   @layer components 로 감싸서 Tailwind 의 pl-*, px-*, h-* 등 유틸리티가
+   정상적으로 오버라이드될 수 있게 함 (utilities 레이어 우선). */
+@layer components {
+  .input {
+    width: 100%;
+    background: var(--c-surface-3);
+    color: var(--c-text);
+    border: 1px solid transparent;
+    height: 44px;
+    padding: 0 14px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    outline: none;
+    transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
+  }
+  .input::placeholder { color: var(--c-text-muted); font-weight: 500; }
+  .input:hover { background: var(--c-border); }
+  .input:focus {
+    background: var(--c-surface);
+    border-color: var(--c-brand);
+    box-shadow: 0 0 0 3px var(--c-brand-soft);
+  }
+  .input:disabled {
+    background: var(--c-surface-2);
+    color: var(--c-text-muted);
+    cursor: not-allowed;
+  }
 }
 textarea.input {
   padding: 10px 12px;
@@ -325,6 +332,17 @@ table.pro tbody td.tabular {
   font-size: 12.5px;
 }
 
+/* 상세 리스트 — 컬럼 간 세로 구분선으로 헤더/셀을 명확히 분리. */
+table.pro.pro-grid thead th,
+table.pro.pro-grid tbody td {
+  border-right: 1px solid var(--c-border);
+}
+table.pro.pro-grid thead th:last-child,
+table.pro.pro-grid tbody td:last-child {
+  border-right: 0;
+}
+
+
 /* ============================================================ */
 /*                         HEADINGS                              */
 /* ============================================================ */
@@ -369,6 +387,100 @@ table.pro tbody td.tabular {
 .divide-y-pro > * + * { border-top: 1px solid var(--c-border); }
 
 /* ============================================================ */
+/*                    FILTER INPUT (soft/borderless)             */
+/* ============================================================ */
+/* 목록 상단 필터 바 전용 — 라이트 그레이 배경 + 무경계 + 둥근 8px.
+   두꺼운 bordered input 보다 시각적으로 가벼워 탭/셀렉트/검색과 자연스럽게 어울림. */
+.filter-input {
+  background: var(--c-surface-3);
+  color: var(--c-text);
+  border: 0;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+  outline: none;
+  transition: background .15s ease, box-shadow .15s ease;
+}
+.filter-input::placeholder { color: var(--c-text-muted); font-weight: 500; }
+.filter-input:hover { background: var(--c-border); }
+.filter-input:focus {
+  background: var(--c-surface);
+  box-shadow: 0 0 0 2px var(--c-brand-soft), inset 0 0 0 1px var(--c-brand);
+}
+select.filter-input {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 28px;
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 10px 10px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239AA3AE' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
+}
+
+/* ============================================================ */
+/*                      GHOST / TAG SELECT                        */
+/* ============================================================ */
+/* 테이블 셀 안에서 "태그처럼 보이지만 누르면 셀렉트가 열리는" 가벼운 스타일.
+   기본 상태에선 보더/배경 없이 텍스트+쉐브론만 보이고, hover 시 은은한 pill. */
+.ghost-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 4px 22px 4px 10px;
+  height: 26px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--c-text);
+  cursor: pointer;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: background .15s ease, box-shadow .15s ease;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239AA3AE' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 10px 10px;
+}
+.ghost-select:hover {
+  background-color: var(--c-surface-3);
+}
+.ghost-select:focus {
+  outline: none;
+  background-color: var(--c-surface-3);
+  box-shadow: 0 0 0 2px var(--c-brand-soft);
+}
+.ghost-select.placeholder {
+  color: var(--c-text-muted);
+  font-weight: 500;
+}
+.ghost-select option {
+  color: var(--c-text);
+  background: var(--c-surface);
+}
+
+/* 권한 전용 컬러 뱃지 스타일 - ghost-select 위에 덮어쓰기 */
+.role-select {
+  font-family: "JetBrains Mono", Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 3px 22px 3px 10px;
+  height: 24px;
+}
+.role-admin   { color: #7C3AED; background-color: rgba(124, 58, 237, .08); }
+.role-admin:hover   { background-color: rgba(124, 58, 237, .15); }
+.role-manager { color: #2563EB; background-color: rgba(37, 99, 235, .08); }
+.role-manager:hover { background-color: rgba(37, 99, 235, .15); }
+.role-member  { color: var(--c-text-2); background-color: var(--c-surface-3); }
+.role-member:hover  { background-color: var(--c-border); }
+
+/* ============================================================ */
 /*                            TABS                               */
 /* ============================================================ */
 .tabs {
@@ -378,6 +490,8 @@ table.pro tbody td.tabular {
   padding: 4px;
   background: var(--c-surface-3);
   border-radius: 999px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .tab {
   display: inline-flex;
@@ -390,6 +504,9 @@ table.pro tbody td.tabular {
   color: var(--c-text-3);
   border-radius: 999px;
   transition: background .15s, color .15s;
+  white-space: nowrap;
+  word-break: keep-all;
+  flex-shrink: 0;
 }
 .tab:hover { color: var(--c-text); }
 .tab-active {
@@ -549,3 +666,97 @@ html.dark .nav-active {
   color: var(--c-brand-soft-fg);
 }
 html.dark .nav-active svg { stroke: var(--c-brand-soft-fg); }
+
+/* ===== Notification pulse — 파란 계열, 강한 강조 ===== */
+/* 새 알림이 올 때 2.8초 동안 파랑 글로우로 강하게 반짝이고 부드럽게 사라짐.
+   .siri-pulse — 원형/사각 버튼 테두리 + 외부 halo (FAB 용)
+   .siri-pulse-bg — pill 형 배경 글로우 (사이드바 NavLink 용) */
+@keyframes pulse-halo {
+  0%   { opacity: 0;    transform: scale(.85); filter: blur(8px); }
+  18%  { opacity: 1;    transform: scale(1.08); filter: blur(10px); }
+  55%  { opacity: .9;   transform: scale(1.18); filter: blur(14px); }
+  100% { opacity: 0;    transform: scale(1.38); filter: blur(20px); }
+}
+/* 버튼 본체 주위로 퍼지는 파란 box-shadow 파동 — 버튼 자체 opacity 는 절대 건드리지 않음 */
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0    rgba(59,130,246,.00), 0 0 0 0  rgba(59,130,246,.00); }
+  25%  { box-shadow: 0 0 0 4px  rgba(59,130,246,.55), 0 0 22px 6px rgba(59,130,246,.55); }
+  70%  { box-shadow: 0 0 0 10px rgba(59,130,246,.25), 0 0 32px 12px rgba(59,130,246,.35); }
+  100% { box-shadow: 0 0 0 18px rgba(59,130,246,0),    0 0 40px 16px rgba(59,130,246,0); }
+}
+@keyframes pulse-bg-glow {
+  0%   { opacity: 0;    filter: blur(10px); transform: scale(.96); }
+  20%  { opacity: 1;    filter: blur(12px); transform: scale(1); }
+  70%  { opacity: .9;   filter: blur(16px); transform: scale(1.04); }
+  100% { opacity: 0;    filter: blur(22px); transform: scale(1.08); }
+}
+
+/* position 은 붙이지 않음 — 호출 측 요소가 이미 fixed/relative/absolute 등 positioning
+   context 를 가진다고 가정. */
+.siri-pulse {
+  animation: pulse-ring 2.8s cubic-bezier(.22,.61,.36,1) forwards;
+}
+.siri-pulse::before {
+  /* 짙은 파랑 링 — 버튼 바로 바깥으로 3px 두께 */
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: inherit;
+  padding: 3px;
+  background: linear-gradient(135deg, #3B82F6, #60A5FA 50%, #2563EB);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+  animation: pulse-halo 2.8s cubic-bezier(.22,.61,.36,1) forwards;
+  z-index: 1;
+}
+.siri-pulse::after {
+  /* 바깥으로 퍼지는 큰 halo */
+  content: "";
+  position: absolute;
+  inset: -14px;
+  border-radius: inherit;
+  background: radial-gradient(
+    circle at center,
+    rgba(59,130,246,.75) 0%,
+    rgba(59,130,246,.35) 45%,
+    rgba(59,130,246,0) 75%
+  );
+  pointer-events: none;
+  animation: pulse-halo 2.8s cubic-bezier(.22,.61,.36,1) forwards;
+  z-index: 0;
+}
+
+/* 사이드바 nav 버전 — pill 모양, 뒷배경에 넓게 깔리는 파란 글로우 + 좌측 파란 라인 */
+.siri-pulse-bg { position: relative; overflow: visible; }
+.siri-pulse-bg::before {
+  /* 좌측 파란 스트로크 (브랜드 강조선) */
+  content: "";
+  position: absolute;
+  left: -2px; top: 6px; bottom: 6px;
+  width: 3px;
+  border-radius: 2px;
+  background: linear-gradient(to bottom, #60A5FA, #2563EB);
+  box-shadow: 0 0 12px 2px rgba(59,130,246,.8);
+  pointer-events: none;
+  animation: pulse-halo 2.8s cubic-bezier(.22,.61,.36,1) forwards;
+  z-index: 1;
+}
+.siri-pulse-bg::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(59,130,246,.55) 0%,
+    rgba(59,130,246,.25) 55%,
+    rgba(59,130,246,0) 80%
+  );
+  pointer-events: none;
+  z-index: -1;
+  animation: pulse-bg-glow 2.8s cubic-bezier(.22,.61,.36,1) forwards;
+}
