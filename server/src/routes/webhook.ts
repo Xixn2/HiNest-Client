@@ -1,7 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import express from "express";
 import crypto from "node:crypto";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { prisma } from "../lib/db.js";
 
 /**
@@ -28,7 +28,9 @@ const webhookLimiter = rateLimit({
   limit: 10,
   standardHeaders: "draft-7",
   legacyHeaders: false,
-  keyGenerator: (req) => `${req.ip}|${req.params.token ?? ""}`,
+  // ipKeyGenerator 로 IPv6 를 /64 서브넷으로 정규화 — IPv6 사용자가 주소 바꿔가며
+  // 회피하는 걸 차단. token 조합으로 채널별 격리.
+  keyGenerator: (req) => `${ipKeyGenerator(req.ip ?? "")}|${req.params.token ?? ""}`,
   message: { error: "rate limited" },
 });
 
