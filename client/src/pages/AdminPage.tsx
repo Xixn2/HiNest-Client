@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import PageHeader from "../components/PageHeader";
+import { downloadCSV, downloadXLSX, openPrintable, parseSheet, type TableColumn } from "../lib/exportTable";
+import DatePicker from "../components/DatePicker";
 
 type UserRow = {
   id: string;
@@ -12,7 +14,144 @@ type UserRow = {
   active: boolean;
   avatarColor?: string;
   createdAt: string;
+  // HR 상세
+  hrCode?: string | null;
+  affiliation?: string | null;
+  employeeNo?: string | null;
+  workplace?: string | null;
+  department?: string | null;
+  jobDuty?: string | null;
+  employmentType?: string | null;
+  employmentCategory?: string | null;
+  contractType?: string | null;
+  birthDate?: string | null;
+  gender?: string | null;
+  disabilityType?: string | null;
+  disabilityLevel?: string | null;
+  hireDate?: string | null;
+  phone?: string | null;
+  note?: string | null;
 };
+
+// 나이 계산 (생년월일 기반)
+function calcAge(birth?: string | null): number | "" {
+  if (!birth) return "";
+  const d = new Date(birth);
+  if (isNaN(d.getTime())) return "";
+  const now = new Date();
+  let age = now.getFullYear() - d.getFullYear();
+  const m = now.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+  return age;
+}
+// 근속연수 (입사일 기반, 소수점 1자리)
+function calcTenure(hire?: string | null): number | "" {
+  if (!hire) return "";
+  const d = new Date(hire);
+  if (isNaN(d.getTime())) return "";
+  const years = (Date.now() - d.getTime()) / (365.25 * 24 * 3600 * 1000);
+  return Math.max(0, Math.round(years * 10) / 10);
+}
+
+// 상세 뷰 select 옵션 — 고정 리스트. "기타" 선택 시 직접 입력 가능.
+const EMPLOYMENT_TYPES = ["정규직", "계약직", "파견직", "인턴", "아르바이트"];
+const EMPLOYMENT_CATEGORIES = ["무기계약", "유기계약", "일용직"];
+const CONTRACT_TYPES = ["기간제", "무기계약직", "정규직"];
+const GENDERS = ["남", "여"];
+const DISABILITY_TYPES = ["지체장애", "청각장애", "시각장애", "뇌병변장애", "언어장애", "지적장애", "자폐성장애", "정신장애", "신장장애", "심장장애", "호흡기장애", "간장애", "안면장애", "장루·요루장애", "뇌전증장애"];
+const DISABILITY_LEVELS = ["중증", "경증"];
+
+// 엑셀/PDF 내보내기 컬럼 — 스크린샷 포맷 (권한/상태 제외).
+const HR_EXPORT_COLUMNS: TableColumn<UserRow>[] = [
+  { header: "HR번호", get: (u) => u.hrCode ?? "" },
+  { header: "소속", get: (u) => u.affiliation ?? "" },
+  { header: "사번", get: (u) => u.employeeNo ?? "" },
+  { header: "근무지", get: (u) => u.workplace ?? "" },
+  { header: "부서", get: (u) => u.department ?? u.team ?? "" },
+  { header: "직무", get: (u) => u.jobDuty ?? "" },
+  { header: "이름", get: (u) => u.name },
+  { header: "직급", get: (u) => u.position ?? "" },
+  { header: "고용형태", get: (u) => u.employmentType ?? "" },
+  { header: "고용유형", get: (u) => u.employmentCategory ?? "" },
+  { header: "계약형태", get: (u) => u.contractType ?? "" },
+  { header: "생년월일", get: (u) => u.birthDate ?? "" },
+  { header: "성별", get: (u) => u.gender ?? "" },
+  { header: "나이", get: (u) => calcAge(u.birthDate) },
+  { header: "장애유형", get: (u) => u.disabilityType ?? "" },
+  { header: "장애정도", get: (u) => u.disabilityLevel ?? "" },
+  { header: "입사일", get: (u) => u.hireDate ?? "" },
+  { header: "근속", get: (u) => calcTenure(u.hireDate) },
+  { header: "전화번호", get: (u) => u.phone ?? "" },
+  { header: "비고", get: (u) => u.note ?? "" },
+];
+
+// 엑셀 헤더 → User 필드 매핑 (import 용)
+const HR_IMPORT_HEADER_MAP: Record<string, string> = {
+  "HR번호": "hrCode",
+  "소속": "affiliation",
+  "사번": "employeeNo",
+  "근무지": "workplace",
+  "부서": "department",
+  "직무": "jobDuty",
+  "이름": "name",
+  "직급": "position",
+  "고용형태": "employmentType",
+  "고용유형": "employmentCategory",
+  "계약형태": "contractType",
+  "생년월일": "birthDate",
+  "성별": "gender",
+  "장애유형": "disabilityType",
+  "장애정도": "disabilityLevel",
+  "입사일": "hireDate",
+  "전화번호": "phone",
+  "비고": "note",
+  "이메일": "email",
+  "email": "email",
+  "팀": "team",
+};
+
+/**
+ * 엑셀 파일을 파싱해 /api/admin/users/import 로 업로드.
+ * 헤더 매핑은 HR_IMPORT_HEADER_MAP 기준, 매칭 안 되는 컬럼은 무시.
+ * 매칭 식별자(email/사번/HR번호) 중 하나는 반드시 있어야 서버가 업서트함.
+ */
+async function handleImport(
+  e: React.ChangeEvent<HTMLInputElement>,
+  reload: () => void | Promise<void>
+) {
+  const input = e.currentTarget;
+  const file = input.files?.[0];
+  // 같은 파일 재선택 시에도 onChange 가 다시 발화하도록 value 리셋
+  input.value = "";
+  if (!file) return;
+
+  try {
+    const raw = await parseSheet(file);
+    if (raw.length === 0) {
+      alert("빈 파일이거나 읽을 수 있는 행이 없습니다.");
+      return;
+    }
+    const rows = raw.map((r) => {
+      const mapped: Record<string, string> = {};
+      for (const [header, value] of Object.entries(r)) {
+        const field = HR_IMPORT_HEADER_MAP[header];
+        if (field && value) mapped[field] = value;
+      }
+      return mapped;
+    });
+    if (!confirm(`${rows.length}행을 업로드합니다. 기존 유저의 HR 정보가 갱신됩니다. 계속할까요?`)) return;
+    const r = await api<{ updated: number; skipped: number; errors: string[] }>(
+      "/api/admin/users/import",
+      { method: "POST", json: { rows } }
+    );
+    let msg = `업데이트 ${r.updated}건 · 스킵 ${r.skipped}건`;
+    if (r.errors?.length) msg += `\n\n${r.errors.join("\n")}`;
+    alert(msg);
+    await reload();
+  } catch (err: any) {
+    alert(`업로드 실패: ${err?.message ?? err}`);
+  }
+}
 type Invite = {
   id: string;
   key: string;
@@ -124,6 +263,10 @@ function UsersTab({
   const [q, setQ] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [activeFilter, setActiveFilter] = useState<"all" | "active" | "inactive">("all");
+  const [attendanceTarget, setAttendanceTarget] = useState<UserRow | null>(null);
+  const [editTarget, setEditTarget] = useState<UserRow | null>(null);
+  // 기본 뷰(컴팩트) ↔ 상세 뷰(엑셀 포맷 전 컬럼)
+  const [view, setView] = useState<"basic" | "detail">("basic");
 
   async function update(id: string, data: any) {
     await api(`/api/admin/users/${id}`, { method: "PATCH", json: data });
@@ -155,6 +298,70 @@ function UsersTab({
       <div className="section-head">
         <div className="title">구성원 목록 <span className="text-ink-400 font-medium tabular ml-1">{filtered.length}</span></div>
         <div className="flex items-center gap-2">
+          {/* 기본/상세 뷰 토글 */}
+          <div className="tabs">
+            {(["basic", "detail"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={`tab ${view === v ? "tab-active" : ""}`}
+                title={v === "detail" ? "HR 상세 정보 전 컬럼 보기" : "기본 구성원 뷰"}
+              >
+                {v === "basic" ? "기본" : "상세"}
+              </button>
+            ))}
+          </div>
+          <span className="mx-1 h-4 w-px bg-ink-200" />
+          {/* 엑셀 업로드 — 숨겨진 file input + 트리거 */}
+          <label
+            className="btn-ghost !h-[32px] !px-3 text-[12px] cursor-pointer"
+            title="엑셀(.xlsx) 파일로 HR 정보 일괄 업데이트 (email/사번/HR번호 기준 매칭)"
+          >
+            업로드
+            <input
+              type="file"
+              className="hidden"
+              accept=".xlsx,.xls,.csv"
+              onChange={(e) => handleImport(e, reload)}
+            />
+          </label>
+          <span className="mx-1 h-4 w-px bg-ink-200" />
+          {/* 현재 필터/검색 결과 기준으로 내보내기 — 권한/상태는 앱 UI 전용이므로 제외. */}
+          <button
+            type="button"
+            className="btn-ghost !h-[32px] !px-3 text-[12px]"
+            onClick={() => {
+              const stamp = new Date().toISOString().slice(0, 10);
+              downloadXLSX(`hinest-구성원목록-${stamp}`, filtered, HR_EXPORT_COLUMNS, "구성원");
+            }}
+            title="현재 필터된 목록을 엑셀(.xlsx) 파일로 저장"
+          >
+            Excel
+          </button>
+          <button
+            type="button"
+            className="btn-ghost !h-[32px] !px-3 text-[12px]"
+            onClick={() => {
+              const stamp = new Date().toISOString().slice(0, 10);
+              downloadCSV(`hinest-구성원목록-${stamp}`, filtered, HR_EXPORT_COLUMNS);
+            }}
+            title="CSV 파일로 저장 (범용)"
+          >
+            CSV
+          </button>
+          <button
+            type="button"
+            className="btn-ghost !h-[32px] !px-3 text-[12px]"
+            onClick={() => {
+              openPrintable("HiNest · 구성원 목록", filtered, HR_EXPORT_COLUMNS, {
+                subtitle: `${roleFilter || "전체 권한"} · ${activeFilter === "all" ? "전체" : activeFilter === "active" ? "활성" : "비활성"}${q ? ` · 검색: "${q}"` : ""}`,
+              });
+            }}
+            title="인쇄 창을 열어 PDF 로 저장"
+          >
+            PDF
+          </button>
+          <span className="mx-1 h-4 w-px bg-ink-200" />
           <input className="input text-[12px] h-[32px] w-[200px]" placeholder="이름·이메일·팀 검색" value={q} onChange={(e) => setQ(e.target.value)} />
           <select className="input text-[12px] h-[32px] w-[120px]" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
             <option value="">모든 권한</option>
@@ -172,62 +379,408 @@ function UsersTab({
         </div>
       </div>
 
+      {view === "detail" && (
+        <DetailUserTable rows={filtered} positions={positions} update={update} remove={remove} />
+      )}
+      {view === "basic" && (
       <table className="pro">
         <thead>
           <tr>
-            <th style={{ width: "26%" }}>이름</th>
-            <th style={{ width: "18%" }}>ID / 이메일</th>
-            <th style={{ width: "14%" }}>직급</th>
-            <th style={{ width: "14%" }}>팀</th>
-            <th style={{ width: "10%" }}>권한</th>
-            <th style={{ width: "10%" }}>상태</th>
+            <th style={{ width: "30%" }}>구성원</th>
+            <th style={{ width: "16%" }}>직급</th>
+            <th style={{ width: "18%" }}>팀</th>
+            <th style={{ width: "13%" }}>권한</th>
+            <th style={{ width: "15%" }}>상태</th>
             <th style={{ width: "8%", textAlign: "right" }}></th>
           </tr>
         </thead>
         <tbody>
-          {filtered.map((u) => (
-            <tr key={u.id}>
-              <td>
-                <div className="flex items-center gap-3">
-                  <UserAvatar name={u.name} color={u.avatarColor ?? "#3D54C4"} />
-                  <div className="min-w-0">
-                    <div className="text-[13px] font-bold text-ink-900 truncate">{u.name}</div>
-                    <div className="text-[11px] text-ink-500 tabular">가입 {new Date(u.createdAt).toLocaleDateString("ko-KR")}</div>
+          {filtered.map((u) => {
+            const roleClass =
+              u.role === "ADMIN" ? "role-admin"
+              : u.role === "MANAGER" ? "role-manager"
+              : "role-member";
+            const positionInList = !u.position || positions.some((p) => p.name === u.position);
+            const teamInList = !u.team || teams.some((t) => t.name === u.team);
+            return (
+              <tr key={u.id}>
+                <td>
+                  <div className="flex items-center gap-3">
+                    <UserAvatar name={u.name} color={u.avatarColor ?? "#3D54C4"} />
+                    <div className="min-w-0">
+                      <div className="text-[13px] font-bold text-ink-900 truncate">{u.name}</div>
+                      <div className="text-[11px] text-ink-500 truncate tabular">{u.email}</div>
+                    </div>
                   </div>
-                </div>
+                </td>
+                <td>
+                  <select
+                    className={`ghost-select ${!u.position ? "placeholder" : ""}`}
+                    value={u.position ?? ""}
+                    onChange={(e) => update(u.id, { position: e.target.value || null })}
+                    title={!positionInList ? "현재 직급은 목록에서 제거된 항목입니다" : undefined}
+                    style={!positionInList ? { fontStyle: "italic", opacity: 0.7 } : undefined}
+                  >
+                    <option value="">직급 없음</option>
+                    {positions.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+                    {u.position && !positionInList && (
+                      <option value={u.position}>{u.position} · 사용안함</option>
+                    )}
+                  </select>
+                </td>
+                <td>
+                  <select
+                    className={`ghost-select ${!u.team ? "placeholder" : ""}`}
+                    value={u.team ?? ""}
+                    onChange={(e) => update(u.id, { team: e.target.value || null })}
+                    title={!teamInList ? "현재 팀은 목록에서 제거된 항목입니다" : undefined}
+                    style={!teamInList ? { fontStyle: "italic", opacity: 0.7 } : undefined}
+                  >
+                    <option value="">팀 없음</option>
+                    {teams.map((t) => <option key={t.id} value={t.name}>{t.name}</option>)}
+                    {u.team && !teamInList && (
+                      <option value={u.team}>{u.team} · 사용안함</option>
+                    )}
+                  </select>
+                </td>
+                <td>
+                  <select
+                    className={`ghost-select role-select ${roleClass}`}
+                    value={u.role}
+                    onChange={(e) => update(u.id, { role: e.target.value })}
+                  >
+                    <option value="MEMBER">MEMBER</option>
+                    <option value="MANAGER">MANAGER</option>
+                    <option value="ADMIN">ADMIN</option>
+                  </select>
+                </td>
+                <td>
+                  <button onClick={() => update(u.id, { active: !u.active })} className={u.active ? "chip-green" : "chip-gray"}>
+                    <span className="badge-dot" style={{ background: u.active ? "#16A34A" : "#8E959E" }} />
+                    {u.active ? "Active" : "Inactive"}
+                  </button>
+                </td>
+                <td style={{ textAlign: "right" }}>
+                  <button className="btn-icon" title="상세 정보 편집" onClick={() => setEditTarget(u)}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
+                    </svg>
+                  </button>
+                  <button className="btn-icon" title="출근 기록 수정" onClick={() => setAttendanceTarget(u)}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 7v5l3 2" />
+                    </svg>
+                  </button>
+                  <button className="btn-icon" title="삭제" onClick={() => remove(u.id)}>
+                    <TrashIcon />
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+          {filtered.length === 0 && (
+            <tr>
+              <td colSpan={6}>
+                <EmptyState title="구성원이 없습니다" description="초대키를 발급해 팀원을 추가해보세요." />
               </td>
-              <td className="tabular text-[12px] text-ink-600">{u.email}</td>
-              <td>
-                <select className="input text-[12px] h-[30px]" value={u.position ?? ""} onChange={(e) => update(u.id, { position: e.target.value || null })}>
-                  <option value="">—</option>
-                  {positions.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
-                  {u.position && !positions.find((p) => p.name === u.position) && (
-                    <option value={u.position}>{u.position} (사용안함)</option>
-                  )}
-                </select>
-              </td>
-              <td>
-                <select className="input text-[12px] h-[30px]" value={u.team ?? ""} onChange={(e) => update(u.id, { team: e.target.value || null })}>
-                  <option value="">—</option>
-                  {teams.map((t) => <option key={t.id} value={t.name}>{t.name}</option>)}
-                  {u.team && !teams.find((t) => t.name === u.team) && (
-                    <option value={u.team}>{u.team} (사용안함)</option>
-                  )}
-                </select>
-              </td>
-              <td>
-                <select className="input text-[12px] h-[30px]" value={u.role} onChange={(e) => update(u.id, { role: e.target.value })}>
-                  <option value="MEMBER">MEMBER</option>
-                  <option value="MANAGER">MANAGER</option>
-                  <option value="ADMIN">ADMIN</option>
-                </select>
-              </td>
-              <td>
-                <button onClick={() => update(u.id, { active: !u.active })} className={u.active ? "chip-green" : "chip-gray"}>
-                  <span className="badge-dot" style={{ background: u.active ? "#16A34A" : "#8E959E" }} />
-                  {u.active ? "Active" : "Inactive"}
-                </button>
-              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+      )}
+      {attendanceTarget && (
+        <AttendanceEditModal
+          user={attendanceTarget}
+          onClose={() => setAttendanceTarget(null)}
+          onSaved={() => { setAttendanceTarget(null); reload(); }}
+        />
+      )}
+      {editTarget && (
+        <UserDetailEditModal
+          user={editTarget}
+          teams={teams}
+          positions={positions}
+          onClose={() => setEditTarget(null)}
+          onSaved={() => { setEditTarget(null); reload(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ===== 상세 정보 편집 모달 — HR 전 필드 입력 ===== */
+/**
+ * 관리자가 한 유저의 HR 상세 정보를 폼으로 편집.
+ * - 섹션: 조직 정보 / 개인 정보 / 고용 정보 / 기타
+ * - 생년월일/입사일은 date picker, 성별/장애정도는 select, 나머지는 text
+ * - 저장 시 변경된 필드만 PATCH
+ */
+function UserDetailEditModal({
+  user, teams, positions, onClose, onSaved,
+}: {
+  user: UserRow;
+  teams: Team[];
+  positions: Position[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  // 편집 가능한 필드 초기값 — null 은 "" 로 통일.
+  const init = {
+    name: user.name ?? "",
+    hrCode: user.hrCode ?? "",
+    affiliation: user.affiliation ?? "",
+    employeeNo: user.employeeNo ?? "",
+    workplace: user.workplace ?? "",
+    department: user.department ?? "",
+    team: user.team ?? "",
+    position: user.position ?? "",
+    jobDuty: user.jobDuty ?? "",
+    employmentType: user.employmentType ?? "",
+    employmentCategory: user.employmentCategory ?? "",
+    contractType: user.contractType ?? "",
+    hireDate: user.hireDate ?? "",
+    birthDate: user.birthDate ?? "",
+    gender: user.gender ?? "",
+    phone: user.phone ?? "",
+    disabilityType: user.disabilityType ?? "",
+    disabilityLevel: user.disabilityLevel ?? "",
+    note: user.note ?? "",
+  };
+  const [form, setForm] = useState(init);
+  const [saving, setSaving] = useState(false);
+
+  function set<K extends keyof typeof init>(k: K, v: string) {
+    setForm((f) => ({ ...f, [k]: v }));
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      // 변경된 필드만 모아 전송, 빈 문자열은 null.
+      const diff: Record<string, string | null> = {};
+      for (const k of Object.keys(init) as (keyof typeof init)[]) {
+        if (form[k] !== init[k]) diff[k] = form[k].trim() === "" ? null : form[k].trim();
+      }
+      if (Object.keys(diff).length > 0) {
+        await api(`/api/admin/users/${user.id}`, { method: "PATCH", json: diff });
+      }
+      onSaved();
+    } catch (e: any) {
+      alert(`저장 실패: ${e?.message ?? e}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/40 grid place-items-center p-4 z-50" onClick={onClose}>
+      <div
+        className="card w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-3 pb-3 border-b border-ink-100">
+          <UserAvatar name={user.name} color={user.avatarColor ?? "#3D54C4"} />
+          <div className="min-w-0 flex-1">
+            <div className="text-[15px] font-bold text-ink-900 truncate">{user.name} · 상세 정보</div>
+            <div className="text-[11px] text-ink-500 tabular truncate">{user.email}</div>
+          </div>
+          <span className="text-[11px] text-ink-400">나이 {calcAge(form.birthDate) || "-"} · 근속 {calcTenure(form.hireDate) || "-"}년</span>
+        </div>
+
+        <div className="overflow-auto py-4 space-y-5 flex-1">
+          <Section title="조직 정보">
+            <Field label="HR번호"><input className="input" value={form.hrCode} onChange={(e) => set("hrCode", e.target.value)} placeholder="daiso_worker46" /></Field>
+            <Field label="소속"><input className="input" value={form.affiliation} onChange={(e) => set("affiliation", e.target.value)} placeholder="다이소" /></Field>
+            <Field label="사번"><input className="input" value={form.employeeNo} onChange={(e) => set("employeeNo", e.target.value)} placeholder="AD6156258" /></Field>
+            <Field label="근무지"><input className="input" value={form.workplace} onChange={(e) => set("workplace", e.target.value)} placeholder="본사" /></Field>
+            <Field label="부서"><input className="input" value={form.department} onChange={(e) => set("department", e.target.value)} placeholder="서비스지원" /></Field>
+            <Field label="팀">
+              <select className="input" value={form.team} onChange={(e) => set("team", e.target.value)}>
+                <option value="">(없음)</option>
+                {teams.map((t) => <option key={t.id} value={t.name}>{t.name}</option>)}
+                {form.team && !teams.some((t) => t.name === form.team) && (
+                  <option value={form.team}>{form.team} · 사용안함</option>
+                )}
+              </select>
+            </Field>
+            <Field label="직급">
+              <select className="input" value={form.position} onChange={(e) => set("position", e.target.value)}>
+                <option value="">(없음)</option>
+                {positions.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+                {form.position && !positions.some((p) => p.name === form.position) && (
+                  <option value={form.position}>{form.position} · 사용안함</option>
+                )}
+              </select>
+            </Field>
+            <Field label="직무"><input className="input" value={form.jobDuty} onChange={(e) => set("jobDuty", e.target.value)} placeholder="예: QA" /></Field>
+          </Section>
+
+          <Section title="고용 정보">
+            <Field label="고용형태">
+              <select className="input" value={form.employmentType} onChange={(e) => set("employmentType", e.target.value)}>
+                <option value="">(없음)</option>
+                <option>정규직</option>
+                <option>계약직</option>
+                <option>파견직</option>
+                <option>인턴</option>
+              </select>
+            </Field>
+            <Field label="고용유형"><input className="input" value={form.employmentCategory} onChange={(e) => set("employmentCategory", e.target.value)} placeholder="유기계약" /></Field>
+            <Field label="계약형태"><input className="input" value={form.contractType} onChange={(e) => set("contractType", e.target.value)} placeholder="기간제" /></Field>
+            <Field label="입사일"><input type="date" className="input" value={form.hireDate} onChange={(e) => set("hireDate", e.target.value)} /></Field>
+          </Section>
+
+          <Section title="개인 정보">
+            <Field label="이름"><input className="input" value={form.name} onChange={(e) => set("name", e.target.value)} /></Field>
+            <Field label="생년월일"><input type="date" className="input" value={form.birthDate} onChange={(e) => set("birthDate", e.target.value)} /></Field>
+            <Field label="성별">
+              <select className="input" value={form.gender} onChange={(e) => set("gender", e.target.value)}>
+                <option value="">(없음)</option>
+                <option>남</option>
+                <option>여</option>
+              </select>
+            </Field>
+            <Field label="전화번호"><input className="input" value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="010-0000-0000" /></Field>
+            <Field label="장애유형"><input className="input" value={form.disabilityType} onChange={(e) => set("disabilityType", e.target.value)} placeholder="예: 청각장애" /></Field>
+            <Field label="장애정도">
+              <select className="input" value={form.disabilityLevel} onChange={(e) => set("disabilityLevel", e.target.value)}>
+                <option value="">(없음)</option>
+                <option>중증</option>
+                <option>경증</option>
+              </select>
+            </Field>
+          </Section>
+
+          <Section title="기타" cols={1}>
+            <Field label="비고">
+              <textarea
+                className="input min-h-[72px]"
+                value={form.note}
+                onChange={(e) => set("note", e.target.value)}
+                placeholder="자유 메모"
+              />
+            </Field>
+          </Section>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-3 border-t border-ink-100">
+          <button className="btn-ghost" onClick={onClose} disabled={saving}>취소</button>
+          <button className="btn-primary" onClick={save} disabled={saving}>
+            {saving ? "저장 중…" : "저장"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, children, cols = 2 }: { title: string; children: React.ReactNode; cols?: 1 | 2 | 3 }) {
+  const grid = cols === 1 ? "grid-cols-1" : cols === 3 ? "grid-cols-1 md:grid-cols-3" : "grid-cols-1 md:grid-cols-2";
+  return (
+    <div>
+      <div className="text-[12px] font-bold text-ink-600 mb-2">{title}</div>
+      <div className={`grid ${grid} gap-3`}>{children}</div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="label text-[11px] text-ink-500 mb-1">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+/* ===== 상세 리스트 뷰 — 엑셀 포맷 그대로 전 컬럼 ===== */
+/**
+ * 가로 스크롤 가능한 HR 상세 테이블.
+ * 각 셀은 인라인 편집(blur 시 저장) — 관리자가 바로 수정 가능.
+ * 나이/근속은 생년월일/입사일에서 자동 계산되는 읽기 전용 컬럼.
+ */
+function DetailUserTable({
+  rows,
+  positions,
+  update,
+  remove,
+}: {
+  rows: UserRow[];
+  positions: Position[];
+  update: (id: string, data: any) => Promise<void>;
+  remove: (id: string) => Promise<void>;
+}) {
+  // 편집 가능한 필드만 정의. 나이/근속은 계산 컬럼.
+  const fields: { key: keyof UserRow; label: string; width: number }[] = [
+    { key: "hrCode", label: "HR번호", width: 120 },
+    { key: "affiliation", label: "소속", width: 100 },
+    { key: "employeeNo", label: "사번", width: 110 },
+    { key: "workplace", label: "근무지", width: 90 },
+    { key: "department", label: "부서", width: 110 },
+    { key: "jobDuty", label: "직무", width: 110 },
+    { key: "name", label: "이름", width: 90 },
+    { key: "position", label: "직급", width: 110 },
+    { key: "employmentType", label: "고용형태", width: 120 },
+    { key: "employmentCategory", label: "고용유형", width: 120 },
+    { key: "contractType", label: "계약형태", width: 130 },
+    { key: "birthDate", label: "생년월일", width: 170 },
+    { key: "gender", label: "성별", width: 60 },
+    { key: "disabilityType", label: "장애유형", width: 100 },
+    { key: "disabilityLevel", label: "장애정도", width: 80 },
+    { key: "hireDate", label: "입사일", width: 170 },
+    { key: "phone", label: "전화번호", width: 160 },
+    { key: "note", label: "비고", width: 140 },
+  ];
+
+  return (
+    <div className="overflow-auto">
+      <table className="pro pro-grid" style={{ minWidth: 2000 }}>
+        <thead>
+          <tr>
+            {fields.slice(0, 6).map((f) => (
+              <th key={f.key as string} style={{ width: f.width, minWidth: f.width }}>{f.label}</th>
+            ))}
+            <th style={{ width: 90, minWidth: 90 }}>이름</th>
+            <th style={{ width: 110, minWidth: 110 }}>직급</th>
+            {fields.slice(8, 12).map((f) => (
+              <th key={f.key as string} style={{ width: f.width, minWidth: f.width }}>{f.label}</th>
+            ))}
+            <th style={{ width: 80, minWidth: 80 }}>성별</th>
+            <th style={{ width: 60, minWidth: 60 }}>나이</th>
+            {fields.slice(13, 16).map((f) => (
+              <th key={f.key as string} style={{ width: f.width, minWidth: f.width }}>{f.label}</th>
+            ))}
+            <th style={{ width: 60, minWidth: 60 }}>근속</th>
+            <th style={{ width: 160, minWidth: 160 }}>전화번호</th>
+            <th style={{ width: 140, minWidth: 140 }}>비고</th>
+            <th style={{ width: 50, minWidth: 50, textAlign: "right" }}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((u) => (
+            <tr key={u.id}>
+              <DetailCell u={u} k="hrCode" update={update} />
+              <DetailCell u={u} k="affiliation" update={update} />
+              <DetailCell u={u} k="employeeNo" update={update} />
+              <DetailCell u={u} k="workplace" update={update} />
+              <DetailCell u={u} k="department" update={update} />
+              <DetailCell u={u} k="jobDuty" update={update} />
+              <DetailCell u={u} k="name" update={update} />
+              <SelectCell u={u} k="position" options={positions.map((p) => p.name)} update={update} />
+              <SelectCell u={u} k="employmentType" options={EMPLOYMENT_TYPES} update={update} />
+              <SelectCell u={u} k="employmentCategory" options={EMPLOYMENT_CATEGORIES} update={update} />
+              <SelectCell u={u} k="contractType" options={CONTRACT_TYPES} update={update} />
+              <DateCell u={u} k="birthDate" update={update} />
+              <SelectCell u={u} k="gender" options={GENDERS} update={update} />
+              <td className="text-[12px] tabular text-ink-600">{calcAge(u.birthDate)}</td>
+              <SelectCell u={u} k="disabilityType" options={DISABILITY_TYPES} update={update} />
+              <SelectCell u={u} k="disabilityLevel" options={DISABILITY_LEVELS} update={update} />
+              <DateCell u={u} k="hireDate" update={update} />
+              <td className="text-[12px] tabular text-ink-600">{calcTenure(u.hireDate)}</td>
+              <DetailCell u={u} k="phone" update={update} />
+              <DetailCell u={u} k="note" update={update} />
               <td style={{ textAlign: "right" }}>
                 <button className="btn-icon" title="삭제" onClick={() => remove(u.id)}>
                   <TrashIcon />
@@ -235,15 +788,342 @@ function UsersTab({
               </td>
             </tr>
           ))}
-          {filtered.length === 0 && (
+          {rows.length === 0 && (
             <tr>
-              <td colSpan={7}>
-                <EmptyState title="구성원이 없습니다" description="초대키를 발급해 팀원을 추가해보세요." />
+              <td colSpan={21}>
+                <EmptyState title="구성원이 없습니다" description="엑셀 업로드로 일괄 등록하거나 초대키를 발급해보세요." />
               </td>
             </tr>
           )}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/**
+ * 날짜 셀 — 일정 페이지와 같은 디자인의 DatePicker 팝오버 사용.
+ * 값은 "YYYY-MM-DD" 문자열로 저장.
+ */
+function DateCell({
+  u, k, update,
+}: {
+  u: UserRow;
+  k: keyof UserRow;
+  update: (id: string, data: any) => Promise<void>;
+}) {
+  const raw = (u[k] as string | null | undefined) ?? "";
+  return (
+    <td className="p-0">
+      <DatePicker
+        value={raw}
+        onChange={(v) => {
+          if (v === raw) return;
+          update(u.id, { [k]: v || null });
+        }}
+      />
+    </td>
+  );
+}
+
+/**
+ * 선택형 셀 — 주어진 옵션 중 하나를 고르거나 "기타" 선택 시 직접 입력.
+ * 현재 값이 옵션에 없으면 자동으로 "기타" 모드로 진입해 편집 가능.
+ */
+function SelectCell({
+  u, k, options, update,
+}: {
+  u: UserRow;
+  k: keyof UserRow;
+  options: string[];
+  update: (id: string, data: any) => Promise<void>;
+}) {
+  const raw = (u[k] as string | null | undefined) ?? "";
+  // 옵션에 없으면서 값이 있으면 "기타(custom)" 모드
+  const isCustom = raw !== "" && !options.includes(raw);
+  const [mode, setMode] = useState<"select" | "custom">(isCustom ? "custom" : "select");
+  const [custom, setCustom] = useState<string>(isCustom ? raw : "");
+
+  useEffect(() => {
+    const next = raw !== "" && !options.includes(raw);
+    setMode(next ? "custom" : "select");
+    setCustom(next ? raw : "");
+  }, [raw, options.join("|")]);
+
+  async function onSelectChange(val: string) {
+    if (val === "__OTHER__") {
+      setMode("custom");
+      // 직접 입력 대기 — 값은 아직 저장하지 않음.
+      return;
+    }
+    setMode("select");
+    setCustom("");
+    if (val !== raw) await update(u.id, { [k]: val || null });
+  }
+
+  async function saveCustom() {
+    const next = custom.trim();
+    if (next === raw) return;
+    await update(u.id, { [k]: next || null });
+  }
+
+  if (mode === "custom") {
+    return (
+      <td className="p-0">
+        <div className="flex items-center gap-1 px-1">
+          <input
+            className="w-full min-w-0 bg-transparent border-0 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-400 rounded text-[12px] px-1 py-1.5"
+            value={custom}
+            placeholder="직접 입력"
+            autoFocus
+            onChange={(e) => setCustom(e.target.value)}
+            onBlur={saveCustom}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
+              if (e.key === "Escape") { setMode("select"); setCustom(""); }
+            }}
+          />
+          <button
+            type="button"
+            className="text-[11px] text-ink-400 hover:text-ink-700"
+            title="선택 목록으로 돌아가기"
+            onClick={() => { setMode("select"); setCustom(""); update(u.id, { [k]: null }); }}
+          >
+            ✕
+          </button>
+        </div>
+      </td>
+    );
+  }
+  return (
+    <td className="p-0">
+      <select
+        className="w-full min-w-0 bg-transparent border-0 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-400 rounded text-[12px] px-1 py-1.5"
+        value={raw}
+        onChange={(e) => onSelectChange(e.target.value)}
+      >
+        <option value="">(없음)</option>
+        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+        <option value="__OTHER__">기타…</option>
+      </select>
+    </td>
+  );
+}
+
+/**
+ * 인라인 편집 셀 — blur 시 값이 바뀌었으면 PATCH.
+ * 빈 문자열은 null 로 보내 DB 에서 정리.
+ */
+function DetailCell({
+  u, k, update, placeholder, type,
+}: {
+  u: UserRow;
+  k: keyof UserRow;
+  update: (id: string, data: any) => Promise<void>;
+  placeholder?: string;
+  type?: "text" | "date";
+}) {
+  const raw = (u[k] as string | null | undefined) ?? "";
+  const [v, setV] = useState<string>(String(raw));
+  // 외부에서 값이 바뀌면(리로드 후) 로컬 값도 맞춤
+  useEffect(() => { setV(String(raw)); }, [raw]);
+
+  return (
+    <td className="p-0">
+      <input
+        type={type ?? "text"}
+        // padding 을 최소화해 좁은 컬럼에서도 10자 날짜가 잘리지 않도록.
+        className="w-full min-w-0 bg-transparent border-0 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-400 rounded text-[12px] px-1 py-1.5 tabular"
+        value={v}
+        placeholder={placeholder}
+        onChange={(e) => setV(e.target.value)}
+        onBlur={() => {
+          const next = v.trim();
+          if (next === (raw ?? "")) return;
+          update(u.id, { [k]: next || null });
+        }}
+      />
+    </td>
+  );
+}
+
+/* ===== 출근 기록 수정 모달 ===== */
+function AttendanceEditModal({
+  user, onClose, onSaved,
+}: { user: UserRow; onClose: () => void; onSaved: () => void }) {
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const [date, setDate] = useState(todayStr);
+  const [checkIn, setCheckIn] = useState("");
+  const [checkOut, setCheckOut] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState<{ checkIn: string | null; checkOut: string | null }>({ checkIn: null, checkOut: null });
+
+  // ISO → "HH:mm"
+  const isoToHM = (iso: string | null | undefined): string => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  };
+
+  // 해당 날짜 기록 로드 — 실제 DB 값을 가져와서 input 에 미리 채움.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const res = await api<{ attendance: { checkIn: string | null; checkOut: string | null } | null }>(
+          `/api/admin/users/${user.id}/attendance?date=${date}`
+        );
+        if (cancelled) return;
+        const a = res.attendance;
+        setLoaded({ checkIn: a?.checkIn ?? null, checkOut: a?.checkOut ?? null });
+        setCheckIn(isoToHM(a?.checkIn));
+        setCheckOut(isoToHM(a?.checkOut));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [date, user.id]);
+
+  const currentStatus: "IN" | "OFF" | "NONE" = loaded.checkOut ? "OFF" : loaded.checkIn ? "IN" : "NONE";
+  const statusLabel = currentStatus === "IN" ? "출근중" : currentStatus === "OFF" ? "퇴근" : "미출근";
+  const statusColor = currentStatus === "IN" ? "#16A34A" : currentStatus === "OFF" ? "#8E959E" : "#D97706";
+
+  const timeToISO = (hm: string): string | null => {
+    if (!hm) return null;
+    const [h, m] = hm.split(":").map(Number);
+    if (isNaN(h) || isNaN(m)) return null;
+    const [Y, M, D] = date.split("-").map(Number);
+    return new Date(Y, M - 1, D, h, m, 0, 0).toISOString();
+  };
+
+  async function save() {
+    setSaving(true);
+    try {
+      const body: any = { date };
+      body.checkIn = checkIn ? timeToISO(checkIn) : null;
+      body.checkOut = checkOut ? timeToISO(checkOut) : null;
+      await api(`/api/admin/users/${user.id}/attendance`, { method: "PATCH", json: body });
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function applyQuick(action: "IN_NOW" | "OUT_NOW" | "RESET_IN" | "CLEAR_OUT" | "ALL_CLEAR") {
+    setSaving(true);
+    try {
+      const now = new Date();
+      const nowISO = new Date(
+        Number(date.slice(0, 4)),
+        Number(date.slice(5, 7)) - 1,
+        Number(date.slice(8, 10)),
+        now.getHours(),
+        now.getMinutes(),
+      ).toISOString();
+      let body: any = { date };
+      if (action === "IN_NOW")      body = { date, checkIn: nowISO, checkOut: null };
+      if (action === "OUT_NOW")     body = { date, checkOut: nowISO };
+      if (action === "RESET_IN")    body = { date, checkIn: nowISO, checkOut: null }; // 퇴근 상태 → 다시 출근
+      if (action === "CLEAR_OUT")   body = { date, checkOut: null };                   // 퇴근 취소 → 출근중 복귀
+      if (action === "ALL_CLEAR")   body = { date, checkIn: null, checkOut: null };
+      await api(`/api/admin/users/${user.id}/attendance`, { method: "PATCH", json: body });
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 grid place-items-center z-50 p-4" onClick={onClose}>
+      <div className="card w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-lg font-bold">출근 기록 수정</h3>
+          <button onClick={onClose} className="btn-ghost btn-xs">닫기</button>
+        </div>
+        <div className="text-[12px] text-ink-600 mb-4">
+          {user.name} · {user.email}
+        </div>
+
+        {/* 현재 상태 요약 박스 */}
+        <div className="rounded-xl p-3 mb-4 flex items-center gap-3"
+          style={{ background: statusColor + "14", border: `1px solid ${statusColor}33` }}>
+          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: statusColor }} />
+          <div className="flex-1 min-w-0">
+            <div className="text-[13px] font-extrabold" style={{ color: statusColor }}>
+              {loading ? "기록 로드중…" : `현재 상태 — ${statusLabel}`}
+            </div>
+            <div className="text-[11px] text-ink-600 mt-0.5 tabular">
+              출근 {isoToHM(loaded.checkIn) || "—"} · 퇴근 {isoToHM(loaded.checkOut) || "—"}
+            </div>
+          </div>
+        </div>
+
+        {/* 원클릭 상태 토글 */}
+        <div>
+          <div className="field-label mb-1.5">빠른 변경</div>
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            {currentStatus !== "IN" && (
+              <button className="btn-ghost btn-xs justify-center" disabled={saving}
+                onClick={() => applyQuick(currentStatus === "OFF" ? "RESET_IN" : "IN_NOW")}
+                style={{ color: "#16A34A" }}>
+                ▶ {currentStatus === "OFF" ? "다시 출근(지금)" : "출근 처리(지금)"}
+              </button>
+            )}
+            {currentStatus === "IN" && (
+              <button className="btn-ghost btn-xs justify-center" disabled={saving}
+                onClick={() => applyQuick("OUT_NOW")} style={{ color: "#8E959E" }}>
+                ■ 퇴근 처리(지금)
+              </button>
+            )}
+            {currentStatus === "OFF" && (
+              <button className="btn-ghost btn-xs justify-center" disabled={saving}
+                onClick={() => applyQuick("CLEAR_OUT")} style={{ color: "#D97706" }}>
+                ↩ 퇴근 취소(출근중으로)
+              </button>
+            )}
+            {currentStatus !== "NONE" && (
+              <button className="btn-ghost btn-xs justify-center" disabled={saving}
+                onClick={() => applyQuick("ALL_CLEAR")} style={{ color: "#DC2626" }}>
+                × 미출근으로 초기화
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* 수동 입력 */}
+        <div className="space-y-3">
+          <div>
+            <label className="field-label">날짜</label>
+            <input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="field-label">출근 시각</label>
+              <input type="time" className="input" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} disabled={loading} />
+            </div>
+            <div>
+              <label className="field-label">퇴근 시각</label>
+              <input type="time" className="input" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} disabled={loading} />
+            </div>
+          </div>
+          <div className="text-[11px] text-ink-500">
+            시각을 비우고 저장하면 해당 필드가 지워집니다.
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 mt-5">
+          <button className="btn-ghost btn-xs" onClick={onClose} disabled={saving}>취소</button>
+          <button className="btn-primary btn-xs" onClick={save} disabled={saving || loading}>
+            수동 입력 저장
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
