@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import { requireAuth } from "../lib/auth.js";
 import { prisma } from "../lib/db.js";
 
@@ -18,8 +19,36 @@ router.get("/", requireAuth, async (req, res) => {
       position: user.position,
       avatarColor: user.avatarColor,
       superAdmin: user.superAdmin,
+      presenceStatus: user.presenceStatus,
+      presenceMessage: user.presenceMessage,
+      presenceUpdatedAt: user.presenceUpdatedAt,
     },
   });
+});
+
+// 업무 상태 변경 — null 로 보내면 "자동 판정 (attendance 기준)"
+// 수동 설정 가능 상태 — 근무중/오프라인은 자동 판정이라 수동 값에서 제외.
+const PRESENCE_VALUES = ["MEETING", "MEAL", "OUT", "AWAY"] as const;
+const presenceSchema = z.object({
+  status: z.enum(PRESENCE_VALUES).nullable(),
+  message: z.string().max(60).nullable().optional(),
+});
+
+router.patch("/presence", requireAuth, async (req, res) => {
+  const u = (req as any).user;
+  const parsed = presenceSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid input" });
+  const { status, message } = parsed.data;
+  const updated = await prisma.user.update({
+    where: { id: u.id },
+    data: {
+      presenceStatus: status,
+      presenceMessage: message ?? null,
+      presenceUpdatedAt: status ? new Date() : null,
+    },
+    select: { presenceStatus: true, presenceMessage: true, presenceUpdatedAt: true },
+  });
+  res.json(updated);
 });
 
 export default router;
