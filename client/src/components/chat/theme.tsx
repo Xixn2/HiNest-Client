@@ -4,18 +4,33 @@
  */
 import type { Room } from "./types";
 
+/**
+ * 채팅 팔레트 — 모두 CSS 변수 매핑으로 라이트/다크 자동 전환.
+ * 키 이름은 레거시 호환을 위해 유지.
+ */
 export const C = {
-  blue: "#3182F6",
-  blueHover: "#1B64DA",
-  blueSoft: "#E8F3FF",
-  ink: "#191F28",
-  gray700: "#4E5968",
-  gray600: "#6B7684",
-  gray500: "#8B95A1",
-  gray300: "#D1D6DB",
-  gray200: "#E5E8EB",
-  gray100: "#F2F4F6",
-  red: "#F04452",
+  // 브랜드
+  blue: "var(--c-brand)",
+  blueHover: "var(--c-brand-hover)",
+  blueSoft: "var(--c-brand-soft)",
+  // 텍스트
+  ink: "var(--c-text)",
+  gray700: "var(--c-text-2)",
+  gray600: "var(--c-text-3)",
+  gray500: "var(--c-text-muted)",
+  // 보더/구분선
+  gray300: "var(--c-border-strong)",
+  gray200: "var(--c-border)",
+  // 보조 표면 (상대 버블 배경 등)
+  gray100: "var(--c-surface-3)",
+  // 상태
+  red: "var(--c-danger)",
+  // 표면
+  surface: "var(--c-surface)",
+  surfaceAlt: "var(--c-surface-2)",
+  bg: "var(--c-bg)",
+  // 브랜드 텍스트 대비용 (내 버블 텍스트)
+  brandFg: "var(--c-brand-fg)",
 } as const;
 
 export const FONT =
@@ -118,19 +133,26 @@ export function formatDetailed(d: Date): string {
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 ${clock}`;
 }
 
-/** 이름 첫 글자 기반 원형 아바타 */
+/** 이름 첫 글자 기반 원형 아바타. presence 전달 시 오른쪽 아래 상태 점 표시. */
 export function Avatar({
   name,
   color,
   size,
+  presenceColor,
+  presenceTitle,
 }: {
   name: string;
   color: string;
   size: number;
+  presenceColor?: string;
+  presenceTitle?: string;
 }) {
+  const dot = Math.max(8, Math.round(size * 0.28));
+  const ring = Math.max(1, Math.round(size * 0.06));
   return (
     <div
       style={{
+        position: "relative",
         width: size,
         height: size,
         borderRadius: "50%",
@@ -145,6 +167,21 @@ export function Avatar({
       }}
     >
       {name?.[0] ?? "?"}
+      {presenceColor && (
+        <span
+          title={presenceTitle}
+          style={{
+            position: "absolute",
+            bottom: -1,
+            right: -1,
+            width: dot,
+            height: dot,
+            borderRadius: "50%",
+            background: presenceColor,
+            boxShadow: `0 0 0 ${ring}px var(--c-surface, #fff)`,
+          }}
+        />
+      )}
     </div>
   );
 }
