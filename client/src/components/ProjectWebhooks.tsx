@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
+import { api, apiSWR } from "../api";
 
 type Channel = {
   id: string;
@@ -34,13 +34,21 @@ export default function ProjectWebhooks({ projectId }: { projectId: string }) {
   const [form, setForm] = useState({ name: "", description: "", color: "#6366F1" });
 
   async function load() {
-    const r = await api<{ channels: Channel[] }>(`/api/project/${projectId}/webhook`);
-    setChannels(r.channels);
-    setLoaded(true);
-    if (selected) {
-      const still = r.channels.find((c) => c.id === selected.id);
-      if (!still) setSelected(null);
-    }
+    // 이전에 열었던 프로젝트면 캐시된 채널 목록부터 즉시 그리고, 네트워크에서 새 값 오면 교체.
+    await apiSWR<{ channels: Channel[] }>(`/api/project/${projectId}/webhook`, {
+      onCached: (r) => {
+        setChannels(r.channels);
+        setLoaded(true);
+      },
+      onFresh: (r) => {
+        setChannels(r.channels);
+        setLoaded(true);
+        if (selected) {
+          const still = r.channels.find((c) => c.id === selected.id);
+          if (!still) setSelected(null);
+        }
+      },
+    });
   }
   useEffect(() => {
     load();

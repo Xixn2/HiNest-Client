@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { api } from "./api";
+import { api, clearApiCache } from "./api";
 
 export type User = {
   id: string;
@@ -64,6 +64,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     await api("/api/auth/logout", { method: "POST" });
     setUser(null);
+    // 다른 사용자가 로그인했을 때 이전 사용자의 프로젝트/캘린더가 깜빡 보이는 사고 방지.
+    clearApiCache();
   };
 
   return (

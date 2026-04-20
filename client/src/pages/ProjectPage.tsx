@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { api } from "../api";
+import { apiSWR } from "../api";
 import PageHeader from "../components/PageHeader";
 import ProjectCalendar from "../components/ProjectCalendar";
 import ProjectWebhooks from "../components/ProjectWebhooks";
@@ -37,17 +37,28 @@ export default function ProjectPage() {
     if (!id) return;
     let alive = true;
     setLoading(true);
-    api<{ project: Project }>(`/api/project/${id}`)
-      .then((r) => {
+    // stale-while-revalidate — 이전에 방문했던 프로젝트라면 캐시된 응답으로 즉시 렌더.
+    // 동시에 백그라운드로 네트워크 호출이 돌아 최신값이 오면 교체.
+    apiSWR<{ project: Project }>(`/api/project/${id}`, {
+      onCached: (r) => {
         if (!alive) return;
         setProject(r.project);
         setErr(null);
-      })
-      .catch((e) => {
+        // 캐시 히트면 "불러오는 중" 타이틀 바로 내린다. 네트워크는 계속 돌고 있음.
+        setLoading(false);
+      },
+      onFresh: (r) => {
+        if (!alive) return;
+        setProject(r.project);
+        setErr(null);
+        setLoading(false);
+      },
+      onError: (e) => {
         if (!alive) return;
         setErr(e?.message ?? "불러오지 못했습니다.");
-      })
-      .finally(() => alive && setLoading(false));
+        setLoading(false);
+      },
+    });
     return () => {
       alive = false;
     };
