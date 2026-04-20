@@ -7,6 +7,14 @@ import { notifyAllUsers } from "../lib/notify.js";
 const router = Router();
 router.use(requireAuth);
 
+/**
+ * 공지 작성/삭제 권한 allowlist — 새 역할이 추가돼도 기본은 거부되도록 denylist 대신 allowlist.
+ */
+const NOTICE_WRITE_ROLES = new Set(["ADMIN", "MANAGER"]);
+function canWriteNotice(role: unknown): boolean {
+  return typeof role === "string" && NOTICE_WRITE_ROLES.has(role);
+}
+
 router.get("/", async (_req, res) => {
   const list = await prisma.notice.findMany({
     orderBy: [{ pinned: "desc" }, { createdAt: "desc" }],
@@ -23,7 +31,7 @@ const schema = z.object({
 
 router.post("/", async (req, res) => {
   const u = (req as any).user;
-  if (u.role === "MEMBER") return res.status(403).json({ error: "forbidden" });
+  if (!canWriteNotice(u?.role)) return res.status(403).json({ error: "forbidden" });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid input" });
   const d = parsed.data;
@@ -44,7 +52,7 @@ router.post("/", async (req, res) => {
 
 router.delete("/:id", async (req, res) => {
   const u = (req as any).user;
-  if (u.role === "MEMBER") return res.status(403).json({ error: "forbidden" });
+  if (!canWriteNotice(u?.role)) return res.status(403).json({ error: "forbidden" });
   await prisma.notice.delete({ where: { id: req.params.id } });
   await writeLog(u.id, "NOTICE_DELETE", req.params.id);
   res.json({ ok: true });
