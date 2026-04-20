@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { useNotifications } from "../notifications";
 import PageHeader from "../components/PageHeader";
 
 type Notice = {
@@ -14,12 +16,25 @@ type Notice = {
 
 export default function NoticePage() {
   const { user } = useAuth();
+  const { bellItems, markRead } = useNotifications();
   const [list, setList] = useState<Notice[]>([]);
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Notice | null>(null);
   const [form, setForm] = useState({ title: "", content: "", pinned: false });
+  const [params, setParams] = useSearchParams();
 
   const canPost = user?.role === "ADMIN" || user?.role === "MANAGER";
+
+  // 벨 알림 중 "공지" 타입의 미읽음을 noticeId -> notificationId 맵으로 인덱싱
+  const unreadByNoticeId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const n of bellItems) {
+      if (n.type !== "NOTICE" || n.readAt) continue;
+      const match = n.linkUrl?.match(/id=([^&]+)/);
+      if (match) m.set(match[1], n.id);
+    }
+    return m;
+  }, [bellItems]);
 
   async function load() {
     const res = await api<{ notices: Notice[] }>("/api/notice");
@@ -29,6 +44,18 @@ export default function NoticePage() {
   useEffect(() => {
     load();
   }, []);
+
+  // 알림 등에서 ?id=... 로 들어왔을 때 자동 선택
+  useEffect(() => {
+    const id = params.get("id");
+    if (!id || list.length === 0) return;
+    const found = list.find((n) => n.id === id);
+    if (found) {
+      setSelected(found);
+      const notifId = unreadByNoticeId.get(found.id);
+      if (notifId) markRead([notifId]);
+    }
+  }, [params, list, unreadByNoticeId, markRead]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -60,9 +87,21 @@ export default function NoticePage() {
             {list.map((n) => (
               <button
                 key={n.id}
-                onClick={() => setSelected(n)}
-                className={`w-full text-left px-4 py-3 hover:bg-slate-50 ${selected?.id === n.id ? "bg-brand-50" : ""}`}
+                onClick={() => {
+                  setSelected(n);
+                  // URL 동기화 — 새로고침/공유 시에도 같은 공지 유지
+                  const next = new URLSearchParams(params);
+                  next.set("id", n.id);
+                  setParams(next, { replace: true });
+                  // 해당 공지에 대한 미읽음 알림이 있으면 읽음 처리
+                  const notifId = unreadByNoticeId.get(n.id);
+                  if (notifId) markRead([notifId]);
+                }}
+                className={`relative w-full text-left px-4 py-3 hover:bg-slate-50 ${selected?.id === n.id ? "bg-brand-50" : ""}`}
               >
+                {unreadByNoticeId.has(n.id) && (
+                  <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-brand-500" />
+                )}
                 <div className="flex items-center gap-2">
                   {n.pinned && <span className="chip bg-rose-100 text-rose-600">고정</span>}
                   <div className="font-semibold text-slate-900 truncate">{n.title}</div>
