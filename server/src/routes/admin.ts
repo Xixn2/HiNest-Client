@@ -291,7 +291,9 @@ router.patch("/teams/:id", async (req, res) => {
   const team = await prisma.team.update({ where: { id: prev.id }, data: { name } });
   // 사용자 team 문자열도 동기화
   if (prev.name !== name) {
-    await prisma.user.updateMany({ where: { team: prev.name }, data: { team } });
+    // `team` 변수는 Team 객체라 문자열 필드에 바로 못 넣음. 새 이름 `name` 을 넣어야
+    // 사용자의 team 문자열이 올바르게 동기화됨.
+    await prisma.user.updateMany({ where: { team: prev.name }, data: { team: name } });
   }
   await writeLog(u.id, "TEAM_UPDATE", team.id, `${prev.name} -> ${name}`);
   res.json({ team });
