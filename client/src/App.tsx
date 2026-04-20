@@ -16,6 +16,7 @@ import ApprovalsPage from "./pages/ApprovalsPage";
 import OrgChartPage from "./pages/OrgChartPage";
 import ProfilePage from "./pages/ProfilePage";
 import ExpensePage from "./pages/ExpensePage";
+import ProjectPage from "./pages/ProjectPage";
 import AdminPage from "./pages/AdminPage";
 import SuperAdminPage from "./pages/SuperAdminPage";
 
@@ -70,6 +71,7 @@ export default function App() {
         <Route path="org" element={<OrgChartPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="expense" element={<ExpensePage />} />
+        <Route path="projects/:id" element={<ProjectPage />} />
         <Route
           path="admin"
           element={
