@@ -3,6 +3,7 @@ import { api } from "../api";
 import PageHeader from "../components/PageHeader";
 
 type Folder = { id: string; name: string; parentId?: string | null; createdAt: string };
+type DocScope = "ALL" | "TEAM" | "PRIVATE" | "CUSTOM";
 type Doc = {
   id: string;
   title: string;
@@ -13,11 +14,29 @@ type Doc = {
   fileType?: string | null;
   fileSize?: number | null;
   tags?: string | null;
+  scope?: DocScope;
+  scopeTeam?: string | null;
+  scopeUserIds?: string | null;
   createdAt: string;
   updatedAt: string;
   author: { name: string; avatarColor: string };
   folder?: { name: string } | null;
 };
+
+type ScopeTab = "all" | "public" | "team" | "private" | "custom";
+const SCOPE_TABS: { key: ScopeTab; label: string }[] = [
+  { key: "all",     label: "전체" },
+  { key: "team",    label: "팀" },
+  { key: "private", label: "개인" },
+  { key: "custom",  label: "사용자지정" },
+];
+const SCOPE_LABEL: Record<DocScope, string> = {
+  ALL: "전체 공개",
+  TEAM: "팀 공개",
+  PRIVATE: "개인",
+  CUSTOM: "사용자지정",
+};
+type DirUser = { id: string; name: string; team?: string | null; avatarColor?: string };
 
 export default function DocumentsPage() {
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -26,14 +45,20 @@ export default function DocumentsPage() {
   const [q, setQ] = useState("");
   const [creating, setCreating] = useState<null | "folder" | "doc">(null);
   const [uploading, setUploading] = useState(false);
-  const [docForm, setDocForm] = useState({ title: "", description: "", tags: "", fileUrl: "", fileName: "", fileType: "", fileSize: 0 });
+  const [scopeTab, setScopeTab] = useState<ScopeTab>("all");
+  const [allUsers, setAllUsers] = useState<DirUser[]>([]);
+  const [docForm, setDocForm] = useState<{
+    title: string; description: string; tags: string;
+    fileUrl: string; fileName: string; fileType: string; fileSize: number;
+    scope: DocScope; scopeTeam: string; scopeUserIds: string[];
+  }>({ title: "", description: "", tags: "", fileUrl: "", fileName: "", fileType: "", fileSize: 0, scope: "ALL", scopeTeam: "", scopeUserIds: [] });
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function load() {
     const [f, d] = await Promise.all([
       api<{ folders: Folder[] }>("/api/document/folders"),
       api<{ documents: Doc[] }>(
-        `/api/document?folderId=${encodeURIComponent(currentFolder)}${q ? `&q=${encodeURIComponent(q)}` : ""}`
+        `/api/document?folderId=${encodeURIComponent(currentFolder)}&scope=${scopeTab}${q ? `&q=${encodeURIComponent(q)}` : ""}`
       ),
     ]);
     setFolders(f.folders);
@@ -42,7 +67,13 @@ export default function DocumentsPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line
-  }, [currentFolder, q]);
+  }, [currentFolder, q, scopeTab]);
+
+  // 사용자지정 범위 선택 시 유저 목록 로드
+  useEffect(() => {
+    if (creating !== "doc" || allUsers.length > 0) return;
+    api<{ users: DirUser[] }>("/api/users").then((r) => setAllUsers(r.users)).catch(() => {});
+  }, [creating, allUsers.length]);
 
   async function addFolder() {
     const name = prompt("새 폴더 이름");
@@ -92,15 +123,28 @@ export default function DocumentsPage() {
   async function createDoc(e: React.FormEvent) {
     e.preventDefault();
     if (!docForm.title.trim()) return alert("제목을 입력해주세요");
+    if (docForm.scope === "CUSTOM" && docForm.scopeUserIds.length === 0) {
+      return alert("사용자지정 범위에선 최소 한 명 이상을 선택해주세요");
+    }
     await api("/api/document", {
       method: "POST",
       json: {
-        ...docForm,
+        title: docForm.title,
+        description: docForm.description,
+        tags: docForm.tags,
+        fileUrl: docForm.fileUrl,
+        fileName: docForm.fileName,
+        fileType: docForm.fileType,
+        fileSize: docForm.fileSize,
         folderId: currentFolder === "root" ? null : currentFolder,
+        scope: docForm.scope,
+        // 팀 범위는 서버가 요청자(user)의 team 을 자동 사용 — 클라에선 명시하지 않음.
+        scopeTeam: null,
+        scopeUserIds: docForm.scope === "CUSTOM" ? docForm.scopeUserIds : undefined,
       },
     });
     setCreating(null);
-    setDocForm({ title: "", description: "", tags: "", fileUrl: "", fileName: "", fileType: "", fileSize: 0 });
+    setDocForm({ title: "", description: "", tags: "", fileUrl: "", fileName: "", fileType: "", fileSize: 0, scope: "ALL", scopeTeam: "", scopeUserIds: [] });
     load();
   }
 
@@ -142,6 +186,23 @@ export default function DocumentsPage() {
           </>
         }
       />
+
+      {/* 공개 범위 탭 — 전체 / 팀 / 개인 / 사용자지정 */}
+      <div className="flex items-center gap-1 mb-3 border-b border-ink-150">
+        {SCOPE_TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setScopeTab(t.key)}
+            className={`px-3 h-9 text-[13px] font-bold border-b-2 transition ${
+              scopeTab === t.key
+                ? "border-brand-500 text-ink-900"
+                : "border-transparent text-ink-500 hover:text-ink-700"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
       {/* 툴바 */}
       <div className="flex items-center gap-2 mb-4">
@@ -244,7 +305,19 @@ export default function DocumentsPage() {
                         </svg>
                       </div>
                       <div className="min-w-0">
-                        <div className="text-[13px] font-bold text-ink-900">{d.title}</div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="text-[13px] font-bold text-ink-900">{d.title}</div>
+                          {d.scope && d.scope !== "ALL" && (
+                            <span className={`text-[10px] font-bold px-1.5 py-[1px] rounded ${
+                              d.scope === "PRIVATE" ? "bg-rose-50 text-rose-700"
+                              : d.scope === "TEAM" ? "bg-sky-50 text-sky-700"
+                              : "bg-violet-50 text-violet-700"
+                            }`}>
+                              {SCOPE_LABEL[d.scope]}
+                              {d.scope === "TEAM" && d.scopeTeam ? ` · ${d.scopeTeam}` : ""}
+                            </span>
+                          )}
+                        </div>
                         {d.description && <div className="text-[11px] text-ink-500 line-clamp-1">{d.description}</div>}
                       </div>
                     </div>
@@ -320,6 +393,57 @@ export default function DocumentsPage() {
               <div>
                 <label className="field-label">태그 (쉼표로 구분)</label>
                 <input className="input" value={docForm.tags} onChange={(e) => setDocForm({ ...docForm, tags: e.target.value })} placeholder="예: 규정, 인사, 양식" />
+              </div>
+              <div>
+                <label className="field-label">공개 범위</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {(["ALL", "TEAM", "PRIVATE", "CUSTOM"] as DocScope[]).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setDocForm((p) => ({ ...p, scope: s }))}
+                      className={`h-9 rounded-lg border text-[12px] font-bold transition ${
+                        docForm.scope === s
+                          ? "border-brand-500 bg-brand-50 text-brand-700"
+                          : "border-ink-200 bg-white text-ink-600 hover:border-ink-300"
+                      }`}
+                    >
+                      {SCOPE_LABEL[s]}
+                    </button>
+                  ))}
+                </div>
+                {docForm.scope === "TEAM" && (
+                  <div className="mt-2 text-[11px] text-ink-500">
+                    내가 속한 팀으로 자동 지정돼요.
+                  </div>
+                )}
+                {docForm.scope === "CUSTOM" && (
+                  <div className="mt-2 border border-ink-200 rounded-lg max-h-[180px] overflow-y-auto p-2 space-y-1">
+                    {allUsers.length === 0 ? (
+                      <div className="text-[12px] text-ink-500 p-2">사용자를 불러오는 중…</div>
+                    ) : (
+                      allUsers.map((u) => {
+                        const checked = docForm.scopeUserIds.includes(u.id);
+                        return (
+                          <label key={u.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-ink-50 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => setDocForm((p) => ({
+                                ...p,
+                                scopeUserIds: checked
+                                  ? p.scopeUserIds.filter((x) => x !== u.id)
+                                  : [...p.scopeUserIds, u.id],
+                              }))}
+                            />
+                            <div className="w-6 h-6 rounded grid place-items-center text-white text-[10px] font-bold" style={{ background: u.avatarColor ?? "#6B7280" }}>{u.name[0]}</div>
+                            <div className="text-[12px] flex-1">{u.name}{u.team ? <span className="text-ink-400 ml-1">· {u.team}</span> : null}</div>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
               </div>
               <div className="flex justify-end gap-2 pt-1">
                 <button type="button" className="btn-ghost" onClick={() => setCreating(null)}>취소</button>
