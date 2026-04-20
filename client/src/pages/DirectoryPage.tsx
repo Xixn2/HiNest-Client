@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
+import { resolvePresence, type PresenceStatus, type WorkStatus } from "../lib/presence";
 
 type DirectoryUser = {
   id: string;
@@ -12,6 +13,9 @@ type DirectoryUser = {
   team?: string | null;
   position?: string | null;
   avatarColor?: string;
+  presenceStatus?: PresenceStatus | null;
+  presenceMessage?: string | null;
+  workStatus?: WorkStatus;
 };
 
 type ViewMode = "grid" | "list";
@@ -242,6 +246,7 @@ function GridCard({ u, onDM }: { u: DirectoryUser; onDM: () => void }) {
           style={{ background: u.avatarColor ?? "#3D54C4", letterSpacing: "-0.02em" }}
         >
           {u.name[0]}
+          <PresenceDot u={u} size={14} ring={2} />
         </div>
       </div>
 
@@ -256,6 +261,7 @@ function GridCard({ u, onDM }: { u: DirectoryUser; onDM: () => void }) {
           {u.team && <span className="chip-blue flex-shrink-0">{u.team}</span>}
         </div>
         <div className="text-[11px] text-ink-500 tabular truncate mt-1">{u.email}</div>
+        <PresenceLine u={u} />
 
         <div className="mt-3 flex items-center gap-1.5">
           <button onClick={onDM} className="btn-primary btn-xs flex-1 justify-center" title={`${u.name}님과 1:1 대화`}>
@@ -299,13 +305,17 @@ function ListRow({ u, onDM, divider }: { u: DirectoryUser; onDM: () => void; div
       }`}
     >
       <div
-        className="w-10 h-10 rounded-full grid place-items-center text-white text-[13px] font-extrabold flex-shrink-0"
+        className="relative w-10 h-10 rounded-full grid place-items-center text-white text-[13px] font-extrabold flex-shrink-0"
         style={{ background: u.avatarColor ?? "#3D54C4", letterSpacing: "-0.02em" }}
       >
         {u.name[0]}
+        <PresenceDot u={u} size={12} ring={2} />
       </div>
       <div className="min-w-0 w-[28%]">
-        <div className="text-[14px] font-extrabold text-ink-900 truncate tracking-tight">{u.name}</div>
+        <div className="flex items-center gap-1.5">
+          <div className="text-[14px] font-extrabold text-ink-900 truncate tracking-tight">{u.name}</div>
+          <PresenceBadge u={u} />
+        </div>
         <div className="text-[11px] text-ink-500 tabular truncate">{u.email}</div>
       </div>
       <div className="w-[14%]">
@@ -328,6 +338,51 @@ function ListRow({ u, onDM, divider }: { u: DirectoryUser; onDM: () => void; div
         </svg>
         메시지
       </button>
+    </div>
+  );
+}
+
+/* ===== 업무 상태 표시 — 아바타 오른쪽 아래 점, 이름 옆 뱃지, 프로필 카드 라인 ===== */
+function PresenceDot({ u, size = 12, ring = 2 }: { u: DirectoryUser; size?: number; ring?: number }) {
+  const p = resolvePresence(u.presenceStatus ?? null, u.workStatus);
+  return (
+    <span
+      title={p.label + (u.presenceMessage ? ` · ${u.presenceMessage}` : "")}
+      style={{
+        position: "absolute",
+        bottom: -1,
+        right: -1,
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        background: p.color,
+        boxShadow: `0 0 0 ${ring}px var(--c-surface, #fff)`,
+      }}
+    />
+  );
+}
+
+function PresenceBadge({ u }: { u: DirectoryUser }) {
+  const p = resolvePresence(u.presenceStatus ?? null, u.workStatus);
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold"
+      style={{ background: p.color + "18", color: p.color }}
+      title={u.presenceMessage ?? undefined}
+    >
+      <span className="w-1 h-1 rounded-full" style={{ background: p.color }} />
+      {p.label}
+    </span>
+  );
+}
+
+function PresenceLine({ u }: { u: DirectoryUser }) {
+  const p = resolvePresence(u.presenceStatus ?? null, u.workStatus);
+  return (
+    <div className="mt-1.5 flex items-center gap-1.5 text-[11px]">
+      <span className="w-1.5 h-1.5 rounded-full" style={{ background: p.color }} />
+      <span className="font-bold" style={{ color: p.color }}>{p.label}</span>
+      {u.presenceMessage && <span className="text-ink-500 truncate">· {u.presenceMessage}</span>}
     </div>
   );
 }
