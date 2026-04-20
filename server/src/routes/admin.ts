@@ -170,10 +170,18 @@ const importRowSchema = z.object({
   note: z.string().optional(),
   team: z.string().optional(),
 });
+/** 1회 import 최대 행 수 — DoS 방지용 상한. 실무상 넉넉한 5000. */
+const IMPORT_MAX_ROWS = 5000;
+
 router.post("/users/import", async (req, res) => {
   const u = (req as any).user;
   const rows = Array.isArray(req.body?.rows) ? req.body.rows : null;
   if (!rows) return res.status(400).json({ error: "rows 배열이 필요합니다." });
+  if (rows.length > IMPORT_MAX_ROWS) {
+    return res.status(413).json({
+      error: `한 번에 업로드 가능한 최대 행 수(${IMPORT_MAX_ROWS})를 초과했습니다. 나눠서 업로드해 주세요.`,
+    });
+  }
 
   let updated = 0;
   let skipped = 0;
