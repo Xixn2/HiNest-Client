@@ -68,6 +68,9 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       email: user.email,
       superAdmin: user.superAdmin,
     } as AuthUser;
+    // 핸들러에서 user row 가 또 필요하면 재조회하지 말고 이거 쓰기 — /api/me 처럼
+    // 인증만 거치고 바로 user 필드를 되돌려주는 엔드포인트에서 DB 왕복 1번 절약.
+    (req as any).userRecord = user;
     next();
   } catch {
     return res.status(401).json({ error: "unauthorized" });

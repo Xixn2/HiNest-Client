@@ -6,8 +6,9 @@ import { prisma } from "../lib/db.js";
 const router = Router();
 
 router.get("/", requireAuth, async (req, res) => {
-  const u = (req as any).user;
-  const user = await prisma.user.findUnique({ where: { id: u.id } });
+  // requireAuth 가 이미 user row 전체를 가져왔으므로 재조회하지 말고 그걸 재사용.
+  // 매 화면 로드마다 호출되는 엔드포인트라 DB 왕복 1번 절약이 체감된다.
+  const user = (req as any).userRecord;
   if (!user) return res.status(404).json({ error: "not found" });
   res.json({
     user: {
