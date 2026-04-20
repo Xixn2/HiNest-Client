@@ -207,6 +207,7 @@ export default function AttendancePage() {
                   <option value="ANNUAL">연차</option>
                   <option value="HALF">반차</option>
                   <option value="SICK">병가</option>
+                  <option value="TRIP">외근</option>
                   <option value="OTHER">기타</option>
                 </select>
               </div>
@@ -239,7 +240,7 @@ export default function AttendancePage() {
 }
 
 function typeLabel(t: string) {
-  return { ANNUAL: "연차", HALF: "반차", SICK: "병가", OTHER: "기타" }[t] ?? t;
+  return { ANNUAL: "연차", HALF: "반차", SICK: "병가", TRIP: "외근", OTHER: "기타" }[t] ?? t;
 }
 
 function StatusChip({ status }: { status: string }) {
