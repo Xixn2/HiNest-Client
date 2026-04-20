@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api } from "../api";
+import { api, apiSWR } from "../api";
 import { useAuth } from "../auth";
 
 type ProjectEvent = {
@@ -132,8 +132,15 @@ export default function ProjectCalendar({
 
   async function load() {
     const q = `from=${encodeURIComponent(range.from.toISOString())}&to=${encodeURIComponent(range.to.toISOString())}`;
-    const res = await api<{ events: ProjectEvent[] }>(`/api/project/${projectId}/events?${q}`);
-    setEvents(res.events);
+    // 같은 달을 이전에 열어봤다면 캐시된 이벤트로 즉시 그려주고, 백그라운드에서 갱신.
+    // 콜드스타트 구간에 빈 달력 대신 직전 상태가 보이는 편이 체감상 훨씬 낫다.
+    await apiSWR<{ events: ProjectEvent[] }>(
+      `/api/project/${projectId}/events?${q}`,
+      {
+        onCached: (res) => setEvents(res.events),
+        onFresh: (res) => setEvents(res.events),
+      }
+    );
   }
 
   /** 필터 적용된 이벤트. "내 일정"은 내가 담당자로 포함된 것 + 내가 만든 것(담당자 없어도 내 스케줄로 취급). */
