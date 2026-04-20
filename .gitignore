@@ -3,6 +3,12 @@ dist
 .DS_Store
 *.log
 
+# iCloud / Finder 가 만드는 중복 백업 파일 (" 2.tsx" 등)
+* 2.ts
+* 2.tsx
+* 2.js
+* 2.d.ts
+
 # build artifacts
 *.tsbuildinfo
 
