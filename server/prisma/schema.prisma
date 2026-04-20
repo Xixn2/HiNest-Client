@@ -22,6 +22,28 @@ model User {
   team         String?
   active       Boolean  @default(true)
   avatarColor  String   @default("#36D7B7")
+  // HR 상세 (엑셀 업/다운로드용) — 모두 선택값.
+  hrCode             String?  // HR번호 (daiso_worker46 등)
+  affiliation        String?  // 소속 (예: 다이소)
+  employeeNo         String?  // 사번 (AD6156258 등)
+  workplace          String?  // 근무지 (본사/지점 등)
+  department         String?  // 부서 (team 과 별개로 유지)
+  jobDuty            String?  // 직무
+  employmentType     String?  // 고용형태 (정규직/계약직)
+  employmentCategory String?  // 고용유형 (유기계약 등)
+  contractType       String?  // 계약형태 (기간제 등)
+  birthDate          String?  // 생년월일 YYYY-MM-DD
+  gender             String?  // 남/여
+  disabilityType     String?  // 장애유형
+  disabilityLevel    String?  // 장애정도 (중증/경증)
+  hireDate           String?  // 입사일 YYYY-MM-DD
+  phone              String?  // 전화번호
+  note               String?  // 비고
+  // 사용자 업무 상태 — AVAILABLE(근무중) | MEETING | MEAL | OUT | OFFLINE | AWAY
+  // null 이면 attendance 기준으로 "출근/퇴근/미출근" 자동 판정
+  presenceStatus    String?
+  presenceMessage   String?
+  presenceUpdatedAt DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -42,6 +64,93 @@ model User {
   passkeys     Passkey[]
   desktopBios  DesktopBiometric[]
   reactions    MessageReaction[]
+  projects     ProjectMember[]
+  projectsCreated Project[] @relation("ProjectCreator")
+}
+
+/// 팀/프로젝트 — 사이드바 "팀" 카테고리 아래에 자신이 참여중인 프로젝트가 표시됨.
+/// 멤버는 ProjectMember 로 연결, 생성자는 자동으로 OWNER 로 들어감.
+model Project {
+  id          String           @id @default(cuid())
+  name        String
+  description String?
+  color       String           @default("#3B5CF0")
+  status      String           @default("ACTIVE") // ACTIVE | ARCHIVED
+  createdById String
+  createdBy   User             @relation("ProjectCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  members     ProjectMember[]
+  events      ProjectEvent[]
+  webhooks    WebhookChannel[]
+}
+
+/// 외부 서비스에서 들어오는 웹훅 이벤트를 받아 프로젝트 안 "채널"로 묶어 노출.
+/// token 은 URL 경로에 들어가 비밀 키 역할 — 외부로 노출되므로 rotate 가능하게 저장.
+model WebhookChannel {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  color       String   @default("#6366F1")
+  /// URL 경로용 secret token — `/api/webhook/:token` 로 외부에서 POST
+  token       String   @unique
+  createdById String
+  createdAt   DateTime @default(now())
+  events      WebhookEvent[]
+
+  @@index([projectId])
+}
+
+model WebhookEvent {
+  id         String   @id @default(cuid())
+  channelId  String
+  channel    WebhookChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  /// 추출된 제목 — 기본은 payload.title / payload.subject / payload.text 첫줄.
+  title      String
+  /// 추출된 본문 (길이 제한)
+  body       String?
+  /// 원본 JSON 문자열 — 디버깅/리플레이 용
+  rawPayload String
+  /// 요청 발신 IP (X-Forwarded-For 우선)
+  sourceIp   String?
+  createdAt  DateTime @default(now())
+
+  @@index([channelId, createdAt])
+}
+
+model ProjectMember {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String   @default("MEMBER") // OWNER | MANAGER | MEMBER
+  joinedAt  DateTime @default(now())
+
+  @@unique([projectId, userId])
+  @@index([userId])
+}
+
+/// 프로젝트 전용 일정 — 회사 전체 일정(Event) 과 분리. 월/주/일 뷰에서 쓰임.
+model ProjectEvent {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  startAt     DateTime
+  endAt       DateTime
+  allDay      Boolean  @default(false)
+  color       String   @default("#3B5CF0")
+  // 담당자 userId 콤마 구분 — 해당 프로젝트 멤버에 한해 선택.
+  assigneeIds String?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([projectId, startAt])
 }
 
 /// Electron 데스크톱 앱에서 OS Touch ID 로 총관리자 잠금 해제할 수 있게 등록된 기기.
@@ -277,6 +386,10 @@ model Document {
   tags        String?  // comma separated
   authorId    String
   author      User     @relation("DocumentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  // 공개 범위 — ALL(전체) | TEAM(팀) | PRIVATE(개인) | CUSTOM(사용자지정)
+  scope        String  @default("ALL")
+  scopeTeam    String? // TEAM 일 때 대상 팀명
+  scopeUserIds String? // CUSTOM 일 때 접근 허용 유저 id 콤마 구분
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
