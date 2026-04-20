@@ -287,6 +287,8 @@ model RoomMember {
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([roomId, userId])
+  // userId 단독 조회 — "내가 속한 방" 검색에서 자주 쓰임
+  @@index([userId])
 }
 
 model ChatMessage {
@@ -311,6 +313,8 @@ model ChatMessage {
   reactions   MessageReaction[]
 
   @@index([roomId, scheduledAt])
+  // after-cursor 증분 폴링 — createdAt 역정렬·범위 조회가 핵심 경로
+  @@index([roomId, createdAt])
 }
 
 model MessageReaction {

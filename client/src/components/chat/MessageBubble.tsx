@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { C, FONT, formatBytes } from "./theme";
 import type { Attachment, Message, Reaction } from "./types";
 
@@ -484,8 +484,17 @@ export function safeFileUrl(u: string | null | undefined): string | null {
   return /^\/uploads\/[A-Za-z0-9._-]+$/.test(u) ? u : null;
 }
 
-/* ===== 메시지 버블 — 텍스트 / 이미지 / 비디오 / 파일 ===== */
-export function MessageBubble({ msg, mine }: { msg: Message; mine: boolean }) {
+/* ===== 메시지 버블 — 텍스트 / 이미지 / 비디오 / 파일 =====
+ *
+ * React.memo 로 감싼다. 메시지 리스트는 거의 append-only 라 대부분의 기존 버블은
+ * props 가 그대로다 (msg 참조·mine 동일). memo 로 재렌더를 차단하면 1.5초 증분
+ * 폴링마다 전체 리스트가 아니라 "새로 추가된 것" 만 렌더된다.
+ *
+ * msg 는 서버 응답이 들어올 때마다 새 객체지만, 증분 폴링은 기존 요소를 그대로
+ * 두고 새 요소만 append 하므로 기존 msg reference 는 유지된다. full 동기화
+ * 때는 배열 전체가 새로 만들어져 모두 재렌더되는데, 그건 15초에 한 번이라 허용.
+ */
+function MessageBubbleInner({ msg, mine }: { msg: Message; mine: boolean }) {
   const fileUrl = safeFileUrl(msg.fileUrl);
   const hasFile = !!fileUrl;
   const hasText = !!msg.content?.trim();
@@ -623,6 +632,14 @@ export function MessageBubble({ msg, mine }: { msg: Message; mine: boolean }) {
   // 기본: 텍스트 버블
   return <TextBubble content={msg.content} mine={mine} />;
 }
+
+// 얕은 비교로 충분 — msg 는 서버에서 객체 그대로 넘어오고, 증분 폴링 때 기존 요소의
+// 참조는 바뀌지 않는다. full 동기화(15초 주기) 시에만 reference 가 새로 만들어져
+// 재렌더가 발생 → 의도된 동작.
+export const MessageBubble = memo(
+  MessageBubbleInner,
+  (a, b) => a.mine === b.mine && a.msg === b.msg
+);
 
 // URL 자동 링크화 — http(s):// 또는 www. 로 시작하는 문자열을 <a> 로 변환.
 // 안전 조치: href 는 반드시 http/https 로만 구성하고, rel=noopener noreferrer + target=_blank.
