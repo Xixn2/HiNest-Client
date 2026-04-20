@@ -50,21 +50,49 @@ const docSchema = z.object({
   fileType: z.string().optional(),
   fileSize: z.number().int().optional(),
   tags: z.string().optional(),
+  scope: z.enum(["ALL", "TEAM", "PRIVATE", "CUSTOM"]).optional(),
+  scopeTeam: z.string().nullable().optional(),
+  scopeUserIds: z.array(z.string()).optional(),
 });
 
+// 특정 유저가 볼 수 있는 문서 where 조건을 만든다.
+function visibilityWhere(u: { id: string; team: string | null; role: string }) {
+  // ADMIN 은 전부 볼 수 있음 — 관리 목적.
+  if (u.role === "ADMIN") return {};
+  const ors: any[] = [
+    { scope: "ALL" },
+    { authorId: u.id }, // 본인이 올린 건 항상 봄
+  ];
+  if (u.team) ors.push({ scope: "TEAM", scopeTeam: u.team });
+  // CUSTOM — scopeUserIds 콤마 문자열에 내 id 포함
+  ors.push({ scope: "CUSTOM", scopeUserIds: { contains: u.id } });
+  return { OR: ors };
+}
+
 router.get("/", async (req, res) => {
+  const u = (req as any).user;
   const folderId = req.query.folderId ? String(req.query.folderId) : undefined;
   const q = req.query.q ? String(req.query.q).trim() : "";
-  const where: any = {};
-  if (folderId === "root") where.folderId = null;
-  else if (folderId) where.folderId = folderId;
-  if (q) where.OR = [
-    { title: { contains: q } },
-    { description: { contains: q } },
-    { tags: { contains: q } },
-  ];
+  const scope = req.query.scope ? String(req.query.scope) : "all";
+  // 기본은 가시성 필터 적용 (내가 볼 수 있는 문서만).
+  const ands: any[] = [visibilityWhere(u)];
+  if (folderId === "root") ands.push({ folderId: null });
+  else if (folderId) ands.push({ folderId });
+  if (q) ands.push({
+    OR: [
+      { title: { contains: q } },
+      { description: { contains: q } },
+      { tags: { contains: q } },
+    ],
+  });
+  // scope 탭: 전체(all) | 팀(team) | 개인(private = 내 PRIVATE) | 사용자지정(custom = CUSTOM 대상)
+  if (scope === "team") ands.push({ scope: "TEAM" });
+  else if (scope === "private") ands.push({ scope: "PRIVATE", authorId: u.id });
+  else if (scope === "custom") ands.push({ scope: "CUSTOM" });
+  else if (scope === "public") ands.push({ scope: "ALL" });
+  // scope === "all" 은 가시성 전체 — 추가 조건 없음
   const docs = await prisma.document.findMany({
-    where,
+    where: { AND: ands },
     orderBy: { updatedAt: "desc" },
     include: {
       author: { select: { name: true, avatarColor: true } },
@@ -79,6 +107,12 @@ router.post("/", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: "invalid input" });
   const u = (req as any).user;
   const d = parsed.data;
+  // scope 기본값 = ALL. TEAM 일 때 팀명이 비면 작성자 팀으로, CUSTOM 은 허용 유저 콤마문자열 저장.
+  const scope = d.scope ?? "ALL";
+  const scopeTeam = scope === "TEAM" ? (d.scopeTeam ?? u.team ?? null) : null;
+  const scopeUserIds = scope === "CUSTOM" && d.scopeUserIds?.length
+    ? d.scopeUserIds.join(",")
+    : null;
   const doc = await prisma.document.create({
     data: {
       title: d.title,
@@ -90,6 +124,9 @@ router.post("/", async (req, res) => {
       fileSize: d.fileSize,
       tags: d.tags,
       authorId: u.id,
+      scope,
+      scopeTeam,
+      scopeUserIds,
     },
   });
   await writeLog(u.id, "DOC_CREATE", doc.id, d.title);

@@ -31,16 +31,14 @@ router.post("/", async (req, res) => {
     data: { title: d.title, content: d.content, pinned: !!d.pinned, authorId: u.id },
   });
   await writeLog(u.id, "NOTICE_CREATE", n.id, d.title);
-  await notifyAllUsers(
-    {
-      type: "NOTICE",
-      title: d.pinned ? `📌 ${d.title}` : d.title,
-      body: d.content.slice(0, 120),
-      linkUrl: `/notice`,
-      actorName: u.name,
-    },
-    u.id
-  );
+  // 작성자 본인에게도 알림이 가게 — 관리자 스스로 테스트/확인이 쉽도록.
+  await notifyAllUsers({
+    type: "NOTICE",
+    title: d.pinned ? `📌 ${d.title}` : d.title,
+    body: d.content.slice(0, 120),
+    linkUrl: `/notice?id=${n.id}`,
+    actorName: u.name,
+  });
   res.json({ notice: n });
 });
 

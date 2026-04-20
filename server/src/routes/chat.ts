@@ -240,13 +240,8 @@ router.get("/rooms/:id/messages", async (req, res) => {
     return m;
   });
 
-  // 읽음 처리: 방 멤버가 조회하면 내 lastReadAt 을 now 로 갱신
-  if (member) {
-    await prisma.roomMember.update({
-      where: { id: member.id },
-      data: { lastReadAt: now },
-    }).catch(() => { /* best-effort */ });
-  }
+  // 읽음 처리는 더 이상 여기서 하지 않음 — 백그라운드 폴링으로 읽음이 찍히는 문제 방지.
+  // 클라이언트가 방을 실제로 보고 있을 때만 POST /rooms/:id/read 를 호출.
 
   // 멤버별 lastReadAt → 클라이언트에서 메시지별 안읽음 카운트 계산
   const readStates = await prisma.roomMember.findMany({
@@ -261,6 +256,23 @@ router.get("/rooms/:id/messages", async (req, res) => {
     serverTime: now.toISOString(),
     readStates,
   });
+});
+
+/**
+ * 읽음 처리 — 방을 실제 포커스 중일 때만 호출.
+ * 단순히 내 lastReadAt 을 now 로 갱신.
+ */
+router.post("/rooms/:id/read", async (req, res) => {
+  const u = (req as any).user;
+  const member = await prisma.roomMember.findFirst({
+    where: { roomId: req.params.id, userId: u.id },
+  });
+  if (!member) return res.json({ ok: true });
+  await prisma.roomMember.update({
+    where: { id: member.id },
+    data: { lastReadAt: new Date() },
+  });
+  res.json({ ok: true });
 });
 
 /**

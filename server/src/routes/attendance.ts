@@ -23,17 +23,14 @@ router.get("/today", async (req, res) => {
   res.json({ attendance: rec });
 });
 
-// 출근
+// 출근 — 하루에 여러 번 가능. 외근/복귀 등으로 재출근 찍는 경우 대응.
+// checkIn 은 항상 최신 시각으로 덮어쓰고, checkOut 은 초기화 (새 근무 시작으로 간주).
 router.post("/check-in", async (req, res) => {
   const u = (req as any).user;
   const date = todayStr();
-  const exists = await prisma.attendance.findUnique({
-    where: { userId_date: { userId: u.id, date } },
-  });
-  if (exists?.checkIn) return res.status(400).json({ error: "이미 출근 처리되었습니다" });
   const rec = await prisma.attendance.upsert({
     where: { userId_date: { userId: u.id, date } },
-    update: { checkIn: new Date() },
+    update: { checkIn: new Date(), checkOut: null },
     create: { userId: u.id, date, checkIn: new Date() },
   });
   await writeLog(u.id, "CHECK_IN", date);
@@ -66,8 +63,9 @@ router.get("/month", async (req, res) => {
 });
 
 // 휴가 신청
+// TRIP = 외근 (출장/외부 미팅 등 — 사무실 밖에서 업무).
 const leaveSchema = z.object({
-  type: z.enum(["ANNUAL", "HALF", "SICK", "OTHER"]),
+  type: z.enum(["ANNUAL", "HALF", "SICK", "TRIP", "OTHER"]),
   startDate: z.string(),
   endDate: z.string(),
   reason: z.string().optional(),
