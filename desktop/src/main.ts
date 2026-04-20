@@ -210,6 +210,23 @@ ipcMain.handle("hinest:setBadge", (_e, count: number) => {
   } catch {}
 });
 
+// 외부 URL 을 OS 기본 브라우저로 — 렌더러에서 명시적으로 호출.
+// 보안: http/https/mailto/tel 만 허용. javascript:, file:, hinest:// 등 차단.
+ipcMain.handle("hinest:openExternal", async (_e, url: unknown) => {
+  try {
+    if (typeof url !== "string") return { ok: false, error: "invalid url" };
+    const lower = url.trim().toLowerCase();
+    const allowed = ["http://", "https://", "mailto:", "tel:"];
+    if (!allowed.some((p) => lower.startsWith(p))) {
+      return { ok: false, error: "disallowed scheme" };
+    }
+    await shell.openExternal(url);
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: String(e?.message ?? e) };
+  }
+});
+
 ipcMain.handle("hinest:flashFrame", () => {
   try {
     mainWindow?.flashFrame(true);

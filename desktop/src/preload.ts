@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld("hinest", {
   deviceId: process.env.HINEST_DEVICE_ID ?? "",
   setBadge: (count: number) => ipcRenderer.invoke("hinest:setBadge", count),
   flashFrame: () => ipcRenderer.invoke("hinest:flashFrame"),
+  openExternal: (url: string) => ipcRenderer.invoke("hinest:openExternal", url),
   showNotification: (opts: { title: string; body?: string; silent?: boolean }) =>
     ipcRenderer.invoke("hinest:showNotification", opts),
   relaunch: () => ipcRenderer.invoke("hinest:relaunch"),
