@@ -7,7 +7,12 @@
  */
 
 // xlsx-js-style: xlsx(SheetJS CE) 의 drop-in 포크. 셀 스타일(채우기/테두리/폰트) 쓰기 지원.
-import * as XLSX from "xlsx-js-style";
+// 약 470KB — 관리자 페이지 외에선 거의 안 쓰므로 동적 import 로 초기 번들에서 제외.
+let _xlsxPromise: Promise<typeof import("xlsx-js-style")> | null = null;
+async function loadXLSX() {
+  if (!_xlsxPromise) _xlsxPromise = import("xlsx-js-style");
+  return _xlsxPromise;
+}
 
 export type TableColumn<T> = {
   header: string;
@@ -17,6 +22,7 @@ export type TableColumn<T> = {
 
 /** 엑셀/CSV 파일을 파싱해 {헤더→값} 객체 배열로 변환. */
 export async function parseSheet(file: File): Promise<Record<string, string>[]> {
+  const XLSX = await loadXLSX();
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: "array" });
   const ws = wb.Sheets[wb.SheetNames[0]];
@@ -36,12 +42,13 @@ export async function parseSheet(file: File): Promise<Record<string, string>[]> 
  * 진짜 .xlsx 파일로 저장. 한글/숫자/날짜 모두 엑셀에서 바로 열림.
  * 스타일링 — 헤더는 굵게+연한 블루 배경+가운데정렬, 본문 전 셀은 얇은 테두리로 격자.
  */
-export function downloadXLSX<T>(
+export async function downloadXLSX<T>(
   filename: string,
   rows: T[],
   columns: TableColumn<T>[],
   sheetName = "Sheet1"
 ) {
+  const XLSX = await loadXLSX();
   const aoa: (string | number)[][] = [
     columns.map((c) => c.header),
     ...rows.map((r) =>

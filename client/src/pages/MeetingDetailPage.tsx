@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, apiSWR } from "../api";
 import { useAuth } from "../auth";
-import MeetingEditor from "../components/MeetingEditor";
+// TipTap 에디터는 ~300KB 덩어리 — 회의록 상세 페이지 안에서 다시 한 번 나눠서
+// 제목/메타/공개범위 UI 가 먼저 보이고, 에디터는 뒤따라 로드되도록 함.
+const MeetingEditor = lazy(() => import("../components/MeetingEditor"));
 
 type Visibility = "ALL" | "PROJECT" | "SPECIFIC";
 
@@ -94,7 +96,7 @@ export default function MeetingDetailPage() {
     api<{ projects: ProjectLite[] }>(user?.role === "ADMIN" ? "/api/project?all=1" : "/api/project")
       .then((r) => setMyProjects(r.projects))
       .catch(() => {});
-    api<{ users: UserLite[] }>("/api/user")
+    api<{ users: UserLite[] }>("/api/users")
       .then((r) => setUsers(r.users))
       .catch(() => {});
   }, [edit, user?.role]);
@@ -104,12 +106,19 @@ export default function MeetingDetailPage() {
     return meeting.authorId === user.id || user.role === "ADMIN";
   }, [meeting, user]);
 
-  // 자동 저장 — 1.5초 디바운스
+  // 자동 저장 — 1.5초 디바운스 (저장 중이면 타이머만 다시 걸어서 race 방지)
   const saveTimerRef = useRef<number | null>(null);
+  const savingRef = useRef(false);
+  const pendingRef = useRef(false);
   useEffect(() => {
     if (!edit || !meeting || !canEdit) return;
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(() => {
+      if (savingRef.current) {
+        // 이미 저장 중이면 끝난 뒤 한 번 더 저장하도록 마크
+        pendingRef.current = true;
+        return;
+      }
       doSave();
     }, 1500);
     return () => {
@@ -120,6 +129,11 @@ export default function MeetingDetailPage() {
 
   async function doSave() {
     if (!meeting || !canEdit) return;
+    if (savingRef.current) {
+      pendingRef.current = true;
+      return;
+    }
+    savingRef.current = true;
     setSaving(true);
     try {
       const payload: any = {
@@ -131,21 +145,31 @@ export default function MeetingDetailPage() {
       if (visibility === "SPECIFIC") payload.viewerIds = viewerIds;
       await api(`/api/meeting/${meeting.id}`, { method: "PATCH", json: payload });
       setLastSaved(Date.now());
+      setErr(null);
     } catch (e: any) {
       setErr(e?.message ?? "저장 실패");
     } finally {
+      savingRef.current = false;
       setSaving(false);
+      if (pendingRef.current) {
+        pendingRef.current = false;
+        // 저장하는 동안 추가 변경이 있었다면 한 번 더 저장
+        void doSave();
+      }
     }
   }
 
+  const [deleting, setDeleting] = useState(false);
   async function remove() {
-    if (!meeting || !canEdit) return;
+    if (!meeting || !canEdit || deleting) return;
     if (!confirm("이 회의록을 삭제할까요? 되돌릴 수 없습니다.")) return;
+    setDeleting(true);
     try {
       await api(`/api/meeting/${meeting.id}`, { method: "DELETE" });
       nav("/meetings");
     } catch (e: any) {
       alert(e?.message ?? "삭제 실패");
+      setDeleting(false);
     }
   }
 
@@ -184,8 +208,8 @@ export default function MeetingDetailPage() {
               <button className="btn-ghost" onClick={() => { setEdit(false); setSearchParams({}); }}>
                 미리보기
               </button>
-              <button className="btn-ghost text-danger" onClick={remove}>
-                삭제
+              <button className="btn-ghost text-danger" onClick={remove} disabled={deleting}>
+                {deleting ? "삭제 중…" : "삭제"}
               </button>
             </>
           )}
@@ -275,12 +299,14 @@ export default function MeetingDetailPage() {
         </div>
       )}
 
-      {/* 본문 에디터 */}
-      <MeetingEditor
-        value={content}
-        onChange={(json) => setContent(json)}
-        editable={edit && canEdit}
-      />
+      {/* 본문 에디터 — 청크 로드 동안 부드러운 스켈레톤 */}
+      <Suspense fallback={<div className="min-h-[200px] rounded-lg bg-[color:var(--c-surface-3)] animate-pulse" />}>
+        <MeetingEditor
+          value={content}
+          onChange={(json) => setContent(json)}
+          editable={edit && canEdit}
+        />
+      </Suspense>
     </div>
   );
 }

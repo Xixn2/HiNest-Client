@@ -22,6 +22,9 @@ export default function NoticePage() {
   const [selected, setSelected] = useState<Notice | null>(null);
   const [form, setForm] = useState({ title: "", content: "", pinned: false });
   const [params, setParams] = useSearchParams();
+  const [saving, setSaving] = useState(false);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   const canPost = user?.role === "ADMIN" || user?.role === "MANAGER";
 
@@ -63,17 +66,34 @@ export default function NoticePage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    await api("/api/notice", { method: "POST", json: form });
-    setOpen(false);
-    setForm({ title: "", content: "", pinned: false });
-    load();
+    if (saving) return;
+    setSaving(true);
+    setSaveErr(null);
+    try {
+      await api("/api/notice", { method: "POST", json: form });
+      setOpen(false);
+      setForm({ title: "", content: "", pinned: false });
+      await load();
+    } catch (e: any) {
+      setSaveErr(e?.message ?? "공지 등록에 실패했어요");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function remove(id: string) {
     if (!confirm("삭제하시겠습니까?")) return;
-    await api(`/api/notice/${id}`, { method: "DELETE" });
-    setSelected(null);
-    load();
+    if (removingId) return;
+    setRemovingId(id);
+    try {
+      await api(`/api/notice/${id}`, { method: "DELETE" });
+      setSelected(null);
+      await load();
+    } catch (e: any) {
+      alert(e?.message ?? "삭제에 실패했어요");
+    } finally {
+      setRemovingId(null);
+    }
   }
 
   return (
@@ -133,8 +153,12 @@ export default function NoticePage() {
                   <h2 className="text-xl font-bold mt-2">{selected.title}</h2>
                 </div>
                 {canPost && (
-                  <button className="btn-ghost" onClick={() => remove(selected.id)}>
-                    삭제
+                  <button
+                    className="btn-ghost"
+                    onClick={() => remove(selected.id)}
+                    disabled={removingId === selected.id}
+                  >
+                    {removingId === selected.id ? "삭제 중…" : "삭제"}
                   </button>
                 )}
               </div>
