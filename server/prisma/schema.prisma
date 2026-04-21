@@ -156,6 +156,11 @@ model ProjectEvent {
   color       String   @default("#3B5CF0")
   // 담당자 userId 콤마 구분 — 해당 프로젝트 멤버에 한해 선택.
   assigneeIds String?
+  /// 완료 여부. UI 에서 체크박스로 토글.
+  /// completedAt/completedById 는 completed=true 로 전환 시 자동 기록 — 누가 언제 완료했는지 감사용.
+  completed     Boolean   @default(false)
+  completedAt   DateTime?
+  completedById String?
   createdById String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

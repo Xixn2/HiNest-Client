@@ -13,6 +13,10 @@ type ProjectEvent = {
   color: string;
   assigneeIds: string | null;
   createdById: string;
+  /** 완료 여부 — 월/주/일/리스트 뷰에서 체크박스로 토글. */
+  completed: boolean;
+  completedAt: string | null;
+  completedById: string | null;
 };
 
 export type CalMember = {
@@ -206,6 +210,52 @@ export default function ProjectCalendar({
     load();
   }
 
+  /**
+   * 완료 상태 토글 — 달력 셀 안의 체크박스 또는 상세 모달에서 호출.
+   * 서버 왕복 대기 없이 즉시 로컬 state 를 업데이트(옵티미스틱)하고, 실패 시 원복.
+   * 달력 셀에서 쓰이므로 빠른 피드백이 중요하다.
+   */
+  async function toggleCompleted(ev: ProjectEvent) {
+    const next = !ev.completed;
+    // 옵티미스틱 반영
+    setEvents((prev) =>
+      prev.map((e) =>
+        e.id === ev.id
+          ? {
+              ...e,
+              completed: next,
+              completedAt: next ? new Date().toISOString() : null,
+              completedById: next ? user?.id ?? null : null,
+            }
+          : e
+      )
+    );
+    // 상세 모달이 열려있는 상태에서 토글한 경우도 동기화
+    setSelected((sel) =>
+      sel && sel.id === ev.id
+        ? {
+            ...sel,
+            completed: next,
+            completedAt: next ? new Date().toISOString() : null,
+            completedById: next ? user?.id ?? null : null,
+          }
+        : sel
+    );
+    try {
+      await api(`/api/project/${projectId}/events/${ev.id}`, {
+        method: "PATCH",
+        json: { completed: next },
+      });
+    } catch (err) {
+      // 실패 시 원복. alert 로 알려주기보다 UI 가 되돌려지는 걸로 충분.
+      setEvents((prev) =>
+        prev.map((e) => (e.id === ev.id ? ev : e))
+      );
+      setSelected((sel) => (sel && sel.id === ev.id ? ev : sel));
+      console.error("toggle completed failed", err);
+    }
+  }
+
   const headerLabel = useMemo(() => {
     if (mode === "list" || view === "month")
       return cursor.toLocaleDateString("ko-KR", { year: "numeric", month: "long" });
@@ -291,16 +341,16 @@ export default function ProjectCalendar({
       </div>
 
       {mode === "calendar" && view === "month" && (
-        <MonthGrid cursor={cursor} events={visibleEvents} onPick={(d) => { setCursor(d); setView("day"); }} memberMap={memberMap} />
+        <MonthGrid cursor={cursor} events={visibleEvents} onPick={(d) => { setCursor(d); setView("day"); }} memberMap={memberMap} onToggleCompleted={toggleCompleted} />
       )}
       {mode === "calendar" && view === "week" && (
-        <WeekView cursor={cursor} eventsOnDay={eventsOnDay} onSelect={setSelected} onPickDay={(d) => { setCursor(d); setView("day"); }} memberMap={memberMap} />
+        <WeekView cursor={cursor} eventsOnDay={eventsOnDay} onSelect={setSelected} onPickDay={(d) => { setCursor(d); setView("day"); }} memberMap={memberMap} onToggleCompleted={toggleCompleted} />
       )}
       {mode === "calendar" && view === "day" && (
-        <DayView cursor={cursor} events={eventsOnDay(cursor)} onSelect={setSelected} memberMap={memberMap} />
+        <DayView cursor={cursor} events={eventsOnDay(cursor)} onSelect={setSelected} memberMap={memberMap} onToggleCompleted={toggleCompleted} />
       )}
       {mode === "list" && (
-        <ListView cursor={cursor} events={visibleEvents} onSelect={setSelected} memberMap={memberMap} />
+        <ListView cursor={cursor} events={visibleEvents} onSelect={setSelected} memberMap={memberMap} onToggleCompleted={toggleCompleted} />
       )}
 
       {/* 생성 모달 */}
@@ -378,12 +428,24 @@ export default function ProjectCalendar({
           <div className="card w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-2 mb-2">
               <span className="w-3 h-3 rounded-full" style={{ background: selected.color }} />
-              <h3 className="text-lg font-bold flex-1">{selected.title}</h3>
+              <h3 className={`text-lg font-bold flex-1 ${selected.completed ? "line-through text-slate-400" : ""}`}>{selected.title}</h3>
+              {selected.completed && (
+                <span className="chip bg-emerald-50 text-emerald-700 border border-emerald-100">완료</span>
+              )}
             </div>
             <div className="text-xs text-slate-500 mb-3">
               {new Date(selected.startAt).toLocaleString("ko-KR")} ~ {new Date(selected.endAt).toLocaleString("ko-KR")}
               {selected.allDay && <span className="ml-2 chip bg-slate-100 text-slate-500">종일</span>}
             </div>
+            {selected.completed && selected.completedAt && (
+              <div className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded px-2 py-1.5 mb-3">
+                {(() => {
+                  const who = selected.completedById ? memberMap.get(selected.completedById) : null;
+                  const when = new Date(selected.completedAt).toLocaleString("ko-KR");
+                  return who ? `${who.name}님이 ${when}에 완료` : `${when} 완료`;
+                })()}
+              </div>
+            )}
             {parseAssignees(selected.assigneeIds).length > 0 && (
               <div className="mb-3">
                 <div className="text-[11px] font-bold text-slate-500 mb-1.5">담당자</div>
@@ -414,12 +476,86 @@ export default function ProjectCalendar({
             )}
             <div className="flex justify-end gap-2">
               <button className="btn-ghost" onClick={() => setSelected(null)}>닫기</button>
+              <button
+                className={selected.completed ? "btn-ghost" : "btn-primary"}
+                onClick={() => toggleCompleted(selected)}
+              >
+                {selected.completed ? "미완료로 되돌리기" : "완료 처리"}
+              </button>
               <button className="btn-ghost text-rose-600" onClick={() => removeEvent(selected.id)}>삭제</button>
             </div>
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * 일정 완료 체크박스.
+ *  - 달력 셀 내부에 얹히는 작은 원형 토글. 체크/미체크 두 상태.
+ *  - 이벤트 버퀘이션은 caller 에서 설정 — 셀 클릭 vs 체크박스 클릭을 구분해야 하므로
+ *    onClick 에 stopPropagation 을 해서 상세 모달이 같이 열리지 않게 한다.
+ *  - 흰색 배경(밝은 색 이벤트) 과 컬러 배경(진한 색 이벤트) 양쪽에서 보이게
+ *    tone prop 으로 색을 바꿔 사용한다.
+ */
+function CompletionCheckbox({
+  completed,
+  onToggle,
+  tone = "on-color",
+  size = 14,
+}: {
+  completed: boolean;
+  onToggle: () => void;
+  /** "on-color": 이벤트의 진한 배경 위. "on-white": 흰/밝은 배경 위. */
+  tone?: "on-color" | "on-white";
+  size?: number;
+}) {
+  const base =
+    "rounded border flex-shrink-0 grid place-items-center transition cursor-pointer";
+  const palette =
+    tone === "on-color"
+      ? completed
+        ? "bg-white/90 border-white text-slate-700"
+        : "bg-white/10 border-white/60 hover:bg-white/25 text-white/90"
+      : completed
+      ? "bg-brand-500 border-brand-500 text-white"
+      : "bg-white border-slate-300 hover:border-brand-400 text-transparent";
+  return (
+    <span
+      role="checkbox"
+      aria-checked={completed}
+      tabIndex={0}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          e.stopPropagation();
+          onToggle();
+        }
+      }}
+      className={`${base} ${palette}`}
+      style={{ width: size, height: size }}
+      title={completed ? "완료 → 미완료로 되돌리기" : "미완료 → 완료 처리"}
+    >
+      {/* 체크 아이콘 — 완료 상태일 때만 보임. 미완료일 때는 transparent 로 자리차지만. */}
+      <svg
+        width={Math.max(8, size - 4)}
+        height={Math.max(8, size - 4)}
+        viewBox="0 0 12 12"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <polyline points="2.5 6.5 5 9 9.5 3.5" />
+      </svg>
+    </span>
   );
 }
 
@@ -502,11 +638,13 @@ function MonthGrid({
   events,
   onPick,
   memberMap,
+  onToggleCompleted,
 }: {
   cursor: Date;
   events: ProjectEvent[];
   onPick: (d: Date) => void;
   memberMap: Map<string, CalMember>;
+  onToggleCompleted: (ev: ProjectEvent) => void;
 }) {
   const cells = useMemo(() => {
     const first = startOfMonth(cursor);
@@ -564,14 +702,19 @@ function MonthGrid({
                   return (
                     <div
                       key={ev.id}
-                      className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded text-white"
+                      className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded text-white ${ev.completed ? "opacity-50" : ""}`}
                       style={{ background: ev.color }}
                       title={ev.title}
                     >
+                      <CompletionCheckbox
+                        completed={ev.completed}
+                        onToggle={() => onToggleCompleted(ev)}
+                        size={11}
+                      />
                       {asg.length > 0 && (
                         <AssigneeStack ids={asg} memberMap={memberMap} size={12} />
                       )}
-                      <span className="truncate flex-1">{ev.title}</span>
+                      <span className={`truncate flex-1 ${ev.completed ? "line-through" : ""}`}>{ev.title}</span>
                     </div>
                   );
                 })}
@@ -592,12 +735,14 @@ function WeekView({
   onSelect,
   onPickDay,
   memberMap,
+  onToggleCompleted,
 }: {
   cursor: Date;
   eventsOnDay: (d: Date) => ProjectEvent[];
   onSelect: (ev: ProjectEvent) => void;
   onPickDay: (d: Date) => void;
   memberMap: Map<string, CalMember>;
+  onToggleCompleted: (ev: ProjectEvent) => void;
 }) {
   const s = startOfWeek(cursor);
   const days = Array.from({ length: 7 }, (_, i) => {
@@ -628,13 +773,20 @@ function WeekView({
                   <button
                     key={ev.id}
                     onClick={() => onSelect(ev)}
-                    className="w-full text-left text-[11px] px-1.5 py-1 rounded text-white"
+                    className={`w-full text-left text-[11px] px-1.5 py-1 rounded text-white ${ev.completed ? "opacity-55" : ""}`}
                     style={{ background: ev.color }}
                   >
-                    <div className="font-semibold truncate">{ev.title}</div>
-                    <div className="flex items-center justify-between gap-1">
+                    <div className="flex items-center gap-1.5">
+                      <CompletionCheckbox
+                        completed={ev.completed}
+                        onToggle={() => onToggleCompleted(ev)}
+                        size={13}
+                      />
+                      <div className={`font-semibold truncate flex-1 ${ev.completed ? "line-through" : ""}`}>{ev.title}</div>
+                    </div>
+                    <div className="flex items-center justify-between gap-1 mt-0.5 pl-5">
                       {!ev.allDay ? (
-                        <span className="opacity-80">{fmtHHmm(new Date(ev.startAt))}</span>
+                        <span className={`opacity-80 ${ev.completed ? "line-through" : ""}`}>{fmtHHmm(new Date(ev.startAt))}</span>
                       ) : <span />}
                       {asg.length > 0 && <AssigneeStack ids={asg} memberMap={memberMap} size={14} />}
                     </div>
@@ -656,11 +808,13 @@ function ListView({
   events,
   onSelect,
   memberMap,
+  onToggleCompleted,
 }: {
   cursor: Date;
   events: ProjectEvent[];
   onSelect: (ev: ProjectEvent) => void;
   memberMap: Map<string, CalMember>;
+  onToggleCompleted: (ev: ProjectEvent) => void;
 }) {
   // 시작일 기준 정렬, 해당 일자별로 그룹핑.
   // 걸치는 다일(多日) 이벤트는 일단 시작일에만 노출 — 필요 시 후속에서 확장.
@@ -714,12 +868,18 @@ function ListView({
                   <button
                     key={ev.id}
                     onClick={() => onSelect(ev)}
-                    className="w-full flex items-center gap-3 text-left border border-slate-100 rounded-lg px-3 py-2 hover:bg-slate-50"
+                    className={`w-full flex items-center gap-3 text-left border rounded-lg px-3 py-2 hover:bg-slate-50 ${ev.completed ? "border-slate-100 bg-slate-50/60" : "border-slate-100"}`}
                   >
-                    <span className="w-1.5 h-8 rounded flex-shrink-0" style={{ background: ev.color }} />
+                    <CompletionCheckbox
+                      completed={ev.completed}
+                      onToggle={() => onToggleCompleted(ev)}
+                      tone="on-white"
+                      size={18}
+                    />
+                    <span className={`w-1.5 h-8 rounded flex-shrink-0 ${ev.completed ? "opacity-40" : ""}`} style={{ background: ev.color }} />
                     <div className="min-w-0 flex-1">
-                      <div className="text-sm font-semibold text-slate-900 truncate">{ev.title}</div>
-                      <div className="text-[11px] text-slate-500">
+                      <div className={`text-sm font-semibold truncate ${ev.completed ? "text-slate-400 line-through" : "text-slate-900"}`}>{ev.title}</div>
+                      <div className={`text-[11px] ${ev.completed ? "text-slate-400" : "text-slate-500"}`}>
                         {ev.allDay ? (
                           <span>종일</span>
                         ) : (
@@ -747,11 +907,13 @@ function DayView({
   events,
   onSelect,
   memberMap,
+  onToggleCompleted,
 }: {
   cursor: Date;
   events: ProjectEvent[];
   onSelect: (ev: ProjectEvent) => void;
   memberMap: Map<string, CalMember>;
+  onToggleCompleted: (ev: ProjectEvent) => void;
 }) {
   const allDay = events.filter((e) => e.allDay);
   const timed = events
@@ -767,10 +929,15 @@ function DayView({
               <button
                 key={ev.id}
                 onClick={() => onSelect(ev)}
-                className="w-full text-left text-xs px-2 py-1.5 rounded text-white"
+                className={`w-full flex items-center gap-2 text-left text-xs px-2 py-1.5 rounded text-white ${ev.completed ? "opacity-55" : ""}`}
                 style={{ background: ev.color }}
               >
-                {ev.title}
+                <CompletionCheckbox
+                  completed={ev.completed}
+                  onToggle={() => onToggleCompleted(ev)}
+                  size={14}
+                />
+                <span className={ev.completed ? "line-through flex-1" : "flex-1"}>{ev.title}</span>
               </button>
             ))}
           </div>
@@ -787,12 +954,18 @@ function DayView({
             <button
               key={ev.id}
               onClick={() => onSelect(ev)}
-              className="w-full flex items-center gap-3 text-left border border-slate-100 rounded-lg px-3 py-2 hover:bg-slate-50"
+              className={`w-full flex items-center gap-3 text-left border rounded-lg px-3 py-2 hover:bg-slate-50 ${ev.completed ? "border-slate-100 bg-slate-50/60" : "border-slate-100"}`}
             >
-              <span className="w-1.5 h-8 rounded" style={{ background: ev.color }} />
+              <CompletionCheckbox
+                completed={ev.completed}
+                onToggle={() => onToggleCompleted(ev)}
+                tone="on-white"
+                size={18}
+              />
+              <span className={`w-1.5 h-8 rounded ${ev.completed ? "opacity-40" : ""}`} style={{ background: ev.color }} />
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold text-slate-900 truncate">{ev.title}</div>
-                <div className="text-[11px] text-slate-500">
+                <div className={`text-sm font-semibold truncate ${ev.completed ? "text-slate-400 line-through" : "text-slate-900"}`}>{ev.title}</div>
+                <div className={`text-[11px] ${ev.completed ? "text-slate-400" : "text-slate-500"}`}>
                   {fmtHHmm(new Date(ev.startAt))} – {fmtHHmm(new Date(ev.endAt))}
                 </div>
               </div>
