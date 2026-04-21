@@ -6,6 +6,7 @@ import Logo from "./Logo";
 import NotificationBell from "./NotificationBell";
 import SearchModal from "./SearchModal";
 import ChatFab from "./ChatFab";
+import CreateProjectModal from "./CreateProjectModal";
 import { NotificationProvider, useNotifications } from "../notifications";
 import { ROUTE_PREFETCH, loadProject } from "../routes";
 
@@ -249,6 +250,8 @@ function ProjectsSection() {
   const { user } = useAuth();
   const [projects, setProjects] = useState<ProjectLite[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [openCreate, setOpenCreate] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   // ADMIN 은 본인이 멤버가 아니어도 전체 프로젝트를 사이드바에서 열람.
   const isAdmin = user?.role === "ADMIN";
 
@@ -264,13 +267,29 @@ function ProjectsSection() {
     return () => {
       alive = false;
     };
-  }, [isAdmin]);
+  }, [isAdmin, reloadKey]);
 
   const active = projects.filter((p) => p.status === "ACTIVE");
 
   return (
     <div>
-      <SectionLabel>프로젝트</SectionLabel>
+      <div className="flex items-center justify-between pr-1">
+        <SectionLabel>프로젝트</SectionLabel>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setOpenCreate(true)}
+            className="w-5 h-5 mb-1.5 grid place-items-center rounded-full text-ink-500 hover:text-ink-900 hover:bg-ink-100 transition"
+            title="새 프로젝트"
+            aria-label="새 프로젝트"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+        )}
+      </div>
       <div className="space-y-0.5">
         {active.map((p) => (
           <NavLink
@@ -293,6 +312,13 @@ function ProjectsSection() {
           </div>
         )}
       </div>
+      {isAdmin && (
+        <CreateProjectModal
+          open={openCreate}
+          onClose={() => setOpenCreate(false)}
+          onCreated={() => setReloadKey((k) => k + 1)}
+        />
+      )}
     </div>
   );
 }

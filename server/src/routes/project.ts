@@ -53,6 +53,8 @@ const createSchema = z.object({
 
 router.post("/", async (req, res) => {
   const u = (req as any).user;
+  // 프로젝트 생성은 ADMIN 만 — 일반 유저는 멤버로 초대받아 참여한다.
+  if (u.role !== "ADMIN") return res.status(403).json({ error: "forbidden" });
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid input" });
   const d = parsed.data;
