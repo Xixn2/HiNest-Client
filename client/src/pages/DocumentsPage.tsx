@@ -135,12 +135,13 @@ export default function DocumentsPage() {
   }
 
   async function uploadFile(file: File) {
-    if (file.size > 100 * 1024 * 1024) return alert("파일은 100MB 이하만 업로드 가능합니다");
+    if (file.size > 500 * 1024 * 1024) return alert("파일은 500MB 이하만 업로드 가능합니다");
     setUploading(true);
     try {
       const form = new FormData();
       form.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: form, credentials: "include" });
+      // 문서함 전용 엔드포인트 — 서버에서 500MB 까지 허용.
+      const res = await fetch("/api/upload/document", { method: "POST", body: form, credentials: "include" });
       if (!res.ok) throw new Error((await res.json()).error);
       const json = await res.json();
       setDocForm((p) => ({
@@ -491,7 +492,7 @@ export default function DocumentsPage() {
                 ) : (
                   <>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12" /><path d="m7 8 5-5 5 5" /><path d="M20 21H4" /></svg>
-                    <div className="text-[13px] font-bold text-ink-800">파일 선택 (최대 100MB)</div>
+                    <div className="text-[13px] font-bold text-ink-800">파일 선택 (최대 500MB)</div>
                     <div className="text-[11px] text-ink-500">선택 사항 · 링크만 있는 문서도 가능</div>
                   </>
                 )}
