@@ -1589,7 +1589,7 @@ function RoomView({
                           padding: "9px 13px", fontSize: 14, fontWeight: 500,
                           lineHeight: 1.4, letterSpacing: "-0.01em",
                           color: mine ? C.brandFg : C.ink,
-                          background: mine ? C.blue : C.gray100,
+                          background: mine ? C.blue : C.bubbleOther,
                           borderRadius: 16, fontStyle: "italic", opacity: 0.6,
                         }}
                       >

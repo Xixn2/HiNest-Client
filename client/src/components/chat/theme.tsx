@@ -21,8 +21,10 @@ export const C = {
   // 보더/구분선
   gray300: "var(--c-border-strong)",
   gray200: "var(--c-border)",
-  // 보조 표면 (상대 버블 배경 등)
+  // 보조 표면 (배지·리액션 칩 등)
   gray100: "var(--c-surface-3)",
+  // 상대 메시지 버블 전용 — surface 위에 올릴 때 확실히 구분되는 톤
+  bubbleOther: "var(--c-chat-bubble-other)",
   // 상태
   red: "var(--c-danger)",
   // 표면
