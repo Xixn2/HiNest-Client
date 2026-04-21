@@ -7,19 +7,63 @@ const router = Router();
 router.use(requireAuth);
 
 /* ===== 폴더 ===== */
-router.get("/folders", async (_req, res) => {
+// 폴더에도 문서와 동일한 공개 범위 개념이 있음.
+// scope 쿼리 파라미터(all/public/team/private/custom) 기준으로 가시 폴더만 반환.
+function folderVisibilityWhere(u: { id: string; team: string | null; role: string }) {
+  if (u.role === "ADMIN") return {};
+  const ors: any[] = [
+    { scope: "ALL" },
+    { authorId: u.id },
+  ];
+  if (u.team) ors.push({ scope: "TEAM", scopeTeam: u.team });
+  ors.push({ scope: "CUSTOM", scopeUserIds: { contains: u.id } });
+  return { OR: ors };
+}
+
+router.get("/folders", async (req, res) => {
+  const u = (req as any).user;
+  const scope = req.query.scope ? String(req.query.scope) : "all";
+  const ands: any[] = [folderVisibilityWhere(u)];
+  if (scope === "team") ands.push({ scope: "TEAM" });
+  else if (scope === "private") ands.push({ scope: "PRIVATE", authorId: u.id });
+  else if (scope === "custom") ands.push({ scope: "CUSTOM" });
+  else if (scope === "public") ands.push({ scope: "ALL" });
+  // scope === "all" 은 가시성 전체 — 추가 조건 없음.
   const folders = await prisma.folder.findMany({
+    where: { AND: ands },
     orderBy: [{ parentId: "asc" }, { createdAt: "asc" }],
   });
   res.json({ folders });
 });
 
+const folderCreateSchema = z.object({
+  name: z.string().min(1),
+  parentId: z.string().nullable().optional(),
+  scope: z.enum(["ALL", "TEAM", "PRIVATE", "CUSTOM"]).optional(),
+  scopeTeam: z.string().nullable().optional(),
+  scopeUserIds: z.array(z.string()).optional(),
+});
+
 router.post("/folders", async (req, res) => {
   const u = (req as any).user;
-  const name = String(req.body?.name ?? "").trim();
-  const parentId = req.body?.parentId || null;
-  if (!name) return res.status(400).json({ error: "이름이 필요합니다" });
-  const folder = await prisma.folder.create({ data: { name, parentId } });
+  const parsed = folderCreateSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid input" });
+  const { name, parentId } = parsed.data;
+  const scope = parsed.data.scope ?? "ALL";
+  const scopeTeam = scope === "TEAM" ? (parsed.data.scopeTeam ?? u.team ?? null) : null;
+  const scopeUserIds = scope === "CUSTOM" && parsed.data.scopeUserIds?.length
+    ? parsed.data.scopeUserIds.join(",")
+    : null;
+  const folder = await prisma.folder.create({
+    data: {
+      name: name.trim(),
+      parentId: parentId || null,
+      scope,
+      scopeTeam,
+      scopeUserIds,
+      authorId: u.id,
+    },
+  });
   await writeLog(u.id, "FOLDER_CREATE", folder.id, name);
   res.json({ folder });
 });
