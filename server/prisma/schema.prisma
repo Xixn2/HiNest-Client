@@ -88,6 +88,8 @@ model Project {
   events      ProjectEvent[]
   webhooks    WebhookChannel[]
   meetings    Meeting[]
+  documents   Document[]
+  folders     Folder[]
 }
 
 /// 외부 서비스에서 들어오는 웹훅 이벤트를 받아 프로젝트 안 "채널"로 묶어 노출.
@@ -394,7 +396,13 @@ model Folder {
   scopeTeam    String?
   scopeUserIds String? // CUSTOM 일 때 접근 허용 유저 id 콤마 구분
   authorId     String?
+  // 프로젝트 문서함 전용 폴더. null 이면 전역 문서함.
+  // projectId 가 있으면 visibility 는 ProjectMember 기준으로 판단 (scope 필드는 무시됨).
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdAt DateTime   @default(now())
+
+  @@index([projectId])
 }
 
 model Document {
@@ -414,8 +422,14 @@ model Document {
   scope        String  @default("ALL")
   scopeTeam    String? // TEAM 일 때 대상 팀명
   scopeUserIds String? // CUSTOM 일 때 접근 허용 유저 id 콤마 구분
+  // 프로젝트 문서함 전용 문서. null 이면 전역 문서함.
+  // projectId 가 있으면 가시성은 ProjectMember 기준 (scope 는 무시됨).
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([projectId, updatedAt])
 }
 
 model Approval {

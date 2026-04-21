@@ -45,8 +45,16 @@ const SCOPE_LABEL: Record<DocScope, string> = {
   CUSTOM: "사용자지정",
 };
 type DirUser = { id: string; name: string; team?: string | null; avatarColor?: string };
+type ProjectChip = { id: string; name: string; color: string };
 
-export default function DocumentsPage() {
+type Props = {
+  /** 프로젝트 상세 페이지에서 embed 하는 경우 */
+  projectId?: string;
+  /** embed 모드 — 페이지 헤더/카테고리 칩을 숨기고 상위 컨테이너가 래핑하는 전제 */
+  embedded?: boolean;
+};
+
+export default function DocumentsPage({ projectId: fixedProjectId, embedded = false }: Props = {}) {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [docs, setDocs] = useState<Doc[]>([]);
   const [currentFolder, setCurrentFolder] = useState<string | "root">("root");
@@ -55,6 +63,12 @@ export default function DocumentsPage() {
   const [uploading, setUploading] = useState(false);
   const [scopeTab, setScopeTab] = useState<ScopeTab>("all");
   const [allUsers, setAllUsers] = useState<DirUser[]>([]);
+  // 내가 접근 가능한 프로젝트 칩 목록. fixedProjectId 로 고정된 모드에선 안 쓴다.
+  const [projects, setProjects] = useState<ProjectChip[]>([]);
+  // "전체"(null) 또는 선택된 프로젝트 id. embed 모드에선 fixedProjectId 를 우선 적용.
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(fixedProjectId ?? null);
+  const activeProjectId = fixedProjectId ?? selectedProjectId;
+  const inProject = !!activeProjectId;
   const [folderForm, setFolderForm] = useState<{
     name: string;
     scope: DocScope;
@@ -68,20 +82,43 @@ export default function DocumentsPage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function load() {
-    // 폴더도 문서와 동일하게 scope 탭으로 필터 — "전체"엔 모두, "팀/개인/사용자지정" 탭엔 해당 범위만.
+    // 프로젝트 선택 시엔 projectId 필터. scope 필터는 프로젝트 내에선 의미 없음(멤버십이 권한).
+    const pid = activeProjectId;
+    const qs = (extra: string) =>
+      pid
+        ? `projectId=${encodeURIComponent(pid)}&${extra}`
+        : `scope=${scopeTab}&${extra}`;
     const [f, d] = await Promise.all([
-      api<{ folders: Folder[] }>(`/api/document/folders?scope=${scopeTab}`),
+      api<{ folders: Folder[] }>(
+        pid
+          ? `/api/document/folders?projectId=${encodeURIComponent(pid)}`
+          : `/api/document/folders?scope=${scopeTab}`,
+      ),
       api<{ documents: Doc[] }>(
-        `/api/document?folderId=${encodeURIComponent(currentFolder)}&scope=${scopeTab}${q ? `&q=${encodeURIComponent(q)}` : ""}`
+        `/api/document?${qs(`folderId=${encodeURIComponent(currentFolder)}${q ? `&q=${encodeURIComponent(q)}` : ""}`)}`,
       ),
     ]);
     setFolders(f.folders);
     setDocs(d.documents);
   }
+
+  // 프로젝트 칩 목록 로드 — 임베드 모드 아니고 고정 프로젝트가 없을 때만 필요.
+  useEffect(() => {
+    if (embedded || fixedProjectId) return;
+    api<{ projects: ProjectChip[] }>("/api/document/projects")
+      .then((r) => setProjects(r.projects))
+      .catch(() => {});
+  }, [embedded, fixedProjectId]);
+
   useEffect(() => {
     load();
     // eslint-disable-next-line
-  }, [currentFolder, q, scopeTab]);
+  }, [currentFolder, q, scopeTab, activeProjectId]);
+
+  // 프로젝트/탭 전환 시 폴더 루트로 되돌림 (다른 네임스페이스의 폴더 id 가 stale 한 채 남지 않게).
+  useEffect(() => {
+    setCurrentFolder("root");
+  }, [activeProjectId]);
 
   // 사용자지정 범위 선택 시 유저 목록 로드 (문서 / 폴더 모달 공용)
   useEffect(() => {
@@ -111,8 +148,10 @@ export default function DocumentsPage() {
       json: {
         name: folderForm.name.trim(),
         parentId: currentFolder === "root" ? null : currentFolder,
-        scope: folderForm.scope,
-        scopeUserIds: folderForm.scope === "CUSTOM" ? folderForm.scopeUserIds : undefined,
+        // 프로젝트 문서함에선 scope/scopeUserIds 무시 — 서버가 ALL 로 고정.
+        scope: inProject ? undefined : folderForm.scope,
+        scopeUserIds: !inProject && folderForm.scope === "CUSTOM" ? folderForm.scopeUserIds : undefined,
+        projectId: activeProjectId ?? undefined,
       },
     });
     setCreating(null);
@@ -173,10 +212,11 @@ export default function DocumentsPage() {
         fileType: docForm.fileType,
         fileSize: docForm.fileSize,
         folderId: currentFolder === "root" ? null : currentFolder,
-        scope: docForm.scope,
-        // 팀 범위는 서버가 요청자(user)의 team 을 자동 사용 — 클라에선 명시하지 않음.
+        // 프로젝트 문서함에선 scope 필드가 무의미 — 서버가 ALL 로 고정.
+        scope: inProject ? undefined : docForm.scope,
         scopeTeam: null,
-        scopeUserIds: docForm.scope === "CUSTOM" ? docForm.scopeUserIds : undefined,
+        scopeUserIds: !inProject && docForm.scope === "CUSTOM" ? docForm.scopeUserIds : undefined,
+        projectId: activeProjectId ?? undefined,
       },
     });
     setCreating(null);
@@ -188,6 +228,34 @@ export default function DocumentsPage() {
     if (!confirm(`'${d.title}' 을(를) 삭제할까요?`)) return;
     await api(`/api/document/${d.id}`, { method: "DELETE" });
     load();
+  }
+
+  // ===== 다운로드 =====
+  // 개별 문서 — /uploads/<key>?download=1&name=<원본이름> 으로 강제 첨부 헤더 받기.
+  // 이미지·영상처럼 기본이 인라인인 타입도 확실히 "저장" 대화상자를 띄우게 함.
+  function downloadDoc(d: Doc) {
+    if (!d.fileUrl) return;
+    const url = new URL(d.fileUrl, window.location.origin);
+    url.searchParams.set("download", "1");
+    if (d.fileName) url.searchParams.set("name", d.fileName);
+    triggerDownload(url.toString());
+  }
+
+  // 폴더 전체 — 서버에서 ZIP 스트림으로 내려옴. 큰 폴더는 시간이 꽤 걸릴 수 있음.
+  function downloadFolder(f: Folder) {
+    triggerDownload(`/api/document/folders/${f.id}/download`);
+  }
+
+  // 새 탭에서 열되 Content-Disposition: attachment 헤더 때문에 바로 다운로드로 떨어진다.
+  // target=_blank 로 열어야 현재 페이지가 navigate 되지 않음.
+  function triggerDownload(href: string) {
+    const a = document.createElement("a");
+    a.href = href;
+    a.target = "_blank";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   }
 
   // ===== 문서 드래그앤드롭 이동 =====
@@ -235,34 +303,80 @@ export default function DocumentsPage() {
 
   return (
     <div>
-      <PageHeader
-        eyebrow="자료"
-        title="문서함"
-        description="회사 규정·양식·매뉴얼 등을 보관하고 공유합니다."
-        right={
-          <>
-            <button className="btn-ghost" onClick={openFolderModal}>+ 새 폴더</button>
-            <button className="btn-primary" onClick={() => setCreating("doc")}>+ 문서 업로드</button>
-          </>
-        }
-      />
+      {!embedded && (
+        <PageHeader
+          eyebrow="자료"
+          title="문서함"
+          description="회사 규정·양식·매뉴얼 등을 보관하고 공유합니다."
+          right={
+            <>
+              <button className="btn-ghost" onClick={openFolderModal}>+ 새 폴더</button>
+              <button className="btn-primary" onClick={() => setCreating("doc")}>+ 문서 업로드</button>
+            </>
+          }
+        />
+      )}
 
-      {/* 공개 범위 탭 — 전체 / 팀 / 개인 / 사용자지정 */}
-      <div className="flex items-center gap-1 mb-3 border-b border-ink-150">
-        {SCOPE_TABS.map((t) => (
+      {/* 카테고리 칩 — 전체 문서함 + 내가 속한 프로젝트들. fixed/embedded 모드에선 숨김. */}
+      {!embedded && !fixedProjectId && (projects.length > 0 || selectedProjectId) && (
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
           <button
-            key={t.key}
-            onClick={() => setScopeTab(t.key)}
-            className={`px-3 h-9 text-[13px] font-bold border-b-2 transition ${
-              scopeTab === t.key
-                ? "border-brand-500 text-ink-900"
-                : "border-transparent text-ink-500 hover:text-ink-700"
+            onClick={() => setSelectedProjectId(null)}
+            className={`px-3 h-8 rounded-full text-[12px] font-bold border transition ${
+              selectedProjectId === null
+                ? "bg-brand-500 text-white border-brand-500"
+                : "bg-[color:var(--c-surface)] text-ink-600 border-ink-200 hover:border-ink-300"
             }`}
           >
-            {t.label}
+            전체 문서함
           </button>
-        ))}
-      </div>
+          {projects.map((p) => {
+            const on = selectedProjectId === p.id;
+            return (
+              <button
+                key={p.id}
+                onClick={() => setSelectedProjectId(p.id)}
+                className={`px-3 h-8 rounded-full text-[12px] font-bold border transition flex items-center gap-1.5 ${
+                  on
+                    ? "text-white border-transparent"
+                    : "bg-[color:var(--c-surface)] text-ink-700 border-ink-200 hover:border-ink-300"
+                }`}
+                style={on ? { background: p.color } : undefined}
+              >
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: on ? "#fff" : p.color }} />
+                {p.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 임베드 모드용 미니 툴바 — 헤더가 없는 대신 우측 업로드 버튼을 여기 넣는다 */}
+      {embedded && (
+        <div className="flex items-center justify-end gap-2 mb-3">
+          <button className="btn-ghost btn-xs" onClick={openFolderModal}>+ 새 폴더</button>
+          <button className="btn-primary btn-xs" onClick={() => setCreating("doc")}>+ 문서 업로드</button>
+        </div>
+      )}
+
+      {/* 공개 범위 탭 — 프로젝트 문서함에선 의미 없으므로 숨김. */}
+      {!inProject && (
+        <div className="flex items-center gap-1 mb-3 border-b border-ink-150">
+          {SCOPE_TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setScopeTab(t.key)}
+              className={`px-3 h-9 text-[13px] font-bold border-b-2 transition ${
+                scopeTab === t.key
+                  ? "border-brand-500 text-ink-900"
+                  : "border-transparent text-ink-500 hover:text-ink-700"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* 툴바 */}
       <div className="flex items-center gap-2 mb-4">
@@ -369,6 +483,9 @@ export default function DocumentsPage() {
                   <div className="text-[11px] text-ink-500 tabular">{new Date(f.createdAt).toLocaleDateString("ko-KR")}</div>
                 </div>
                 <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1">
+                  <button className="btn-icon" onClick={(e) => { e.stopPropagation(); downloadFolder(f); }} title="폴더 전체 다운로드 (ZIP)">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
+                  </button>
                   <button className="btn-icon" onClick={(e) => { e.stopPropagation(); renameFolder(f); }} title="이름 변경">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
                   </button>
@@ -475,9 +592,16 @@ export default function DocumentsPage() {
                   </td>
                   <td className="tabular text-[11px] text-ink-500">{new Date(d.updatedAt).toLocaleDateString("ko-KR")}</td>
                   <td style={{ textAlign: "right" }}>
-                    <button className="btn-icon" onClick={() => deleteDoc(d)} title="삭제">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
-                    </button>
+                    <div className="flex items-center justify-end gap-1">
+                      {d.fileUrl && (
+                        <button className="btn-icon" onClick={() => downloadDoc(d)} title="다운로드">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
+                        </button>
+                      )}
+                      <button className="btn-icon" onClick={() => deleteDoc(d)} title="삭제">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

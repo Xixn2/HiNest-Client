@@ -6,6 +6,7 @@ import PageHeader from "../components/PageHeader";
 import ProjectCalendar from "../components/ProjectCalendar";
 import ProjectWebhooks from "../components/ProjectWebhooks";
 import ProjectSettingsModal from "../components/ProjectSettingsModal";
+import DocumentsPage from "./DocumentsPage";
 
 type Member = {
   id: string;
@@ -137,6 +138,19 @@ export default function ProjectPage() {
 
         <div className="card">
           <ProjectWebhooks projectId={id} />
+        </div>
+
+        {/* 프로젝트 전용 문서함 — 전체 DocumentsPage 를 projectId 고정 + embed 모드로 임베드.
+            카테고리 칩/공개 범위 탭은 숨기고 해당 프로젝트 네임스페이스 안에서만 돌아간다.
+            프로젝트 멤버가 아닌 사용자는 API 에서 403 을 받으므로 데이터가 보이지 않음. */}
+        <div className="card">
+          <div className="section-head">
+            <div className="title">문서함</div>
+            <div className="text-[12px] text-ink-500">이 프로젝트 멤버만 보고/편집할 수 있습니다.</div>
+          </div>
+          <div className="p-4">
+            <DocumentsPage projectId={id} embedded />
+          </div>
         </div>
 
         <div className="card">
