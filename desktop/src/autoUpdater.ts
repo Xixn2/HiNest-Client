@@ -23,7 +23,33 @@ export function setupAutoUpdater(getWindow: () => BrowserWindow | null) {
   if (initialized) return;
   initialized = true;
 
-  // 개발 모드 / 패키징 안 된 앱에서는 건너뜀 (electron-updater 는 asar 패키지 필요)
+  // IPC 핸들러는 패키징 여부와 무관하게 **항상** 등록.
+  // 렌더러(배너) 가 invoke 했을 때 "handler 없음" 에러가 나지 않도록.
+  // 개발모드에선 { ok:false, error:"unpackaged" } 를 반환해 배너가 폴백 경로(다운로드 페이지)로 진입.
+  ipcMain.handle("hinest:checkForUpdates", async () => {
+    if (!app.isPackaged) return { ok: false, error: "unpackaged" };
+    try {
+      const res = await autoUpdater.checkForUpdates();
+      return { ok: true, version: res?.updateInfo?.version ?? null };
+    } catch (e: any) {
+      return { ok: false, error: String(e?.message ?? e) };
+    }
+  });
+
+  ipcMain.handle("hinest:quitAndInstall", async () => {
+    if (!app.isPackaged) return { ok: false, error: "unpackaged" };
+    try {
+      // isSilent=false, isForceRunAfter=true → 설치 후 자동 재실행.
+      // NSIS/DMG 는 이 호출이 동기적으로 앱을 종료시키므로 반환값이 실제로 전달될 일은 거의 없지만,
+      // 실패 시를 대비해 try/catch.
+      autoUpdater.quitAndInstall(false, true);
+      return { ok: true };
+    } catch (e: any) {
+      return { ok: false, error: String(e?.message ?? e) };
+    }
+  });
+
+  // 개발 모드 / 패키징 안 된 앱에서는 폴링/리스너는 건너뜀 (electron-updater 는 asar 패키지 필요)
   if (!app.isPackaged) return;
 
   autoUpdater.autoDownload = true;
@@ -66,23 +92,4 @@ export function setupAutoUpdater(getWindow: () => BrowserWindow | null) {
   // 창 뜨고 5초 뒤에 첫 체크 (부팅 직후 네트워크 준비 시간 확보)
   setTimeout(check, 5_000);
   setInterval(check, CHECK_INTERVAL_MS);
-
-  // 렌더러에서 수동 체크 / 설치 트리거
-  ipcMain.handle("hinest:checkForUpdates", async () => {
-    try {
-      const res = await autoUpdater.checkForUpdates();
-      return { ok: true, version: res?.updateInfo?.version ?? null };
-    } catch (e: any) {
-      return { ok: false, error: String(e?.message ?? e) };
-    }
-  });
-
-  ipcMain.handle("hinest:quitAndInstall", () => {
-    try {
-      // isSilent=false, isForceRunAfter=true → 설치 후 자동 재실행
-      autoUpdater.quitAndInstall(false, true);
-    } catch (e) {
-      console.warn("[autoUpdater] quitAndInstall failed:", e);
-    }
-  });
 }
