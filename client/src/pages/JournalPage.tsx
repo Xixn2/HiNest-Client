@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, apiSWR } from "../api";
 import PageHeader from "../components/PageHeader";
 import DateTimePicker from "../components/DateTimePicker";
+import { alertAsync } from "../components/ConfirmHost";
 
 type Journal = {
   id: string;
@@ -112,7 +113,7 @@ export default function JournalPage() {
       if (selected?.id === id) setSelected(null);
       setMode("view");
     } catch (e: any) {
-      alert(e?.message ?? "삭제에 실패했어요");
+      alertAsync({ title: "삭제 실패", description: e?.message ?? "삭제에 실패했어요" });
     } finally {
       setRemovingId(null);
       setConfirmRemoveId(null);

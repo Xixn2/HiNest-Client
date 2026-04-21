@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, invalidateCache } from "../api";
+import { confirmAsync } from "./ConfirmHost";
 
 type Role = "OWNER" | "MANAGER" | "MEMBER";
 
@@ -192,7 +193,13 @@ function InfoTab({
   async function doDelete() {
     if (!canDelete) return;
     if (busy) return;
-    if (!confirm(`"${project.name}" 프로젝트를 삭제할까요?\n모든 관련 데이터가 함께 삭제되며 되돌릴 수 없습니다.`)) return;
+    const ok = await confirmAsync({
+      title: "프로젝트 삭제",
+      description: `"${project.name}" 프로젝트를 삭제할까요?\n모든 관련 데이터가 함께 삭제되고 되돌릴 수 없어요.`,
+      tone: "danger",
+      confirmLabel: "삭제",
+    });
+    if (!ok) return;
     setBusy(true);
     setErr(null);
     try {
@@ -345,7 +352,13 @@ function MembersTab({
 
   async function removeMember(userId: string) {
     if (busy) return;
-    if (!confirm("이 멤버를 프로젝트에서 제거할까요?")) return;
+    const ok = await confirmAsync({
+      title: "멤버 제거",
+      description: "이 멤버를 프로젝트에서 제거할까요?",
+      tone: "danger",
+      confirmLabel: "제거",
+    });
+    if (!ok) return;
     setBusy(true);
     setErr(null);
     try {

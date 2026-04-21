@@ -4,6 +4,7 @@ import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
 import MonthPicker from "../components/MonthPicker";
 import DateTimePicker from "../components/DateTimePicker";
+import { confirmAsync, alertAsync } from "../components/ConfirmHost";
 
 type Expense = {
   id: string;
@@ -52,17 +53,20 @@ export default function ExpensePage() {
   const [preview, setPreview] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  async function load() {
+  async function load(aliveRef?: { current: boolean }) {
     const q = new URLSearchParams();
     if (scope === "all") q.set("all", "1");
     q.set("month", month);
     const res = await api<{ expenses: Expense[]; totalAmount: number }>(`/api/expense?${q.toString()}`);
+    if (aliveRef && !aliveRef.current) return;
     setList(res.expenses);
     setTotal(res.totalAmount);
   }
 
   useEffect(() => {
-    load();
+    const aliveRef = { current: true };
+    load(aliveRef);
+    return () => { aliveRef.current = false; };
   }, [scope, month]);
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -71,12 +75,15 @@ export default function ExpensePage() {
     // base64 로 인코딩하면 원본의 ~33% 오버헤드 → 서버 express.json limit 2MB 에 맞추려면
     // 원본을 1.3MB 이하로 제한. 초과하면 서버가 413 을 내던지고 사용자는 무엇이 틀렸는지 모름.
     if (f.size > 1024 * 1024 * 1.3) {
-      alert("영수증은 1.3MB 이하 이미지만 업로드 가능합니다\n(고화질 사진은 미리 크기를 줄여 주세요)");
+      alertAsync({
+        title: "파일 크기 초과",
+        description: "영수증은 1.3MB 이하 이미지만 업로드 가능합니다.\n(고화질 사진은 미리 크기를 줄여 주세요)",
+      });
       if (fileRef.current) fileRef.current.value = "";
       return;
     }
     if (!f.type.startsWith("image/")) {
-      alert("영수증은 이미지 파일만 업로드 가능합니다");
+      alertAsync({ title: "파일 형식 오류", description: "영수증은 이미지 파일만 업로드 가능합니다" });
       if (fileRef.current) fileRef.current.value = "";
       return;
     }
@@ -91,8 +98,14 @@ export default function ExpensePage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (saving) return;
-    if (!form.merchant.trim()) return alert("가맹점 명을 입력해주세요");
-    if (!form.amount || form.amount <= 0) return alert("금액을 입력해주세요");
+    if (!form.merchant.trim()) {
+      await alertAsync({ title: "입력 확인", description: "가맹점 명을 입력해주세요" });
+      return;
+    }
+    if (!form.amount || form.amount <= 0) {
+      await alertAsync({ title: "입력 확인", description: "금액을 입력해주세요" });
+      return;
+    }
     setSaving(true);
     try {
       await api("/api/expense", {
@@ -108,7 +121,7 @@ export default function ExpensePage() {
       if (fileRef.current) fileRef.current.value = "";
       await load();
     } catch (err: any) {
-      alert(err?.message ?? "사용내역 등록에 실패했어요");
+      alertAsync({ title: "등록 실패", description: err?.message ?? "사용내역 등록에 실패했어요" });
     } finally {
       setSaving(false);
     }
@@ -121,7 +134,7 @@ export default function ExpensePage() {
       await api(`/api/expense/${id}`, { method: "PATCH", json: { status } });
       await load();
     } catch (err: any) {
-      alert(err?.message ?? "승인·반려에 실패했어요");
+      alertAsync({ title: "처리 실패", description: err?.message ?? "승인·반려에 실패했어요" });
     } finally {
       setBusyId(null);
     }
@@ -129,13 +142,26 @@ export default function ExpensePage() {
 
   async function remove(id: string) {
     if (busyId) return;
-    if (!confirm("삭제하시겠습니까?")) return;
+    const ok = await confirmAsync({
+      title: "사용내역 삭제",
+      description: "이 사용내역을 삭제할까요? 되돌릴 수 없어요.",
+      tone: "danger",
+      confirmLabel: "삭제",
+    });
+    if (!ok) return;
     setBusyId(id);
+    // 낙관적 제거 — total 도 함께 감소.
+    const prev = list;
+    const prevTotal = total;
+    const target = list.find((x) => x.id === id);
+    setList((xs) => xs.filter((x) => x.id !== id));
+    if (target) setTotal((t) => t - target.amount);
     try {
       await api(`/api/expense/${id}`, { method: "DELETE" });
-      await load();
     } catch (err: any) {
-      alert(err?.message ?? "삭제에 실패했어요");
+      setList(prev);
+      setTotal(prevTotal);
+      alertAsync({ title: "삭제 실패", description: err?.message ?? "삭제에 실패했어요" });
     } finally {
       setBusyId(null);
     }

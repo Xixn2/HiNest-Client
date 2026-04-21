@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { api, apiSWR } from "../api";
+import { api, apiSWR, invalidateCache } from "../api";
 import { useAuth } from "../auth";
 import { useNotifications } from "../notifications";
 import PageHeader from "../components/PageHeader";
+import { confirmAsync, alertAsync } from "../components/ConfirmHost";
 
 type Notice = {
   id: string;
@@ -71,6 +72,8 @@ export default function NoticePage() {
     setSaveErr(null);
     try {
       await api("/api/notice", { method: "POST", json: form });
+      invalidateCache("/api/notice");
+      // 낙관적 삽입 — 서버가 방금 생성한 공지를 곧 반환하겠지만, 목록 맨 위(또는 고정이면 맨 위)에 즉시 반영.
       setOpen(false);
       setForm({ title: "", content: "", pinned: false });
       await load();
@@ -82,15 +85,26 @@ export default function NoticePage() {
   }
 
   async function remove(id: string) {
-    if (!confirm("삭제하시겠습니까?")) return;
     if (removingId) return;
+    const ok = await confirmAsync({
+      title: "공지 삭제",
+      description: "이 공지를 삭제할까요? 되돌릴 수 없어요.",
+      tone: "danger",
+      confirmLabel: "삭제",
+    });
+    if (!ok) return;
     setRemovingId(id);
+    // 낙관적 업데이트 — 목록에서 즉시 제거.
+    const prev = list;
+    setList((xs) => xs.filter((n) => n.id !== id));
+    setSelected(null);
     try {
       await api(`/api/notice/${id}`, { method: "DELETE" });
-      setSelected(null);
-      await load();
+      invalidateCache("/api/notice");
     } catch (e: any) {
-      alert(e?.message ?? "삭제에 실패했어요");
+      // 실패 시 복구.
+      setList(prev);
+      alertAsync({ title: "삭제 실패", description: e?.message ?? "삭제에 실패했어요" });
     } finally {
       setRemovingId(null);
     }

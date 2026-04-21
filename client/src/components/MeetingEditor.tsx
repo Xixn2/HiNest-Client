@@ -12,6 +12,7 @@ import TaskItem from "@tiptap/extension-task-item";
 import { Extension } from "@tiptap/core";
 import { useEffect } from "react";
 import "./MeetingEditor.css";
+import { promptAsync } from "./ConfirmHost";
 
 /** 노션식 글씨 크기(픽셀) — textStyle 의 `data-font-size` 속성으로 직렬화. */
 const FONT_SIZES = [
@@ -254,9 +255,14 @@ function Toolbar({ editor }: { editor: Editor }) {
 
       <ToolBtn
         active={editor.isActive("link")}
-        onClick={() => {
+        onClick={async () => {
           const prev = editor.getAttributes("link").href ?? "";
-          const url = prompt("링크 URL", prev);
+          const url = await promptAsync({
+            title: "링크 URL",
+            placeholder: "https://",
+            defaultValue: prev,
+            confirmLabel: "적용",
+          });
           if (url === null) return;
           if (url === "") editor.chain().focus().unsetLink().run();
           else editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import Logo from "./Logo";
+import { confirmAsync } from "./ConfirmHost";
 import {
   authenticateWithPasskey,
   canUsePasskey,
@@ -398,7 +399,13 @@ function DesktopBiometricPanel({
   }
 
   async function remove(id: string) {
-    if (!confirm("이 기기의 Touch ID 등록을 해제할까요?")) return;
+    const ok = await confirmAsync({
+      title: "Touch ID 해제",
+      description: "이 기기의 Touch ID 등록을 해제할까요?",
+      tone: "danger",
+      confirmLabel: "해제",
+    });
+    if (!ok) return;
     await api(`/api/auth/desktop-biometric/${id}`, { method: "DELETE" });
     reload();
   }
@@ -530,7 +537,13 @@ function PasskeyPanel({
   }
 
   async function remove(id: string) {
-    if (!confirm("이 기기의 패스키를 삭제할까요?")) return;
+    const ok = await confirmAsync({
+      title: "패스키 삭제",
+      description: "이 기기의 패스키를 삭제할까요?",
+      tone: "danger",
+      confirmLabel: "삭제",
+    });
+    if (!ok) return;
     await removePasskey(id);
     reload();
   }

@@ -4,6 +4,7 @@ import { api } from "../api";
 import PageHeader from "../components/PageHeader";
 import { downloadCSV, downloadXLSX, openPrintable, parseSheet, type TableColumn } from "../lib/exportTable";
 import DatePicker from "../components/DatePicker";
+import { confirmAsync, alertAsync, promptAsync } from "../components/ConfirmHost";
 
 type UserRow = {
   id: string;
@@ -129,7 +130,7 @@ async function handleImport(
   try {
     const raw = await parseSheet(file);
     if (raw.length === 0) {
-      alert("빈 파일이거나 읽을 수 있는 행이 없습니다.");
+      await alertAsync({ title: "업로드 실패", description: "빈 파일이거나 읽을 수 있는 행이 없어요." });
       return;
     }
     const rows = raw.map((r) => {
@@ -140,17 +141,22 @@ async function handleImport(
       }
       return mapped;
     });
-    if (!confirm(`${rows.length}행을 업로드합니다. 기존 유저의 HR 정보가 갱신됩니다. 계속할까요?`)) return;
+    const ok = await confirmAsync({
+      title: "HR 일괄 업로드",
+      description: `${rows.length}행을 업로드할게요. 기존 유저의 HR 정보가 갱신돼요. 계속할까요?`,
+      confirmLabel: "업로드",
+    });
+    if (!ok) return;
     const r = await api<{ updated: number; skipped: number; errors: string[] }>(
       "/api/admin/users/import",
       { method: "POST", json: { rows } }
     );
     let msg = `업데이트 ${r.updated}건 · 스킵 ${r.skipped}건`;
     if (r.errors?.length) msg += `\n\n${r.errors.join("\n")}`;
-    alert(msg);
+    await alertAsync({ title: "업로드 완료", description: msg });
     await reload();
   } catch (err: any) {
-    alert(`업로드 실패: ${err?.message ?? err}`);
+    alertAsync({ title: "업로드 실패", description: err?.message ?? String(err) });
   }
 }
 type Invite = {
@@ -334,9 +340,12 @@ function UsersTab({
       // 역할 변경은 총관리자 step-up 세션이 필요함. 안내 + 이동 유도.
       if (msg.includes("비밀번호 재확인") || msg.includes("SUPER_STEPUP")) {
         setUpdateErr("역할 변경은 총관리자 세션이 필요합니다. /super-admin 에서 비밀번호 재확인 후 다시 시도해주세요.");
-        if (confirm("역할 변경은 총관리자 재인증이 필요합니다.\n지금 총관리자 페이지로 이동할까요?")) {
-          nav("/super-admin");
-        }
+        const ok = await confirmAsync({
+          title: "총관리자 재인증",
+          description: "역할 변경은 총관리자 재인증이 필요해요.\n지금 총관리자 페이지로 이동할까요?",
+          confirmLabel: "이동",
+        });
+        if (ok) nav("/super-admin");
       } else {
         setUpdateErr(msg);
       }
@@ -345,7 +354,13 @@ function UsersTab({
     }
   }
   async function remove(id: string) {
-    if (!confirm("정말 삭제할까요? 모든 관련 데이터가 삭제됩니다.")) return;
+    const ok = await confirmAsync({
+      title: "구성원 삭제",
+      description: "정말 삭제할까요? 모든 관련 데이터가 삭제돼요.",
+      tone: "danger",
+      confirmLabel: "삭제",
+    });
+    if (!ok) return;
     try {
       await api(`/api/admin/users/${id}`, { method: "DELETE" });
       reload();
@@ -658,7 +673,7 @@ function UserDetailEditModal({
       }
       onSaved();
     } catch (e: any) {
-      alert(`저장 실패: ${e?.message ?? e}`);
+      alertAsync({ title: "저장 실패", description: e?.message ?? String(e) });
     } finally {
       setSaving(false);
     }
@@ -1254,7 +1269,13 @@ function InvitesTab({
   }
 
   async function remove(id: string) {
-    if (!confirm("초대키를 삭제할까요?")) return;
+    const ok = await confirmAsync({
+      title: "초대키 삭제",
+      description: "이 초대키를 삭제할까요?",
+      tone: "danger",
+      confirmLabel: "삭제",
+    });
+    if (!ok) return;
     await api(`/api/admin/invites/${id}`, { method: "DELETE" });
     reload();
   }
@@ -1421,20 +1442,33 @@ function TeamsTab({ teams, reload }: { teams: Team[]; reload: () => void }) {
       await api("/api/admin/teams", { method: "POST", json: { name: name.trim() } });
       setName("");
       reload();
-    } catch (e: any) { alert(e.message); }
+    } catch (e: any) { alertAsync({ title: "생성 실패", description: e.message }); }
   }
   async function rename(t: Team) {
-    const n = prompt("새 이름", t.name);
-    if (!n || n === t.name) return;
+    const n = await promptAsync({
+      title: "팀 이름 변경",
+      placeholder: "새 이름",
+      defaultValue: t.name,
+      confirmLabel: "변경",
+    });
+    if (!n || n.trim() === t.name) return;
     try {
       await api(`/api/admin/teams/${t.id}`, { method: "PATCH", json: { name: n.trim() } });
       reload();
-    } catch (e: any) { alert(e.message); }
+    } catch (e: any) { alertAsync({ title: "변경 실패", description: e.message }); }
   }
   async function remove(t: Team) {
-    if (!confirm(`'${t.name}' 팀을 삭제할까요?`)) return;
-    await api(`/api/admin/teams/${t.id}`, { method: "DELETE" });
-    reload();
+    const ok = await confirmAsync({
+      title: "팀 삭제",
+      description: `'${t.name}' 팀을 삭제할까요?`,
+      tone: "danger",
+      confirmLabel: "삭제",
+    });
+    if (!ok) return;
+    try {
+      await api(`/api/admin/teams/${t.id}`, { method: "DELETE" });
+      reload();
+    } catch (e: any) { alertAsync({ title: "삭제 실패", description: e.message }); }
   }
 
   return (
@@ -1495,16 +1529,24 @@ function PositionsTab({ positions, reload }: { positions: Position[]; reload: ()
       await api("/api/admin/positions", { method: "POST", json: { name: form.name.trim(), rank: Number(form.rank) || 0 } });
       setForm({ name: "", rank: 0 });
       reload();
-    } catch (e: any) { alert(e.message); }
+    } catch (e: any) { alertAsync({ title: "생성 실패", description: e.message }); }
   }
   async function update(p: Position, data: any) {
     await api(`/api/admin/positions/${p.id}`, { method: "PATCH", json: data });
     reload();
   }
   async function remove(p: Position) {
-    if (!confirm(`'${p.name}' 직급을 삭제할까요?`)) return;
-    await api(`/api/admin/positions/${p.id}`, { method: "DELETE" });
-    reload();
+    const ok = await confirmAsync({
+      title: "직급 삭제",
+      description: `'${p.name}' 직급을 삭제할까요?`,
+      tone: "danger",
+      confirmLabel: "삭제",
+    });
+    if (!ok) return;
+    try {
+      await api(`/api/admin/positions/${p.id}`, { method: "DELETE" });
+      reload();
+    } catch (e: any) { alertAsync({ title: "삭제 실패", description: e.message }); }
   }
 
   return (

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import PageHeader from "../components/PageHeader";
+import { confirmAsync, alertAsync, promptAsync } from "../components/ConfirmHost";
 
 type Folder = {
   id: string;
@@ -184,37 +185,51 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
   }
 
   async function renameFolder(f: Folder) {
-    const name = prompt("새 이름", f.name);
-    if (!name?.trim() || name === f.name) return;
     if (busyFolderId) return;
+    const name = await promptAsync({
+      title: "폴더 이름 변경",
+      placeholder: "새 폴더 이름",
+      defaultValue: f.name,
+      confirmLabel: "변경",
+    });
+    if (!name?.trim() || name === f.name) return;
     setBusyFolderId(f.id);
     try {
       await api(`/api/document/folders/${f.id}`, { method: "PATCH", json: { name: name.trim() } });
       await load();
     } catch (e: any) {
-      alert(e?.message ?? "이름 변경에 실패했어요");
+      alertAsync({ title: "변경 실패", description: e?.message ?? "이름 변경에 실패했어요" });
     } finally {
       setBusyFolderId(null);
     }
   }
 
   async function deleteFolder(f: Folder) {
-    if (!confirm(`'${f.name}' 폴더를 삭제할까요? 하위 폴더·문서가 모두 삭제됩니다.`)) return;
     if (busyFolderId) return;
+    const ok = await confirmAsync({
+      title: "폴더 삭제",
+      description: `'${f.name}' 폴더를 삭제할까요? 하위 폴더·문서가 모두 삭제돼요.`,
+      tone: "danger",
+      confirmLabel: "삭제",
+    });
+    if (!ok) return;
     setBusyFolderId(f.id);
     try {
       await api(`/api/document/folders/${f.id}`, { method: "DELETE" });
       if (currentFolder === f.id) setCurrentFolder("root");
       else await load();
     } catch (e: any) {
-      alert(e?.message ?? "폴더 삭제에 실패했어요");
+      alertAsync({ title: "삭제 실패", description: e?.message ?? "폴더 삭제에 실패했어요" });
     } finally {
       setBusyFolderId(null);
     }
   }
 
   async function uploadFile(file: File) {
-    if (file.size > 500 * 1024 * 1024) return alert("파일은 500MB 이하만 업로드 가능합니다");
+    if (file.size > 500 * 1024 * 1024) {
+      await alertAsync({ title: "파일 크기 초과", description: "파일은 500MB 이하만 업로드 가능해요" });
+      return;
+    }
     setUploading(true);
     try {
       const form = new FormData();
@@ -231,8 +246,12 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
         fileType: json.type,
         fileSize: json.size,
       }));
-    } catch (e: any) { alert(e.message); }
-    finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
+    } catch (e: any) {
+      alertAsync({ title: "업로드 실패", description: e.message });
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
   }
 
   async function createDoc(e: React.FormEvent) {
@@ -278,14 +297,23 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
   }
 
   async function deleteDoc(d: Doc) {
-    if (!confirm(`'${d.title}' 을(를) 삭제할까요?`)) return;
     if (busyDocId) return;
+    const ok = await confirmAsync({
+      title: "문서 삭제",
+      description: `'${d.title}' 을(를) 삭제할까요? 되돌릴 수 없어요.`,
+      tone: "danger",
+      confirmLabel: "삭제",
+    });
+    if (!ok) return;
     setBusyDocId(d.id);
+    // 낙관적 제거.
+    const prev = docs;
+    setDocs((xs) => xs.filter((x) => x.id !== d.id));
     try {
       await api(`/api/document/${d.id}`, { method: "DELETE" });
-      await load();
     } catch (e: any) {
-      alert(e?.message ?? "삭제에 실패했어요");
+      setDocs(prev);
+      alertAsync({ title: "삭제 실패", description: e?.message ?? "삭제에 실패했어요" });
     } finally {
       setBusyDocId(null);
     }
@@ -338,7 +366,7 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
     try {
       await api(`/api/document/${docId}`, { method: "PATCH", json: { folderId } });
     } catch (e: any) {
-      alert(e?.message ?? "이동에 실패했어요");
+      alertAsync({ title: "이동 실패", description: e?.message ?? "이동에 실패했어요" });
       load(); // 실패 시 상태 복구
     }
   }

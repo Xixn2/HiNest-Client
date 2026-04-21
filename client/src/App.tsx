@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth";
 import UpdateBanner from "./components/UpdateBanner";
 import DesktopUpdateBanner from "./components/DesktopUpdateBanner";
+import ConfirmHost from "./components/ConfirmHost";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import DownloadPage from "./pages/DownloadPage";
@@ -64,6 +65,7 @@ export default function App() {
     <>
     <UpdateBanner />
     <DesktopUpdateBanner />
+    <ConfirmHost />
     <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
