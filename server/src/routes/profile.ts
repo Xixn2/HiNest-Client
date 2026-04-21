@@ -10,17 +10,25 @@ router.use(requireAuth);
 const schema = z.object({
   name: z.string().min(1).optional(),
   avatarColor: z.string().regex(/^#([0-9A-Fa-f]{6})$/).optional(),
+  // 업로드 후 받은 /uploads/... 경로. "" 또는 null 을 보내면 삭제로 처리해 색상 fallback.
+  avatarUrl: z.string().nullable().optional(),
 });
 
 router.patch("/", async (req, res) => {
   const u = (req as any).user;
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid input" });
-  const d = parsed.data;
+  const d: any = { ...parsed.data };
+  // 빈 문자열은 명시적 제거로 해석
+  if (d.avatarUrl === "") d.avatarUrl = null;
+  // 업로드된 경로 외 외부 URL 은 막아둔다 (프로필 이미지 프록시 우회/SSRF 방지).
+  if (typeof d.avatarUrl === "string" && !d.avatarUrl.startsWith("/uploads/")) {
+    return res.status(400).json({ error: "유효하지 않은 이미지 경로입니다." });
+  }
   const user = await prisma.user.update({
     where: { id: u.id },
     data: d,
-    select: { id: true, name: true, email: true, avatarColor: true, team: true, position: true, role: true },
+    select: { id: true, name: true, email: true, avatarColor: true, avatarUrl: true, team: true, position: true, role: true },
   });
   await writeLog(u.id, "PROFILE_UPDATE", u.id, JSON.stringify(d));
   res.json({ user });

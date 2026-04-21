@@ -73,7 +73,7 @@ router.get("/", async (req, res) => {
       authorId: true,
       createdAt: true,
       updatedAt: true,
-      author: { select: { id: true, name: true, avatarColor: true } },
+      author: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } },
       project: { select: { id: true, name: true, color: true } },
     },
   });
@@ -104,10 +104,10 @@ router.get("/:id", async (req, res) => {
   const meeting = await prisma.meeting.findUnique({
     where: { id: req.params.id },
     include: {
-      author: { select: { id: true, name: true, avatarColor: true } },
+      author: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } },
       project: { select: { id: true, name: true, color: true } },
       viewers: {
-        include: { user: { select: { id: true, name: true, team: true, position: true, avatarColor: true } } },
+        include: { user: { select: { id: true, name: true, team: true, position: true, avatarColor: true, avatarUrl: true } } },
       },
     },
   });

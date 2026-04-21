@@ -79,7 +79,7 @@ router.get("/", async (req, res) => {
   const events = await prisma.event.findMany({
     where,
     orderBy: { startAt: "asc" },
-    include: { author: { select: { name: true, avatarColor: true } } },
+    include: { author: { select: { name: true, avatarColor: true, avatarUrl: true } } },
   });
   res.json({ events });
 });

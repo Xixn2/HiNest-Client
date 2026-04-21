@@ -125,12 +125,20 @@ function AppLayoutInner() {
         <div className="border-t border-ink-150 p-2">
           <div className="flex items-center gap-2.5 px-2 py-2 rounded-md hover:bg-ink-50">
             <NavLink to="/profile" className="flex items-center gap-2.5 flex-1 min-w-0" title="프로필">
-              <div
-                className="avatar avatar-sm"
-                style={{ background: user?.avatarColor ?? "#3B5CF0" }}
-              >
-                {user?.name?.[0] ?? "?"}
-              </div>
+              {user?.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt={user.name ?? ""}
+                  className="avatar avatar-sm object-cover"
+                />
+              ) : (
+                <div
+                  className="avatar avatar-sm"
+                  style={{ background: user?.avatarColor ?? "#3B5CF0" }}
+                >
+                  {user?.name?.[0] ?? "?"}
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <div className="text-[13px] font-semibold text-ink-900 truncate">{user?.name}</div>
                 <div className="text-[11px] text-ink-500 truncate">{user?.email}</div>

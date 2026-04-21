@@ -24,6 +24,8 @@ model User {
   team         String?
   active       Boolean  @default(true)
   avatarColor  String   @default("#36D7B7")
+  /// 업로드된 프로필 이미지 URL. null 이면 avatarColor + 이니셜 fallback.
+  avatarUrl    String?
   // HR 상세 (엑셀 업/다운로드용) — 모두 선택값.
   hrCode             String?  // HR번호 (daiso_worker46 등)
   affiliation        String?  // 소속 (예: 다이소)

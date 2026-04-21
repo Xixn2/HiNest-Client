@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
@@ -23,6 +23,11 @@ export default function ProfilePage() {
   const { user, refresh } = useAuth();
   const [name, setName] = useState(user?.name ?? "");
   const [color, setColor] = useState(user?.avatarColor ?? "#3D54C4");
+  // null = 색상 이니셜 사용. 문자열 = 업로드된 /uploads/... 경로.
+  // 서버에 저장될 때까지 로컬 state 에서 임시 보관해 미리보기 즉시 반영.
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(user?.avatarUrl ?? null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const [savedMsg, setSavedMsg] = useState("");
   const [err, setErr] = useState("");
   const [pwForm, setPwForm] = useState({ current: "", next: "", confirm: "" });
@@ -33,6 +38,7 @@ export default function ProfilePage() {
     if (user) {
       setName(user.name);
       setColor(user.avatarColor ?? "#3D54C4");
+      setAvatarUrl(user.avatarUrl ?? null);
     }
   }, [user?.id]);
 
@@ -40,13 +46,55 @@ export default function ProfilePage() {
     e.preventDefault();
     setErr(""); setSavedMsg("");
     try {
-      await api("/api/profile", { method: "PATCH", json: { name, avatarColor: color } });
+      // avatarUrl 은 명시적으로 항상 함께 전송 — 이미지 제거도 PATCH 로 반영해야 하니까.
+      await api("/api/profile", {
+        method: "PATCH",
+        json: { name, avatarColor: color, avatarUrl: avatarUrl ?? "" },
+      });
       await refresh();
       setSavedMsg("저장되었습니다");
       setTimeout(() => setSavedMsg(""), 2000);
     } catch (e: any) {
       setErr(e.message ?? "저장 실패");
     }
+  }
+
+  async function onPickAvatar(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // 같은 파일 다시 올릴 수 있게 리셋
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setErr("이미지 파일만 업로드할 수 있어요.");
+      return;
+    }
+    // 프로필 이미지는 작게 제한 — 큰 파일 올려봐야 원형 아바타로 작게만 쓰임.
+    if (file.size > 10 * 1024 * 1024) {
+      setErr("프로필 이미지는 10MB 이하만 업로드할 수 있어요.");
+      return;
+    }
+    setErr("");
+    setUploadingAvatar(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const r = await fetch("/api/upload", { method: "POST", body: form, credentials: "include" });
+      if (!r.ok) {
+        const msg = await r.json().catch(() => ({}));
+        throw new Error((msg as any)?.error ?? "업로드 실패");
+      }
+      const data = await r.json();
+      const url: string | undefined = data?.url;
+      if (!url) throw new Error("업로드 응답이 올바르지 않습니다.");
+      setAvatarUrl(url);
+    } catch (e: any) {
+      setErr(e.message ?? "업로드 실패");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+
+  function clearAvatar() {
+    setAvatarUrl(null);
   }
 
   async function changePw(e: React.FormEvent) {
@@ -82,12 +130,20 @@ export default function ProfilePage() {
         <div className="col-span-1">
           <div className="panel p-6 sticky top-4">
             <div className="flex items-center gap-3">
-              <div
-                className="w-16 h-16 rounded-full grid place-items-center text-white text-[22px] font-extrabold"
-                style={{ background: color, letterSpacing: "-0.03em" }}
-              >
-                {name[0] ?? "?"}
-              </div>
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt={name}
+                  className="w-16 h-16 rounded-full object-cover border border-ink-150"
+                />
+              ) : (
+                <div
+                  className="w-16 h-16 rounded-full grid place-items-center text-white text-[22px] font-extrabold"
+                  style={{ background: color, letterSpacing: "-0.03em" }}
+                >
+                  {name[0] ?? "?"}
+                </div>
+              )}
               <div className="min-w-0">
                 <div className="text-[18px] font-extrabold text-ink-900 tracking-tight truncate">{name}</div>
                 <div className="text-[12px] text-ink-500 truncate">{user.email}</div>
@@ -110,6 +166,50 @@ export default function ProfilePage() {
               <div>
                 <label className="field-label">이름</label>
                 <input className="input" value={name} onChange={(e) => setName(e.target.value)} required />
+              </div>
+              <div>
+                <label className="field-label">프로필 이미지</label>
+                <div className="flex items-center gap-3">
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt="프로필"
+                      className="w-14 h-14 rounded-full object-cover border border-ink-150"
+                    />
+                  ) : (
+                    <div
+                      className="w-14 h-14 rounded-full grid place-items-center text-white text-[18px] font-extrabold"
+                      style={{ background: color, letterSpacing: "-0.03em" }}
+                    >
+                      {name[0] ?? "?"}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      onClick={() => avatarInputRef.current?.click()}
+                      disabled={uploadingAvatar}
+                    >
+                      {uploadingAvatar ? "업로드 중…" : (avatarUrl ? "이미지 변경" : "이미지 업로드")}
+                    </button>
+                    {avatarUrl && (
+                      <button type="button" className="btn-ghost" onClick={clearAvatar} disabled={uploadingAvatar}>
+                        이미지 제거
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={onPickAvatar}
+                  />
+                </div>
+                <div className="text-[11px] text-ink-500 mt-1.5">
+                  이미지가 없을 땐 아래 아바타 색과 이름 첫 글자로 표시됩니다. (10MB 이하)
+                </div>
               </div>
               <div>
                 <label className="field-label">아바타 색</label>
