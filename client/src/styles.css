@@ -222,6 +222,18 @@ textarea.input {
   height: auto;
   line-height: 1.55;
 }
+/* iOS Safari 는 네이티브 date/time/datetime-local 입력에 내장 min-width 를
+   강제해서 w-full 지정에도 컨테이너 밖으로 튀어나올 수 있음. 강제로 shrink 허용 */
+input.input[type="date"],
+input.input[type="time"],
+input.input[type="datetime-local"],
+input.input[type="month"],
+input.input[type="week"] {
+  min-width: 0;
+  max-width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+}
 select.input {
   padding-right: 30px;
   appearance: none;

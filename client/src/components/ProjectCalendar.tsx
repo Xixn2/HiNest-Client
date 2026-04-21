@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, apiSWR } from "../api";
 import { useAuth } from "../auth";
+import DateTimePicker from "./DateTimePicker";
 
 type ProjectEvent = {
   id: string;
@@ -366,11 +367,18 @@ export default function ProjectCalendar({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
                   <label className="label">시작</label>
-                  <input type="datetime-local" className="input" value={form.startAt} onChange={(e) => setForm({ ...form, startAt: e.target.value })} required />
+                  <DateTimePicker
+                    value={form.startAt}
+                    onChange={(v) => setForm({ ...form, startAt: v })}
+                  />
                 </div>
                 <div>
                   <label className="label">종료</label>
-                  <input type="datetime-local" className="input" value={form.endAt} onChange={(e) => setForm({ ...form, endAt: e.target.value })} required />
+                  <DateTimePicker
+                    value={form.endAt}
+                    onChange={(v) => setForm({ ...form, endAt: v })}
+                    min={form.startAt}
+                  />
                 </div>
               </div>
               <label className="inline-flex items-center gap-2 text-sm text-slate-600">
