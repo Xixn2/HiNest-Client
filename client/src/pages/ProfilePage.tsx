@@ -94,10 +94,10 @@ export default function ProfilePage() {
               </div>
             </div>
             <div className="mt-4 pt-4 border-t border-ink-100 grid grid-cols-2 gap-3">
+              <InfoField label="사번" value={user.employeeNo ?? "—"} mono />
               <InfoField label="직급" value={user.position ?? "—"} />
               <InfoField label="팀" value={user.team ?? "—"} />
               <InfoField label="권한" value={user.role} />
-              <InfoField label="상태" value="활성" tone="green" />
             </div>
           </div>
         </div>
@@ -131,10 +131,17 @@ export default function ProfilePage() {
                   ))}
                 </div>
               </div>
-              <div>
-                <label className="field-label">이메일 / 사내 ID</label>
-                <input className="input" value={user.email} disabled />
-                <div className="text-[11px] text-ink-500 mt-1">이메일은 관리자만 변경할 수 있습니다.</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="field-label">이메일</label>
+                  <input className="input" value={user.email} disabled />
+                  <div className="text-[11px] text-ink-500 mt-1">이메일은 관리자만 변경할 수 있습니다.</div>
+                </div>
+                <div>
+                  <label className="field-label">사번</label>
+                  <input className="input font-mono" value={user.employeeNo ?? ""} disabled placeholder="—" />
+                  <div className="text-[11px] text-ink-500 mt-1">가입 시 자동으로 부여됩니다.</div>
+                </div>
               </div>
               {err && <InlineAlert tone="error">{err}</InlineAlert>}
               {savedMsg && <InlineAlert tone="success">{savedMsg}</InlineAlert>}
@@ -412,11 +419,11 @@ function SwatchSystem() {
   );
 }
 
-function InfoField({ label, value, tone }: { label: string; value: string; tone?: "green" }) {
+function InfoField({ label, value, tone, mono }: { label: string; value: string; tone?: "green"; mono?: boolean }) {
   return (
     <div>
       <div className="text-[11px] font-bold text-ink-500 uppercase tracking-[0.06em]">{label}</div>
-      <div className={`text-[13px] font-semibold mt-0.5 ${tone === "green" ? "text-emerald-600" : "text-ink-900"}`}>{value}</div>
+      <div className={`text-[13px] font-semibold mt-0.5 ${tone === "green" ? "text-emerald-600" : "text-ink-900"} ${mono ? "font-mono tracking-[0.02em]" : ""}`}>{value}</div>
     </div>
   );
 }

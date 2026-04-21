@@ -958,7 +958,7 @@ function SelectCell({
       <td className="p-0">
         <div className="flex items-center gap-1 px-1">
           <input
-            className="w-full min-w-0 bg-transparent border-0 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-400 rounded text-[12px] px-1 py-1.5"
+            className="w-full min-w-0 bg-transparent border-0 focus:bg-[color:var(--c-surface)] text-[color:var(--c-text)] focus:outline-none focus:ring-1 focus:ring-brand-400 rounded text-[12px] px-1 py-1.5"
             value={custom}
             placeholder="직접 입력"
             autoFocus
@@ -984,7 +984,7 @@ function SelectCell({
   return (
     <td className="p-0">
       <select
-        className="w-full min-w-0 bg-transparent border-0 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-400 rounded text-[12px] px-1 py-1.5"
+        className="w-full min-w-0 bg-transparent border-0 focus:bg-[color:var(--c-surface)] text-[color:var(--c-text)] focus:outline-none focus:ring-1 focus:ring-brand-400 rounded text-[12px] px-1 py-1.5"
         value={raw}
         onChange={(e) => onSelectChange(e.target.value)}
       >
@@ -1019,7 +1019,7 @@ function DetailCell({
       <input
         type={type ?? "text"}
         // padding 을 최소화해 좁은 컬럼에서도 10자 날짜가 잘리지 않도록.
-        className="w-full min-w-0 bg-transparent border-0 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-400 rounded text-[12px] px-1 py-1.5 tabular"
+        className="w-full min-w-0 bg-transparent border-0 focus:bg-[color:var(--c-surface)] text-[color:var(--c-text)] focus:outline-none focus:ring-1 focus:ring-brand-400 rounded text-[12px] px-1 py-1.5 tabular"
         value={v}
         placeholder={placeholder}
         onChange={(e) => setV(e.target.value)}

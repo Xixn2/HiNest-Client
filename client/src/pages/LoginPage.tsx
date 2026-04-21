@@ -42,13 +42,14 @@ export default function LoginPage() {
 
           <form onSubmit={submit} className="space-y-3">
             <div>
-              <label className="field-label">이메일 또는 사내 ID</label>
+              <label className="field-label">이메일</label>
               <input
                 className="input"
-                type="text"
+                type="email"
                 placeholder="name@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
                 required
               />
             </div>

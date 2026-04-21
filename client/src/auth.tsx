@@ -10,6 +10,7 @@ export type User = {
   position?: string | null;
   avatarColor?: string;
   superAdmin?: boolean;
+  employeeNo?: string | null;
   presenceStatus?: string | null;
   presenceMessage?: string | null;
   presenceUpdatedAt?: string | null;
