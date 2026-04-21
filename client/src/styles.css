@@ -194,14 +194,17 @@ html.dark .panel {
     transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
   }
   .input::placeholder { color: var(--c-text-muted); font-weight: 500; }
-  .input:hover { background: var(--c-border); }
+  /* background shorthand 를 쓰면 background-image / repeat / position 이
+     initial 로 리셋돼서 <select> 의 chevron SVG 가 타일링되는 버그 발생.
+     background-color 로만 변경해서 chevron 배경을 유지. */
+  .input:hover { background-color: var(--c-border); }
   .input:focus {
-    background: var(--c-surface);
+    background-color: var(--c-surface);
     border-color: var(--c-brand);
     box-shadow: 0 0 0 3px var(--c-brand-soft);
   }
   .input:disabled {
-    background: var(--c-surface-2);
+    background-color: var(--c-surface-2);
     color: var(--c-text-muted);
     cursor: not-allowed;
   }
@@ -404,9 +407,9 @@ table.pro.pro-grid tbody td:last-child {
   transition: background .15s ease, box-shadow .15s ease;
 }
 .filter-input::placeholder { color: var(--c-text-muted); font-weight: 500; }
-.filter-input:hover { background: var(--c-border); }
+.filter-input:hover { background-color: var(--c-border); }
 .filter-input:focus {
-  background: var(--c-surface);
+  background-color: var(--c-surface);
   box-shadow: 0 0 0 2px var(--c-brand-soft), inset 0 0 0 1px var(--c-brand);
 }
 select.filter-input {
