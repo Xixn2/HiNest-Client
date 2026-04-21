@@ -623,6 +623,74 @@ html.dark .bg-sky-50     { background: rgba(14,165,233,.12) !important; }
 html.dark .text-sky-600, html.dark .text-sky-700 { color: #7DD3FC !important; }
 
 html.dark .bg-slate-900\/40 { background: rgba(0,0,0,.7) !important; }
+html.dark .bg-slate-900\/70 { background: rgba(0,0,0,.82) !important; }
+
+/* ============================================================ */
+/*       Tailwind slate/white/gray → 다크 토큰 전역 매핑         */
+/*                                                               */
+/*  여러 페이지(프로젝트/공지/업무일지/근태/캘린더 등)에서        */
+/*  하드코딩된 bg-white, bg-slate-*, text-slate-*, border-slate-* */
+/*  가 다크 모드에서 튀어 보이는 문제를 전역 오버라이드로 해결.   */
+/*  라이트 모드는 원본 색을 유지하고, 다크에서만 semantic 변수로   */
+/*  리매핑한다.                                                   */
+/* ============================================================ */
+
+/* Backgrounds — 다크에서 표면 토큰으로 */
+html.dark .bg-white          { background-color: var(--c-surface) !important; }
+html.dark .bg-slate-50       { background-color: var(--c-surface-2) !important; }
+html.dark .bg-slate-50\/40   { background-color: var(--c-surface-2) !important; opacity: 1; }
+html.dark .bg-slate-50\/50   { background-color: var(--c-surface-2) !important; }
+html.dark .bg-slate-50\/70   { background-color: var(--c-surface-2) !important; }
+html.dark .bg-slate-100      { background-color: var(--c-surface-3) !important; }
+html.dark .bg-slate-200      { background-color: var(--c-border) !important; }
+html.dark .bg-gray-50        { background-color: var(--c-surface-2) !important; }
+html.dark .bg-gray-100       { background-color: var(--c-surface-3) !important; }
+html.dark .bg-gray-200       { background-color: var(--c-border) !important; }
+
+/* Text */
+html.dark .text-black        { color: var(--c-text) !important; }
+html.dark .text-slate-900    { color: var(--c-text) !important; }
+html.dark .text-slate-800    { color: var(--c-text) !important; }
+html.dark .text-slate-700    { color: var(--c-text-2) !important; }
+html.dark .text-slate-600    { color: var(--c-text-2) !important; }
+html.dark .text-slate-500    { color: var(--c-text-3) !important; }
+html.dark .text-slate-400    { color: var(--c-text-muted) !important; }
+html.dark .text-slate-300    { color: var(--c-text-muted) !important; }
+html.dark .text-gray-900     { color: var(--c-text) !important; }
+html.dark .text-gray-800     { color: var(--c-text) !important; }
+html.dark .text-gray-700     { color: var(--c-text-2) !important; }
+html.dark .text-gray-600     { color: var(--c-text-2) !important; }
+html.dark .text-gray-500     { color: var(--c-text-3) !important; }
+html.dark .text-gray-400     { color: var(--c-text-muted) !important; }
+
+/* Borders / dividers */
+html.dark .border-slate-100  { border-color: var(--c-border) !important; }
+html.dark .border-slate-200  { border-color: var(--c-border-strong) !important; }
+html.dark .border-slate-300  { border-color: var(--c-border-strong) !important; }
+html.dark .border-gray-100   { border-color: var(--c-border) !important; }
+html.dark .border-gray-200   { border-color: var(--c-border-strong) !important; }
+html.dark .border-gray-300   { border-color: var(--c-border-strong) !important; }
+html.dark .divide-slate-100 > * + * { border-color: var(--c-border) !important; }
+html.dark .divide-slate-200 > * + * { border-color: var(--c-border-strong) !important; }
+html.dark .divide-gray-100 > * + *  { border-color: var(--c-border) !important; }
+html.dark .divide-gray-200 > * + *  { border-color: var(--c-border-strong) !important; }
+
+/* Hover variants */
+html.dark .hover\:bg-white:hover      { background-color: var(--c-surface-2) !important; }
+html.dark .hover\:bg-slate-50:hover   { background-color: var(--c-surface-2) !important; }
+html.dark .hover\:bg-slate-100:hover  { background-color: var(--c-surface-3) !important; }
+html.dark .hover\:bg-slate-200:hover  { background-color: var(--c-border) !important; }
+html.dark .hover\:bg-gray-50:hover    { background-color: var(--c-surface-2) !important; }
+html.dark .hover\:bg-gray-100:hover   { background-color: var(--c-surface-3) !important; }
+html.dark .hover\:border-slate-200:hover { border-color: var(--c-border-strong) !important; }
+html.dark .hover\:border-slate-300:hover { border-color: var(--c-text-muted) !important; }
+html.dark .hover\:text-slate-900:hover { color: var(--c-text) !important; }
+html.dark .hover\:text-slate-700:hover { color: var(--c-text-2) !important; }
+
+/* Placeholder */
+html.dark .placeholder-slate-400::placeholder { color: var(--c-text-muted) !important; }
+html.dark .placeholder-slate-500::placeholder { color: var(--c-text-3) !important; }
+html.dark .placeholder-gray-400::placeholder  { color: var(--c-text-muted) !important; }
 
 /* 그라디언트 파스텔 → 다크에선 약하게 */
 html.dark .bg-gradient-to-r.from-brand-50,
