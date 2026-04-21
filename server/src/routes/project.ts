@@ -137,24 +137,38 @@ router.get("/:id/events", async (req, res) => {
     // 구간 겹침: startAt <= to AND endAt >= from
     where.AND = [{ startAt: { lte: to } }, { endAt: { gte: from } }];
   }
+  // take 상한 — 한 달 이벤트가 수천 건씩 쌓인 프로젝트에서 달력이 응답을 못 받아 비는 현상 방지.
   const events = await prisma.projectEvent.findMany({
     where,
     orderBy: { startAt: "asc" },
+    take: 2000,
   });
   res.json({ events });
 });
 
-const eventSchema = z.object({
+// PATCH 에서 .partial() 을 쓸 수 있도록 base 는 ZodObject 로 유지하고, refine 은 별도 변형만 export.
+const eventSchemaBase = z.object({
   title: z.string().min(1).max(120),
   description: z.string().max(1000).optional().nullable(),
   startAt: z.string().min(1),
   endAt: z.string().min(1),
   allDay: z.boolean().optional(),
   color: z.string().max(16).optional(),
-  assigneeIds: z.array(z.string()).optional(),
+  // 담당자 수 상한 — 한 이벤트에 50명 이상은 현실적으로 없고, 지나치면 assigneeIds
+  // 콤마 직렬화가 너무 길어져 DB 필드 / 목록 렌더링이 무거워짐.
+  assigneeIds: z.array(z.string().max(64)).max(50).optional(),
   // 완료 토글 — 전체 수정 모달에서는 안 쓰이지만 PATCH 에서 같이 보낼 수 있게 허용.
   completed: z.boolean().optional(),
 });
+const eventSchema = eventSchemaBase.refine(
+  (d) => new Date(d.endAt).getTime() >= new Date(d.startAt).getTime(),
+  { message: "종료 시각이 시작 시각보다 빠릅니다", path: ["endAt"] },
+);
+// PATCH 는 일부 필드만 올 수 있으므로 둘 다 있을 때만 순서 검증.
+const eventPatchSchema = eventSchemaBase.partial().refine(
+  (d) => !d.startAt || !d.endAt || new Date(d.endAt).getTime() >= new Date(d.startAt).getTime(),
+  { message: "종료 시각이 시작 시각보다 빠릅니다", path: ["endAt"] },
+);
 
 /** 담당자 userId 들이 모두 해당 프로젝트 멤버인지 검증하고 콤마 문자열로 직렬화. */
 async function normalizeAssignees(projectId: string, ids: string[] | undefined): Promise<string | null> {
@@ -197,7 +211,7 @@ router.patch("/:id/events/:eventId", async (req, res) => {
   const u = (req as any).user;
   const ok = await assertProjectMember(req.params.id, u.id, u.role);
   if (!ok) return res.status(403).json({ error: "forbidden" });
-  const parsed = eventSchema.partial().safeParse(req.body);
+  const parsed = eventPatchSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid input" });
   const d = parsed.data;
   // 완료 상태 전환 시 누가 언제 완료했는지 자동으로 스탬프. 되돌릴 때는 초기화.
@@ -238,10 +252,12 @@ router.get("/:id/webhook", async (req, res) => {
   const u = (req as any).user;
   const ok = await assertProjectMember(req.params.id, u.id, u.role);
   if (!ok) return res.status(403).json({ error: "forbidden" });
+  // take 상한 — 한 프로젝트에 수백 개 webhook 을 만들 일은 실무상 없으므로 100 으로 충분.
   const channels = await prisma.webhookChannel.findMany({
     where: { projectId: req.params.id },
     orderBy: { createdAt: "desc" },
     include: { _count: { select: { events: true } } },
+    take: 100,
   });
   res.json({ channels });
 });

@@ -85,7 +85,7 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
   }>({ title: "", description: "", tags: "", fileUrl: "", fileName: "", fileType: "", fileSize: 0, scope: "ALL", scopeTeam: "", scopeUserIds: [] });
   const fileRef = useRef<HTMLInputElement>(null);
 
-  async function load() {
+  async function load(aliveRef?: { current: boolean }) {
     // 프로젝트 선택 시엔 projectId 필터. scope 필터는 프로젝트 내에선 의미 없음(멤버십이 권한).
     const pid = activeProjectId;
     const qs = (extra: string) =>
@@ -102,6 +102,7 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
         `/api/document?${qs(`folderId=${encodeURIComponent(currentFolder)}${q ? `&q=${encodeURIComponent(q)}` : ""}`)}`,
       ),
     ]);
+    if (aliveRef && !aliveRef.current) return;
     setFolders(f.folders);
     setDocs(d.documents);
   }
@@ -109,13 +110,17 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
   // 프로젝트 칩 목록 로드 — 임베드 모드 아니고 고정 프로젝트가 없을 때만 필요.
   useEffect(() => {
     if (embedded || fixedProjectId) return;
+    let alive = true;
     api<{ projects: ProjectChip[] }>("/api/document/projects")
-      .then((r) => setProjects(r.projects))
+      .then((r) => { if (alive) setProjects(r.projects); })
       .catch(() => {});
+    return () => { alive = false; };
   }, [embedded, fixedProjectId]);
 
   useEffect(() => {
-    load();
+    const aliveRef = { current: true };
+    load(aliveRef);
+    return () => { aliveRef.current = false; };
     // eslint-disable-next-line
   }, [currentFolder, q, scopeTab, activeProjectId]);
 
@@ -127,7 +132,11 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
   // 사용자지정 범위 선택 시 유저 목록 로드 (문서 / 폴더 모달 공용)
   useEffect(() => {
     if ((creating !== "doc" && creating !== "folder") || allUsers.length > 0) return;
-    api<{ users: DirUser[] }>("/api/users").then((r) => setAllUsers(r.users)).catch(() => {});
+    let alive = true;
+    api<{ users: DirUser[] }>("/api/users")
+      .then((r) => { if (alive) setAllUsers(r.users); })
+      .catch(() => {});
+    return () => { alive = false; };
   }, [creating, allUsers.length]);
 
   function openFolderModal() {

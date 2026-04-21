@@ -75,6 +75,8 @@ router.get("/rooms", async (req, res) => {
   }
 
   const where = auditMode ? {} : { members: { some: { userId: u.id } } };
+  // take 상한 — audit 모드는 전사 DM 을 훑기 때문에 대규모 조직에서 수만 건이 될 수 있음.
+  // 일반 모드도 극단적으로 많은 DM 이 쌓인 계정을 보호.
   const rooms = await prisma.chatRoom.findMany({
     where,
     orderBy: { createdAt: "desc" },
@@ -86,6 +88,7 @@ router.get("/rooms", async (req, res) => {
         take: 1,
       },
     },
+    take: auditMode ? 500 : 300,
   });
 
   if (auditMode) await writeLog(u.id, "CHAT_AUDIT_LIST", undefined, `count=${rooms.length}`);
