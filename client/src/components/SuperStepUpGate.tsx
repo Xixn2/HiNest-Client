@@ -62,12 +62,12 @@ export default function SuperStepUpGate({ children }: { children: React.ReactNod
     canUsePasskey().then(setCap);
     loadPasskeys();
     loadDesktopBios();
-    // Electron 네이티브 Touch ID 가능 여부 + deviceId 수집
-    const w = window as any;
-    if (w?.hinest?.deviceId) setDeviceId(w.hinest.deviceId);
-    if (w?.hinest?.canTouchID) {
-      w.hinest.canTouchID().then((ok: boolean) => setNativeTouch(!!ok)).catch(() => setNativeTouch(false));
-    }
+    // Electron 네이티브 Touch ID 가능 여부 + deviceId 수집 (window.hinest 는 hinest.d.ts 에서 타입)
+    const bridge = window.hinest;
+    if (bridge?.deviceId) setDeviceId(bridge.deviceId);
+    bridge?.canTouchID?.()
+      .then((ok) => setNativeTouch(!!ok))
+      .catch(() => setNativeTouch(false));
   }, []);
 
   useEffect(() => {
@@ -116,11 +116,11 @@ export default function SuperStepUpGate({ children }: { children: React.ReactNod
 
   /** Electron 데스크톱 앱 전용 네이티브 Touch ID 흐름 (사전 등록 필수) */
   async function useNativeTouchID() {
-    const w = window as any;
-    if (!w?.hinest?.promptTouchID || !deviceId) return;
+    const bridge = window.hinest;
+    if (!bridge?.promptTouchID || !deviceId) return;
     setErr(""); setBioLoading(true);
     try {
-      const r = await w.hinest.promptTouchID("HiNest 총관리자 접근을 위해 Touch ID 로 인증해주세요");
+      const r = await bridge.promptTouchID("HiNest 총관리자 접근을 위해 Touch ID 로 인증해주세요");
       if (!r?.ok) throw new Error(r?.error || "Touch ID 인증 실패");
       const res = await api<{ expiresAt: number }>("/api/auth/desktop-biometric/stepup", {
         method: "POST",
@@ -379,10 +379,10 @@ function DesktopBiometricPanel({
     if (!deviceId) return;
     setErr(""); setBusy(true);
     try {
-      const w = window as any;
       // 등록할 때도 본인 확인용으로 Touch ID 한 번 더 받자 — 실수 등록 방지
-      if (w?.hinest?.promptTouchID) {
-        const r = await w.hinest.promptTouchID("이 기기를 총관리자 Touch ID 잠금 해제에 등록합니다");
+      const bridge = window.hinest;
+      if (bridge?.promptTouchID) {
+        const r = await bridge.promptTouchID("이 기기를 총관리자 Touch ID 잠금 해제에 등록합니다");
         if (!r?.ok) throw new Error(r?.error || "Touch ID 확인 실패");
       }
       await api("/api/auth/desktop-biometric/enroll", {

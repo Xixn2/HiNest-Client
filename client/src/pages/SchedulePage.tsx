@@ -202,10 +202,10 @@ export default function SchedulePage() {
                         </div>
                       )}
                     </div>
-                    {/* 데스크톱: 이벤트 칩 최대 3개 */}
+                    {/* 데스크톱: 이벤트 칩 최대 3개 — 클릭 시 해당 날짜 상세 모달 오픈 (실수 삭제 방지) */}
                     <div className="hidden sm:block space-y-1">
                       {todays.slice(0, 3).map((e) => (
-                        <EventChip key={e.id} e={e} onRemove={() => remove(e.id)} />
+                        <EventChip key={e.id} e={e} onOpenDay={() => setDayOpen(d!)} />
                       ))}
                       {todays.length > 3 && (
                         <button
@@ -268,7 +268,7 @@ export default function SchedulePage() {
 /* ============================================================ */
 /*                       Event Chip                             */
 /* ============================================================ */
-function EventChip({ e, onRemove }: { e: Event; onRemove: () => void }) {
+function EventChip({ e, onOpenDay }: { e: Event; onOpenDay: () => void }) {
   const cat = e.category ? CATEGORIES.find((c) => c.key === e.category) : undefined;
   const start = new Date(e.startAt);
   const end = new Date(e.endAt);
@@ -282,9 +282,13 @@ function EventChip({ e, onRemove }: { e: Event; onRemove: () => void }) {
   return (
     <button
       type="button"
-      onClick={onRemove}
-      className="group/ev block w-full text-left rounded-md overflow-hidden"
-      title={`${e.title} (클릭시 삭제)`}
+      onClick={(ev) => {
+        // 셀 onClick 까지 버블링하면 동일한 모달이 두 번 열리는 것처럼 느껴질 수 있음 → 여기서 차단.
+        ev.stopPropagation();
+        onOpenDay();
+      }}
+      className="group/ev block w-full text-left rounded-md overflow-hidden hover:opacity-80 transition-opacity"
+      title={`${e.title} · 상세 보기`}
     >
       <div
         className="flex items-center gap-1 px-1.5 py-1 border"

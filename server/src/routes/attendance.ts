@@ -2,17 +2,10 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/db.js";
 import { requireAuth, writeLog } from "../lib/auth.js";
+import { todayStr } from "../lib/dates.js";
 
 const router = Router();
 router.use(requireAuth);
-
-function todayStr() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const da = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${da}`;
-}
 
 // 오늘 출퇴근 상태
 router.get("/today", async (req, res) => {
@@ -38,12 +31,17 @@ router.post("/check-in", async (req, res) => {
 });
 
 // 퇴근
+// 출근 기록 없이 퇴근 눌러도 500 나지 않도록 upsert.
+// (앱 재설치 직후, 새벽 경계 타이밍, 관리자 수동 조정 등 엣지 케이스 대응)
+// create 시 checkIn 은 null 로 두고 checkOut 만 기록 — 리포트에서 "출근 누락 후 퇴근" 으로 보임.
 router.post("/check-out", async (req, res) => {
   const u = (req as any).user;
   const date = todayStr();
-  const rec = await prisma.attendance.update({
+  const now = new Date();
+  const rec = await prisma.attendance.upsert({
     where: { userId_date: { userId: u.id, date } },
-    data: { checkOut: new Date() },
+    update: { checkOut: now },
+    create: { userId: u.id, date, checkOut: now },
   });
   await writeLog(u.id, "CHECK_OUT", date);
   res.json({ attendance: rec });

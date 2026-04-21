@@ -79,7 +79,7 @@ export default function SignupPage() {
               </div>
             </div>
             <div>
-              <label className="field-label">비밀번호 <span className="text-ink-500 font-normal">(6자 이상)</span></label>
+              <label className="field-label">비밀번호 <span className="text-ink-500 font-normal">(8자 이상)</span></label>
               <input
                 className="input"
                 type="password"
@@ -87,7 +87,7 @@ export default function SignupPage() {
                 value={form.password}
                 onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
                 required
-                minLength={6}
+                minLength={8}
               />
             </div>
             {err && (

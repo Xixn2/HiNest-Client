@@ -27,6 +27,11 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Render 컨테이너는 기본이 UTC — HiNest 는 KST 기반 서비스라서 new Date() 로 만든
+      # 날짜 문자열(출근/공지/관리자 리포트 등)이 UTC 로 찍히면 0~9시 사이에 하루가 밀림.
+      # TZ 를 서울로 고정해 모든 node 날짜 포맷팅이 KST 기준이 되도록.
+      - key: TZ
+        value: Asia/Seoul
       # Render 는 PORT 를 주입. 서버 코드가 process.env.PORT 를 이미 쓰고 있어 그대로 둠.
       - key: PORT
         value: 10000

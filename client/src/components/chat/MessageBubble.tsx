@@ -673,10 +673,10 @@ function renderWithLinks(content: string, mine: boolean): React.ReactNode[] {
         onClick={(e) => {
           e.stopPropagation();
           // Electron 데스크톱 앱 안에서는 OS 기본 브라우저로 강제 열기
-          const bridge = (window as any).hinest;
-          if (bridge && typeof bridge.openExternal === "function") {
+          const bridge = window.hinest;
+          if (bridge?.openExternal) {
             e.preventDefault();
-            bridge.openExternal(href);
+            bridge.openExternal(href).catch(() => {});
           }
         }}
       >

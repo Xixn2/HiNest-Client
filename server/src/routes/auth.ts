@@ -75,12 +75,13 @@ const signupSchema = z.object({
   inviteKey: z.string().min(4),
   email: z.string().email(),
   name: z.string().min(1),
-  password: z.string().min(6),
+  // 8자 이상 — 6자는 현대 기준으로 너무 약함. 기존 계정은 그대로 사용 가능하고 다음 변경 시 8자 요구.
+  password: z.string().min(8),
 });
 
 router.post("/signup", async (req, res) => {
   const parsed = signupSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "입력값을 확인해주세요 (비밀번호는 6자 이상)" });
+  if (!parsed.success) return res.status(400).json({ error: "입력값을 확인해주세요 (비밀번호는 8자 이상)" });
   const { inviteKey, email, name, password } = parsed.data;
 
   const key = await prisma.inviteKey.findUnique({ where: { key: inviteKey } });

@@ -11,16 +11,29 @@ type Journal = {
   createdAt: string;
 };
 
+/**
+ * "오늘" 은 항상 KST 기준. 브라우저 로케일이 한국이 아니어도 일지 날짜 기본값이 서울 날짜가 되도록
+ * 명시적 timeZone 사용. 서버 쪽도 동일 규칙(server/src/lib/dates.ts 참고)을 쓰도록 최근 수정됨.
+ */
+const KST_TODAY = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: "Asia/Seoul",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
 function today() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return KST_TODAY.format(new Date());
 }
+
+type Mode = "view" | "create" | "edit";
 
 export default function JournalPage() {
   const [list, setList] = useState<Journal[]>([]);
   const [selected, setSelected] = useState<Journal | null>(null);
   const [form, setForm] = useState({ date: today(), title: "", content: "" });
-  const [editing, setEditing] = useState(false);
+  const [mode, setMode] = useState<Mode>("view");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
 
   async function load() {
     const res = await api<{ journals: Journal[] }>("/api/journal");
@@ -43,21 +56,55 @@ export default function JournalPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function create(e: React.FormEvent) {
-    e.preventDefault();
-    const res = await api<{ journal: Journal }>("/api/journal", { method: "POST", json: form });
+  function openCreate() {
+    setMode("create");
     setForm({ date: today(), title: "", content: "" });
-    setEditing(false);
-    setSelected(res.journal);
-    load();
+    setSelected(null);
+    setErr("");
+  }
+
+  function openEdit(j: Journal) {
+    setMode("edit");
+    setSelected(j);
+    setForm({ date: j.date, title: j.title, content: j.content });
+    setErr("");
+  }
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (saving) return;
+    setSaving(true);
+    setErr("");
+    try {
+      if (mode === "edit" && selected) {
+        const res = await api<{ journal: Journal }>(`/api/journal/${selected.id}`, {
+          method: "PATCH",
+          json: form,
+        });
+        setSelected(res.journal);
+      } else {
+        const res = await api<{ journal: Journal }>("/api/journal", { method: "POST", json: form });
+        setSelected(res.journal);
+      }
+      setMode("view");
+      setForm({ date: today(), title: "", content: "" });
+      load();
+    } catch (e: any) {
+      setErr(e?.message ?? "저장 실패");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function remove(id: string) {
     if (!confirm("삭제하시겠습니까?")) return;
     await api(`/api/journal/${id}`, { method: "DELETE" });
     if (selected?.id === id) setSelected(null);
+    setMode("view");
     load();
   }
+
+  const editing = mode !== "view";
 
   return (
     <div>
@@ -65,7 +112,7 @@ export default function JournalPage() {
         title="업무일지"
         description="하루의 업무를 기록하고 회고하세요."
         right={
-          <button className="btn-primary" onClick={() => { setEditing(true); setSelected(null); }}>
+          <button className="btn-primary" onClick={openCreate}>
             + 새 일지
           </button>
         }
@@ -79,8 +126,8 @@ export default function JournalPage() {
             {list.map((j) => (
               <button
                 key={j.id}
-                onClick={() => { setSelected(j); setEditing(false); }}
-                className={`w-full text-left px-4 py-3 hover:bg-slate-50 ${selected?.id === j.id ? "bg-brand-50" : ""}`}
+                onClick={() => { setSelected(j); setMode("view"); }}
+                className={`w-full text-left px-4 py-3 hover:bg-slate-50 ${selected?.id === j.id && mode === "view" ? "bg-brand-50" : ""}`}
               >
                 <div className="text-xs text-slate-500">{j.date}</div>
                 <div className="font-semibold text-slate-900 truncate">{j.title}</div>
@@ -92,7 +139,7 @@ export default function JournalPage() {
 
         <div className="lg:col-span-2 card">
           {editing ? (
-            <form onSubmit={create} className="space-y-3">
+            <form onSubmit={save} className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="label">날짜</label>
@@ -107,25 +154,44 @@ export default function JournalPage() {
                 <label className="label">내용</label>
                 <textarea className="input" rows={14} value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} required />
               </div>
+              {err && (
+                <div className="text-[12px] font-semibold text-red-600">{err}</div>
+              )}
               <div className="flex justify-end gap-2">
-                <button type="button" className="btn-ghost" onClick={() => setEditing(false)}>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  disabled={saving}
+                  onClick={() => {
+                    setMode("view");
+                    setErr("");
+                    // 편집 중이었다면 원본이 그대로 selected 로 유지되어 바로 보기 화면으로 복귀.
+                  }}
+                >
                   취소
                 </button>
-                <button className="btn-primary">저장</button>
+                <button className="btn-primary" disabled={saving}>
+                  {saving ? "저장 중…" : mode === "edit" ? "수정 저장" : "저장"}
+                </button>
               </div>
             </form>
           ) : selected ? (
             <div>
-              <div className="flex items-start justify-between">
-                <div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
                   <div className="text-xs text-slate-500">{selected.date}</div>
-                  <h2 className="text-xl font-bold mt-1">{selected.title}</h2>
+                  <h2 className="text-xl font-bold mt-1 break-words">{selected.title}</h2>
                 </div>
-                <button className="btn-ghost" onClick={() => remove(selected.id)}>
-                  삭제
-                </button>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <button className="btn-ghost btn-xs" onClick={() => openEdit(selected)}>
+                    수정
+                  </button>
+                  <button className="btn-ghost btn-xs text-red-600 hover:text-red-700" onClick={() => remove(selected.id)}>
+                    삭제
+                  </button>
+                </div>
               </div>
-              <div className="mt-6 whitespace-pre-wrap text-slate-700 leading-relaxed">
+              <div className="mt-6 whitespace-pre-wrap text-slate-700 leading-relaxed break-words">
                 {selected.content}
               </div>
             </div>

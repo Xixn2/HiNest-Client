@@ -1,16 +1,13 @@
 import { Router } from "express";
 import { prisma } from "../lib/db.js";
 import { requireAuth } from "../lib/auth.js";
+import { todayStr } from "../lib/dates.js";
 
 const router = Router();
 router.use(requireAuth);
 
 // 팀원 목록 (일반 유저도 볼 수 있음) — 총관리자는 자신 외엔 보이지 않음
 // 업무 상태(presence) + 오늘 출퇴근 요약 포함
-function todayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 router.get("/", async (req, res) => {
   const u = (req as any).user;

@@ -3,6 +3,7 @@ import { z } from "zod";
 import crypto from "node:crypto";
 import { prisma } from "../lib/db.js";
 import { requireAdmin, requireAuth, requireSuperAdmin, requireSuperAdminStepUp, verifySuperToken, writeLog } from "../lib/auth.js";
+import { todayStr } from "../lib/dates.js";
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -370,8 +371,7 @@ router.get("/logs", requireSuperAdminStepUp, async (req, res) => {
 /* ===== 출근 기록 조회 — 특정 유저의 특정 날짜 ===== */
 router.get("/users/:id/attendance", async (req, res) => {
   const { id } = req.params;
-  const d = new Date();
-  const defaultDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const defaultDate = todayStr();
   const qdate = typeof req.query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date) ? req.query.date : defaultDate;
   const rec = await prisma.attendance.findUnique({
     where: { userId_date: { userId: id, date: qdate } },
@@ -387,8 +387,7 @@ router.patch("/users/:id/attendance", async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id } });
   if (!user) return res.status(404).json({ error: "not found" });
   const body = req.body ?? {};
-  const d = new Date();
-  const defaultDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const defaultDate = todayStr();
   const date = typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : defaultDate;
   const parseTime = (v: unknown): Date | null | undefined => {
     if (v === null) return null;
