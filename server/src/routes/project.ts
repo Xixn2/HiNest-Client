@@ -152,6 +152,8 @@ const eventSchema = z.object({
   allDay: z.boolean().optional(),
   color: z.string().max(16).optional(),
   assigneeIds: z.array(z.string()).optional(),
+  // 완료 토글 — 전체 수정 모달에서는 안 쓰이지만 PATCH 에서 같이 보낼 수 있게 허용.
+  completed: z.boolean().optional(),
 });
 
 /** 담당자 userId 들이 모두 해당 프로젝트 멤버인지 검증하고 콤마 문자열로 직렬화. */
@@ -198,6 +200,13 @@ router.patch("/:id/events/:eventId", async (req, res) => {
   const parsed = eventSchema.partial().safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid input" });
   const d = parsed.data;
+  // 완료 상태 전환 시 누가 언제 완료했는지 자동으로 스탬프. 되돌릴 때는 초기화.
+  const completedPatch =
+    "completed" in d
+      ? d.completed
+        ? { completed: true, completedAt: new Date(), completedById: u.id }
+        : { completed: false, completedAt: null, completedById: null }
+      : {};
   const ev = await prisma.projectEvent.update({
     where: { id: req.params.eventId },
     data: {
@@ -208,6 +217,7 @@ router.patch("/:id/events/:eventId", async (req, res) => {
       ...("allDay" in d ? { allDay: !!d.allDay } : {}),
       ...("color" in d ? { color: d.color! } : {}),
       ...("assigneeIds" in d ? { assigneeIds: await normalizeAssignees(req.params.id, d.assigneeIds) } : {}),
+      ...completedPatch,
     },
   });
   res.json({ event: ev });
