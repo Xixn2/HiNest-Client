@@ -8,11 +8,11 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://hinest-api.onrender.com/api/:path*"
+      "destination": "https://api.nest.hi-vits.com/api/:path*"
     },
     {
       "source": "/uploads/:path*",
-      "destination": "https://hinest-api.onrender.com/uploads/:path*"
+      "destination": "https://api.nest.hi-vits.com/uploads/:path*"
     },
     {
       "source": "/(.*)",
