@@ -699,10 +699,17 @@ function MonthGrid({
               onClick={() => onPick(c)}
               className="min-h-[64px] sm:min-h-[128px] border-t border-l border-slate-100 p-1 sm:p-1.5 text-left hover:bg-slate-50 flex flex-col"
             >
-              {/* 날짜 + 오늘 점 — flex 로 라인높이 정렬. align-middle 쓰면 오프셋이 생겨 점이 어긋나보임. */}
-              <div className={`flex items-center gap-1 text-[11px] sm:text-xs font-bold leading-none mb-1 ${isToday ? "text-brand-600" : "text-slate-700"}`}>
-                <span>{c.getDate()}</span>
-                {isToday && <span className="inline-block w-1.5 h-1.5 rounded-full bg-brand-500" />}
+              {/* 날짜 — 오늘이면 브랜드색 원 배경 (점 대신) 으로 표시해서 이벤트 점과 혼동 방지 */}
+              <div className="flex items-center leading-none mb-1">
+                <span
+                  className={`text-[11px] sm:text-xs font-bold tabular ${
+                    isToday
+                      ? "inline-flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-brand-500 text-white"
+                      : "text-slate-700"
+                  }`}
+                >
+                  {c.getDate()}
+                </span>
               </div>
               {/* 데스크톱: 이벤트 칩 최대 3개 */}
               <div className="hidden sm:block space-y-0.5">
