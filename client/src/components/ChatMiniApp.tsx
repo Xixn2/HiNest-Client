@@ -1765,6 +1765,14 @@ function RoomView({
                   }
                 }}
                 placeholder="메시지를 입력하세요"
+                name="chat-message"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                data-1p-ignore="true"
+                data-lpignore="true"
+                data-form-type="other"
                 style={{
                   flex: 1, border: 0, outline: 0, resize: "none",
                   background: "transparent",
