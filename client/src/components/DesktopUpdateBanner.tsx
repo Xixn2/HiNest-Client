@@ -180,8 +180,14 @@ export default function DesktopUpdateBanner() {
 
   return (
     <div
-      className="fixed bottom-5 right-5 z-[80] w-[380px] panel p-0 overflow-hidden"
-      style={{ boxShadow: "0 10px 28px rgba(0,0,0,.18), 0 2px 8px rgba(0,0,0,.12)" }}
+      // 모바일 뷰포트에서 고정 380px 은 오른쪽 5px + 왼쪽 화면 이탈 → 가로 스크롤 발생.
+      // left-4/right-4 로 화면폭 맞춤, sm 이상에서만 고정폭 380px.
+      // bottom 은 safe-area-inset 고려 (notch 기기에서 하단 홈바에 가려짐 방지).
+      className="fixed left-4 right-4 z-[80] sm:left-auto sm:right-5 sm:w-[380px] panel p-0 overflow-hidden"
+      style={{
+        bottom: "calc(1.25rem + env(safe-area-inset-bottom, 0px))",
+        boxShadow: "0 10px 28px rgba(0,0,0,.18), 0 2px 8px rgba(0,0,0,.12)",
+      }}
     >
       <div
         className="px-4 py-3 flex items-start gap-3"

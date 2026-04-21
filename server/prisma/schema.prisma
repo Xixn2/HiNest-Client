@@ -231,6 +231,9 @@ model Event {
   createdBy     String
   author        User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
   createdAt     DateTime @default(now())
+
+  // 월별 캘린더 조회 — 대부분의 read 경로.
+  @@index([startAt, endAt])
 }
 
 model Leave {
@@ -244,6 +247,8 @@ model Leave {
   status    String   @default("PENDING") // PENDING | APPROVED | REJECTED
   reviewer  String?
   createdAt DateTime @default(now())
+
+  @@index([userId, status])
 }
 
 model Attendance {
@@ -256,6 +261,9 @@ model Attendance {
   note      String?
 
   @@unique([userId, date])
+  // 디렉터리 페이지가 "오늘 date + userId IN (...)" 로 묶어 조회 →
+  // unique 가 만드는 (userId, date) 순서로는 date 선두 조회가 안 되므로 역순 인덱스 추가.
+  @@index([date, userId])
 }
 
 model Journal {
@@ -267,6 +275,8 @@ model Journal {
   content   String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([userId, date(sort: Desc)])
 }
 
 model Notice {
@@ -277,6 +287,8 @@ model Notice {
   authorId  String
   author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
+
+  @@index([pinned(sort: Desc), createdAt(sort: Desc)])
 }
 
 model ChatRoom {
@@ -366,6 +378,8 @@ model CardExpense {
   status     String   @default("PENDING") // PENDING | APPROVED | REJECTED
   reviewer   String?
   createdAt  DateTime @default(now())
+
+  @@index([userId, usedAt(sort: Desc)])
 }
 
 model Notification {
@@ -381,7 +395,10 @@ model Notification {
   readAt    DateTime?
   createdAt DateTime  @default(now())
 
+  // 미읽음 필터용 — (userId, readAt=null) 부분 빠른 조회.
   @@index([userId, readAt])
+  // 리스트 페이지 — 최신순 정렬이 핵심이라 (userId, createdAt desc) 인덱스 추가.
+  @@index([userId, createdAt(sort: Desc)])
 }
 
 model Folder {
@@ -449,6 +466,8 @@ model Approval {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   steps       ApprovalStep[]
+
+  @@index([requesterId, createdAt(sort: Desc)])
 }
 
 model ApprovalStep {
@@ -475,6 +494,8 @@ model AuditLog {
   detail    String?
   ip        String?
   createdAt DateTime @default(now())
+
+  @@index([createdAt(sort: Desc)])
 }
 
 /// 회의록 — 노션 스타일 리치 텍스트 에디터(TipTap) 의 JSON 도큐먼트를 content 에 저장.

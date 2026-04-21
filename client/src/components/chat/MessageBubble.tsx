@@ -413,7 +413,7 @@ export function ReactionPicker({
                 fontSize: 14,
                 fontWeight: 600,
                 fontFamily: FONT,
-                color: a.danger ? "#F04452" : C.ink,
+                color: a.danger ? C.red : C.ink,
                 textAlign: "left",
                 transition: "background .12s ease",
               }}
@@ -430,7 +430,7 @@ export function ReactionPicker({
                   height: 18,
                   display: "grid",
                   placeItems: "center",
-                  color: a.danger ? "#F04452" : C.gray600,
+                  color: a.danger ? C.red : C.gray600,
                 }}
               >
                 {a.icon}

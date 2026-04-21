@@ -61,15 +61,19 @@ router.get("/", async (req, res) => {
   const from = req.query.from ? new Date(String(req.query.from)) : undefined;
   const to = req.query.to ? new Date(String(req.query.to)) : undefined;
 
-  const where: any = {
-    OR: [
-      { scope: "COMPANY" },
-      { scope: "TEAM", team: meUser?.team ?? "" },
-      { scope: "PERSONAL", createdBy: u.id },
-      { scope: "TARGETED", createdBy: u.id },
-      { scope: "TARGETED", targetUserIds: { contains: u.id } },
-    ],
-  };
+  // TEAM 스코프는 "내가 팀에 소속된 경우에만" 추가.
+  // 기존 `team: meUser?.team ?? ""` 는 팀 없는 유저가 `team=""` 인 이벤트(가능: 관리자 실수 · 팀 삭제 후 잔존)를
+  // 전부 열람하는 권한 누수였음. 팀이 없으면 TEAM 절 자체를 제거해 필터에서 배제.
+  const orClauses: any[] = [
+    { scope: "COMPANY" },
+    { scope: "PERSONAL", createdBy: u.id },
+    { scope: "TARGETED", createdBy: u.id },
+    { scope: "TARGETED", targetUserIds: { contains: u.id } },
+  ];
+  if (meUser?.team) {
+    orClauses.push({ scope: "TEAM", team: meUser.team });
+  }
+  const where: any = { OR: orClauses };
   if (from || to) {
     where.AND = [];
     if (from) where.AND.push({ endAt: { gte: from } });

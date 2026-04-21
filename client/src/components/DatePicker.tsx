@@ -86,7 +86,7 @@ export default function DatePicker({
     <div className={`relative ${className ?? ""}`} ref={wrapperRef}>
       <button
         type="button"
-        className="w-full min-w-0 bg-transparent border-0 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-400 rounded text-[12px] px-1 py-1.5 tabular text-left hover:bg-slate-50"
+        className="w-full min-w-0 bg-transparent border-0 focus:bg-[color:var(--c-surface)] text-[color:var(--c-text)] focus:outline-none focus:ring-1 focus:ring-brand-400 rounded text-[12px] px-1 py-1.5 tabular text-left hover:bg-[color:var(--c-surface-3)]"
         onClick={() => setOpen((v) => !v)}
       >
         {value || <span className="text-ink-400">{placeholder}</span>}
