@@ -5,11 +5,9 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
-  // Supabase 는 connection pooling(pgBouncer) 과 direct connection 을 분리 제공.
-  // - DATABASE_URL   : 앱 런타임용 (pgBouncer, port 6543)
-  // - DIRECT_URL     : 마이그레이션용 (direct, port 5432)
-  directUrl = env("DIRECT_URL")
+  // RDS 로 이전한 뒤부터는 pgBouncer 가 없어서 런타임/마이그레이션 모두 동일 URL 사용.
+  // 과거 Supabase 때는 directUrl 로 pgBouncer 우회 포트(5432) 를 따로 지정했었음.
+  url = env("DATABASE_URL")
 }
 
 model User {
