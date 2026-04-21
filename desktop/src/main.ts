@@ -13,7 +13,12 @@ import crypto from "node:crypto";
  */
 
 const isDev = !!process.env.HINEST_DEV;
-const DEFAULT_URL = isDev ? "http://localhost:1000" : process.env.HINEST_URL ?? "http://localhost:1000";
+// 배포 빌드는 기본적으로 Vercel 에 올라간 웹앱을 로드.
+// HINEST_URL 환경변수로 덮어쓰기 가능 (스테이징/로컬 테스트용).
+const PROD_URL = "https://team-hivits.vercel.app";
+const DEFAULT_URL = isDev
+  ? "http://localhost:1000"
+  : process.env.HINEST_URL ?? PROD_URL;
 
 // 단일 인스턴스 — 이미 떠있으면 기존 창 포커스
 const gotLock = app.requestSingleInstanceLock();

@@ -26,6 +26,8 @@
     "appId": "com.hivits.hinest",
     "productName": "HiNest",
     "afterPack": "build/afterPack.js",
+    "afterSign": "build/afterSign.js",
+    "afterAllArtifactBuild": "build/afterAllArtifactBuild.js",
     "asar": true,
     "files": [
       "dist/**/*",
