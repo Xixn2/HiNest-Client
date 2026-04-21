@@ -37,6 +37,13 @@ const PORT = Number(process.env.PORT ?? 4000);
 const IS_PROD = process.env.NODE_ENV === "production";
 const ORIGIN = process.env.CLIENT_ORIGIN ?? "http://localhost:1000";
 
+// ALB(및 Vercel) 뒤에 있으므로 첫 번째 프록시의 X-Forwarded-For 를 신뢰.
+// express-rate-limit 가 req.ip 로 실제 클라이언트 IP 를 식별하려면 필요.
+// "trust proxy" 를 true 로 두면 모든 프록시 헤더를 신뢰해 스푸핑 위험이 있음 → 1.
+if (IS_PROD) {
+  app.set("trust proxy", 1);
+}
+
 // 기본 보안 헤더 — CSP 는 프런트 개발 편의상 기본만.
 app.use(
   helmet({
