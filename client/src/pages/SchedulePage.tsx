@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
@@ -600,6 +600,9 @@ function EventModal({
 
   const [directory, setDirectory] = useState<DirUser[]>([]);
   const [userSearch, setUserSearch] = useState("");
+  // 입력은 즉시 반영되지만 필터링은 React 가 우선순위 낮춰 스케줄 — 한글 IME 로 빠르게 입력해도
+  // 인풋이 끊기지 않고 뒤따르는 대량 리스트 필터가 프레임을 먹지 않음. 디바운스 setTimeout 보다 가벼움.
+  const deferredSearch = useDeferredValue(userSearch);
   useEffect(() => {
     if (form.scope !== "TARGETED" || directory.length) return;
     api<{ users: DirUser[] }>("/api/users").then((r) => setDirectory(r.users));
@@ -617,15 +620,15 @@ function EventModal({
     setForm({ ...form, targetUserIds: form.targetUserIds.filter((x) => x !== id) });
   }
 
-  const filteredDir = directory.filter((d) => {
-    const k = userSearch.trim().toLowerCase();
-    if (!k) return true;
-    return (
+  const filteredDir = useMemo(() => {
+    const k = deferredSearch.trim().toLowerCase();
+    if (!k) return directory;
+    return directory.filter((d) =>
       d.name.toLowerCase().includes(k) ||
       (d.team ?? "").toLowerCase().includes(k) ||
       d.email.toLowerCase().includes(k)
     );
-  });
+  }, [directory, deferredSearch]);
 
   return (
     <div className="fixed inset-0 bg-ink-900/40 grid place-items-center p-4 z-50" onClick={onClose}>
@@ -669,6 +672,7 @@ function EventModal({
                 placeholder="무엇을 계획하고 있나요?"
                 autoFocus
                 required
+                maxLength={200}
               />
             </div>
 
@@ -801,6 +805,7 @@ function EventModal({
                       placeholder="이름·팀·이메일 검색"
                       value={userSearch}
                       onChange={(e) => setUserSearch(e.target.value)}
+                      maxLength={80}
                     />
                   </div>
                   <div className="max-h-[200px] overflow-auto divide-y divide-ink-100">
@@ -893,6 +898,7 @@ function EventModal({
                 placeholder="참석자·장소·준비물 등 상세 내용을 적어주세요"
                 value={form.content}
                 onChange={(e) => setForm({ ...form, content: e.target.value })}
+                maxLength={5_000}
               />
             </div>
           </div>

@@ -333,7 +333,13 @@ export default function ExpensePage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="label">사용처</label>
-                  <input className="input" value={form.merchant} onChange={(e) => setForm({ ...form, merchant: e.target.value })} required />
+                  <input
+                    className="input"
+                    value={form.merchant}
+                    onChange={(e) => setForm({ ...form, merchant: e.target.value })}
+                    required
+                    maxLength={200}
+                  />
                 </div>
                 <div>
                   <label className="label">분류</label>
@@ -346,7 +352,13 @@ export default function ExpensePage() {
               </div>
               <div>
                 <label className="label">메모</label>
-                <textarea className="input" rows={2} value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
+                <textarea
+                  className="input"
+                  rows={2}
+                  value={form.memo}
+                  onChange={(e) => setForm({ ...form, memo: e.target.value })}
+                  maxLength={2_000}
+                />
               </div>
               <div>
                 <label className="label">영수증 (이미지, 1.3MB 이하)</label>
