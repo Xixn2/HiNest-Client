@@ -191,11 +191,24 @@ export default function NoticePage() {
             <form onSubmit={submit} className="space-y-3">
               <div>
                 <label className="label">제목</label>
-                <input className="input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
+                <input
+                  className="input"
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                  required
+                  maxLength={200}
+                />
               </div>
               <div>
                 <label className="label">내용</label>
-                <textarea className="input" rows={8} value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} required />
+                <textarea
+                  className="input"
+                  rows={8}
+                  value={form.content}
+                  onChange={(e) => setForm({ ...form, content: e.target.value })}
+                  required
+                  maxLength={20_000}
+                />
               </div>
               <label className="inline-flex items-center gap-2 text-sm text-slate-600">
                 <input type="checkbox" checked={form.pinned} onChange={(e) => setForm({ ...form, pinned: e.target.checked })} />

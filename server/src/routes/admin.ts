@@ -103,13 +103,16 @@ router.get("/users", async (req, res) => {
   res.json({ users });
 });
 
-const nullableStr = z.string().optional().nullable();
+// HR 필드 전반은 짧은 ID/코드/라벨 성격이므로 500자면 충분.
+// note 만 자유 메모라 5000자까지 허용. 둘 다 DoS 방지 + DB 컬럼 오남용 차단용 상한.
+const nullableStr = z.string().max(500).optional().nullable();
+const noteStr = z.string().max(5_000).optional().nullable();
 const updateUserSchema = z.object({
   role: z.enum(["ADMIN", "MANAGER", "MEMBER"]).optional(),
   team: nullableStr,
   position: nullableStr,
   active: z.boolean().optional(),
-  name: z.string().optional(),
+  name: z.string().max(200).optional(),
   hrCode: nullableStr,
   affiliation: nullableStr,
   employeeNo: nullableStr,
@@ -125,7 +128,7 @@ const updateUserSchema = z.object({
   disabilityLevel: nullableStr,
   hireDate: nullableStr,
   phone: nullableStr,
-  note: nullableStr,
+  note: noteStr,
 });
 
 router.patch("/users/:id", async (req, res) => {
@@ -179,27 +182,30 @@ router.patch("/users/:id", async (req, res) => {
  * 식별자: email(우선) 또는 employeeNo 또는 hrCode 중 먼저 매치되는 기존 유저를 업데이트.
  * 매치 안 되면 무시 (잘못된 비밀번호로 신규 유저 만들지 않음).
  */
+// 업데이트 스키마와 동일한 상한 적용 — 한 행이 거대한 페이로드를 숨기지 못하도록.
+const importShortStr = z.string().max(500).optional();
+const importNoteStr = z.string().max(5_000).optional();
 const importRowSchema = z.object({
-  email: z.string().optional(),
-  hrCode: z.string().optional(),
-  employeeNo: z.string().optional(),
-  name: z.string().optional(),
-  affiliation: z.string().optional(),
-  workplace: z.string().optional(),
-  department: z.string().optional(),
-  jobDuty: z.string().optional(),
-  position: z.string().optional(),
-  employmentType: z.string().optional(),
-  employmentCategory: z.string().optional(),
-  contractType: z.string().optional(),
-  birthDate: z.string().optional(),
-  gender: z.string().optional(),
-  disabilityType: z.string().optional(),
-  disabilityLevel: z.string().optional(),
-  hireDate: z.string().optional(),
-  phone: z.string().optional(),
-  note: z.string().optional(),
-  team: z.string().optional(),
+  email: z.string().max(200).optional(),
+  hrCode: importShortStr,
+  employeeNo: importShortStr,
+  name: z.string().max(200).optional(),
+  affiliation: importShortStr,
+  workplace: importShortStr,
+  department: importShortStr,
+  jobDuty: importShortStr,
+  position: importShortStr,
+  employmentType: importShortStr,
+  employmentCategory: importShortStr,
+  contractType: importShortStr,
+  birthDate: importShortStr,
+  gender: importShortStr,
+  disabilityType: importShortStr,
+  disabilityLevel: importShortStr,
+  hireDate: importShortStr,
+  phone: importShortStr,
+  note: importNoteStr,
+  team: importShortStr,
 });
 /** 1회 import 최대 행 수 — DoS 방지용 상한. 실무상 넉넉한 5000. */
 const IMPORT_MAX_ROWS = 5000;

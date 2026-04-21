@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import PageHeader from "../components/PageHeader";
@@ -235,13 +235,25 @@ export default function AdminPage() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
 
+  // 권한/팀 변경 연타 시 이전 reload() 응답이 나중에 도착해 최신 상태를 덮는 레이스 방지.
+  // 언마운트 후 setState 호출도 동시에 막음.
+  const aliveRef = useRef(true);
+  const reloadTokenRef = useRef(0);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => { aliveRef.current = false; };
+  }, []);
+
   async function loadCommon() {
+    const myToken = ++reloadTokenRef.current;
     const [u, i, t, p] = await Promise.all([
       api<{ users: UserRow[] }>("/api/admin/users"),
       api<{ keys: Invite[] }>("/api/admin/invites"),
       api<{ teams: Team[] }>("/api/admin/teams"),
       api<{ positions: Position[] }>("/api/admin/positions"),
     ]);
+    // 최신 호출이 아니거나 언마운트됐으면 무시.
+    if (!aliveRef.current || myToken !== reloadTokenRef.current) return;
     setUsers(u.users);
     setInvites(i.keys);
     setTeams(t.teams);
@@ -765,6 +777,7 @@ function UserDetailEditModal({
                 value={form.note}
                 onChange={(e) => set("note", e.target.value)}
                 placeholder="자유 메모"
+                maxLength={5_000}
               />
             </Field>
           </Section>

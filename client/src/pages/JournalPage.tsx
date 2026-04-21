@@ -163,12 +163,25 @@ export default function JournalPage() {
                 </div>
                 <div>
                   <label className="label">제목</label>
-                  <input className="input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
+                  <input
+                    className="input"
+                    value={form.title}
+                    onChange={(e) => setForm({ ...form, title: e.target.value })}
+                    required
+                    maxLength={200}
+                  />
                 </div>
               </div>
               <div>
                 <label className="label">내용</label>
-                <textarea className="input" rows={14} value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} required />
+                <textarea
+                  className="input"
+                  rows={14}
+                  value={form.content}
+                  onChange={(e) => setForm({ ...form, content: e.target.value })}
+                  required
+                  maxLength={20_000}
+                />
               </div>
               {err && (
                 <div className="text-[12px] font-semibold text-red-600">{err}</div>
