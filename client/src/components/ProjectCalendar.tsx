@@ -669,13 +669,12 @@ function MonthGrid({
 
   const today = new Date();
   return (
-    <div className="border border-slate-200 rounded-lg overflow-hidden overflow-x-auto">
-      <div className="min-w-[640px]">
-      <div className="grid grid-cols-7 bg-slate-50 text-xs font-bold text-slate-500">
+    <div className="border border-slate-200 rounded-lg overflow-hidden">
+      <div className="grid grid-cols-7 bg-slate-50 text-[11px] sm:text-xs font-bold text-slate-500">
         {["일", "월", "화", "수", "목", "금", "토"].map((w, i) => (
           <div
             key={w}
-            className={`px-2 py-2 text-center ${i === 0 ? "text-rose-500" : i === 6 ? "text-blue-500" : ""}`}
+            className={`px-1 sm:px-2 py-2 text-center ${i === 0 ? "text-rose-500" : i === 6 ? "text-blue-500" : ""}`}
           >
             {w}
           </div>
@@ -683,21 +682,22 @@ function MonthGrid({
       </div>
       <div className="grid grid-cols-7">
         {cells.map((c, i) => {
-          if (!c) return <div key={i} className="min-h-[128px] border-t border-l border-slate-100 bg-slate-50/40" />;
+          if (!c) return <div key={i} className="min-h-[64px] sm:min-h-[128px] border-t border-l border-slate-100 bg-slate-50/40" />;
           const evs = on(c);
           const isToday = sameDay(c, today);
           return (
             <button
               key={i}
               onClick={() => onPick(c)}
-              className="min-h-[128px] border-t border-l border-slate-100 p-1.5 text-left hover:bg-slate-50 flex flex-col"
+              className="min-h-[64px] sm:min-h-[128px] border-t border-l border-slate-100 p-1 sm:p-1.5 text-left hover:bg-slate-50 flex flex-col"
             >
               {/* 날짜 + 오늘 점 — flex 로 라인높이 정렬. align-middle 쓰면 오프셋이 생겨 점이 어긋나보임. */}
-              <div className={`flex items-center gap-1 text-xs font-bold leading-none mb-1 ${isToday ? "text-brand-600" : "text-slate-700"}`}>
+              <div className={`flex items-center gap-1 text-[11px] sm:text-xs font-bold leading-none mb-1 ${isToday ? "text-brand-600" : "text-slate-700"}`}>
                 <span>{c.getDate()}</span>
                 {isToday && <span className="inline-block w-1.5 h-1.5 rounded-full bg-brand-500" />}
               </div>
-              <div className="space-y-0.5">
+              {/* 데스크톱: 이벤트 칩 최대 3개 */}
+              <div className="hidden sm:block space-y-0.5">
                 {evs.slice(0, 3).map((ev) => {
                   const asg = parseAssignees(ev.assigneeIds);
                   return (
@@ -721,10 +721,24 @@ function MonthGrid({
                 })}
                 {evs.length > 3 && <div className="text-[10px] text-slate-400">+{evs.length - 3}</div>}
               </div>
+              {/* 모바일: 색상 점으로 밀도만 표시 */}
+              <div className="sm:hidden flex items-center justify-center flex-wrap gap-[3px] mt-0.5">
+                {evs.slice(0, 4).map((ev) => (
+                  <span
+                    key={ev.id}
+                    className={`inline-block w-1.5 h-1.5 rounded-full ${ev.completed ? "opacity-40" : ""}`}
+                    style={{ background: ev.color }}
+                  />
+                ))}
+                {evs.length > 4 && (
+                  <span className="text-[9px] font-bold text-slate-500 tabular leading-none">
+                    +{evs.length - 4}
+                  </span>
+                )}
+              </div>
             </button>
           );
         })}
-      </div>
       </div>
     </div>
   );
@@ -754,13 +768,12 @@ function WeekView({
   });
   const today = new Date();
   return (
-    <div className="overflow-x-auto">
-    <div className="grid grid-cols-7 gap-2 min-w-[720px]">
+    <div className="grid grid-cols-1 sm:grid-cols-7 gap-2">
       {days.map((d, i) => {
         const evs = eventsOnDay(d);
         const isToday = sameDay(d, today);
         return (
-          <div key={i} className="border border-slate-200 rounded-lg overflow-hidden flex flex-col min-h-[280px]">
+          <div key={i} className="border border-slate-200 rounded-lg overflow-hidden flex flex-col min-h-[80px] sm:min-h-[280px]">
             <button
               onClick={() => onPickDay(d)}
               className={`text-xs font-bold px-2 py-1.5 text-left hover:bg-slate-50 border-b border-slate-100
@@ -801,7 +814,6 @@ function WeekView({
           </div>
         );
       })}
-    </div>
     </div>
   );
 }

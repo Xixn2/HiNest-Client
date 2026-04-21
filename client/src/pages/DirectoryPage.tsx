@@ -96,8 +96,8 @@ export default function DirectoryPage() {
       {me && <MyProfileHero me={me} totalCount={users.length} teamCount={teams.length} />}
 
       {/* Toolbar */}
-      <div className="mt-6 mb-4 flex items-center gap-2 flex-wrap">
-        <div className="relative flex-1 min-w-[200px] max-w-md">
+      <div className="mt-6 mb-4 space-y-2">
+        <div className="relative w-full max-w-md">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8E959E" strokeWidth="2"
             strokeLinecap="round" strokeLinejoin="round" className="absolute left-3.5 top-1/2 -translate-y-1/2">
             <circle cx="11" cy="11" r="7" />
@@ -111,21 +111,25 @@ export default function DirectoryPage() {
           />
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
-          <div className="tabs">
-            <button
-              className={`tab ${teamFilter === "" ? "tab-active" : ""}`}
-              onClick={() => setTeamFilter("")}
-            >
-              전체 <span className="ml-1 tabular text-ink-500">{others.length}</span>
-            </button>
-            {teams.map((t) => (
-              <button key={t} className={`tab ${teamFilter === t ? "tab-active" : ""}`} onClick={() => setTeamFilter(t)}>
-                {t}
+        <div className="flex items-center gap-2">
+          {/* 팀 필터 — 좌측 정렬, 넘치면 가로 스크롤 */}
+          <div className="flex-1 min-w-0 overflow-x-auto -mx-1 px-1">
+            <div className="tabs inline-flex">
+              <button
+                className={`tab ${teamFilter === "" ? "tab-active" : ""}`}
+                onClick={() => setTeamFilter("")}
+              >
+                전체 <span className="ml-1 tabular text-ink-500">{others.length}</span>
               </button>
-            ))}
+              {teams.map((t) => (
+                <button key={t} className={`tab ${teamFilter === t ? "tab-active" : ""}`} onClick={() => setTeamFilter(t)}>
+                  {t}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="tabs">
+          {/* 보기 전환 — 우측 정렬 고정 */}
+          <div className="tabs flex-shrink-0">
             <button className={`tab ${view === "grid" ? "tab-active" : ""}`} onClick={() => setView("grid")} title="그리드">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" />

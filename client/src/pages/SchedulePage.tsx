@@ -145,11 +145,9 @@ export default function SchedulePage() {
       />
 
       <div className="card p-0 overflow-hidden">
-        <div className="overflow-x-auto">
-        <div className="min-w-[640px]">
         <div className="grid grid-cols-7 bg-slate-50 border-b border-slate-100">
           {["일", "월", "화", "수", "목", "금", "토"].map((d, i) => (
-            <div key={d} className={`px-3 py-2 text-xs font-bold text-center ${i === 0 ? "text-rose-500" : i === 6 ? "text-accent-500" : "text-ink-500"}`}>
+            <div key={d} className={`px-1 sm:px-3 py-2 text-[11px] sm:text-xs font-bold text-center ${i === 0 ? "text-rose-500" : i === 6 ? "text-accent-500" : "text-ink-500"}`}>
               {d}
             </div>
           ))}
@@ -173,17 +171,23 @@ export default function SchedulePage() {
             return (
               <div
                 key={i}
-                className={`min-h-[110px] border-b border-r border-ink-100 p-2 ${
+                className={`min-h-[64px] sm:min-h-[110px] border-b border-r border-ink-100 p-1 sm:p-2 ${
                   holiday ? "bg-rose-50/40" : ""
-                }`}
+                } ${d ? "cursor-pointer sm:cursor-default hover:bg-ink-25 sm:hover:bg-transparent" : ""}`}
+                onClick={() => {
+                  // 모바일에서는 셀 탭으로 해당 날짜 상세 열기
+                  if (d && typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches) {
+                    setDayOpen(d);
+                  }
+                }}
               >
                 {d && (
                   <>
                     <div className="flex items-center justify-between mb-1 gap-1">
                       <div
-                        className={`text-xs font-bold tabular ${
+                        className={`text-[11px] sm:text-xs font-bold tabular ${
                           isToday
-                            ? "inline-flex items-center justify-center w-6 h-6 rounded-full bg-brand-500 text-white"
+                            ? "inline-flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-brand-500 text-white"
                             : numClass
                         }`}
                       >
@@ -191,14 +195,15 @@ export default function SchedulePage() {
                       </div>
                       {holiday && (
                         <div
-                          className="text-[10px] font-bold text-rose-600 truncate"
+                          className="text-[9px] sm:text-[10px] font-bold text-rose-600 truncate hidden sm:block"
                           title={holiday.name + (holiday.substitute ? " (대체공휴일)" : "")}
                         >
                           {holiday.name.replace(" 대체공휴일", "*")}
                         </div>
                       )}
                     </div>
-                    <div className="space-y-1">
+                    {/* 데스크톱: 이벤트 칩 최대 3개 */}
+                    <div className="hidden sm:block space-y-1">
                       {todays.slice(0, 3).map((e) => (
                         <EventChip key={e.id} e={e} onRemove={() => remove(e.id)} />
                       ))}
@@ -212,13 +217,26 @@ export default function SchedulePage() {
                         </button>
                       )}
                     </div>
+                    {/* 모바일: 색상 점만 최대 4개 + 더 있으면 숫자 */}
+                    <div className="sm:hidden flex items-center justify-center flex-wrap gap-[3px] mt-0.5">
+                      {todays.slice(0, 4).map((e) => (
+                        <span
+                          key={e.id}
+                          className="inline-block w-1.5 h-1.5 rounded-full"
+                          style={{ background: e.color }}
+                        />
+                      ))}
+                      {todays.length > 4 && (
+                        <span className="text-[9px] font-bold text-ink-500 tabular leading-none">
+                          +{todays.length - 4}
+                        </span>
+                      )}
+                    </div>
                   </>
                 )}
               </div>
             );
           })}
-        </div>
-        </div>
         </div>
       </div>
 
