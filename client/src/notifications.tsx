@@ -120,6 +120,13 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     reload();
 
     let retry: number | null = null;
+    // 채팅 이벤트는 별도 컴포넌트(ChatMiniApp) 에서 소비하므로 DOM CustomEvent 로
+    // 재방송한다. 기존 "chat:open" / "chat:open-room" 같은 in-app event 와 동일 패턴.
+    const rebroadcast = (name: "chat:sse-message" | "chat:sse-update" | "chat:sse-room", payload: unknown) => {
+      try {
+        window.dispatchEvent(new CustomEvent(name, { detail: payload }));
+      } catch {}
+    };
     function connect() {
       try {
         const es = new EventSource("/api/notification/stream", { withCredentials: true });
@@ -135,6 +142,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             // 벨 목록이 카운트만 맞고 항목이 비는 현상을 막기 위함.
             reload();
           } catch {}
+        });
+        // 채팅 실시간 푸시 — ChatMiniApp 이 window 리스너로 수신.
+        es.addEventListener("chat:message", (ev: MessageEvent) => {
+          try { rebroadcast("chat:sse-message", JSON.parse(ev.data)); } catch {}
+        });
+        es.addEventListener("chat:update", (ev: MessageEvent) => {
+          try { rebroadcast("chat:sse-update", JSON.parse(ev.data)); } catch {}
+        });
+        es.addEventListener("chat:room", (ev: MessageEvent) => {
+          try { rebroadcast("chat:sse-room", JSON.parse(ev.data)); } catch {}
         });
         es.onerror = () => {
           es.close();
