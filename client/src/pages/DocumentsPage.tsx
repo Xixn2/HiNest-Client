@@ -2,7 +2,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import PageHeader from "../components/PageHeader";
 
-type Folder = { id: string; name: string; parentId?: string | null; createdAt: string };
+type Folder = {
+  id: string;
+  name: string;
+  parentId?: string | null;
+  createdAt: string;
+  scope?: DocScope;
+  scopeTeam?: string | null;
+  scopeUserIds?: string | null;
+};
 type DocScope = "ALL" | "TEAM" | "PRIVATE" | "CUSTOM";
 type Doc = {
   id: string;
@@ -47,6 +55,11 @@ export default function DocumentsPage() {
   const [uploading, setUploading] = useState(false);
   const [scopeTab, setScopeTab] = useState<ScopeTab>("all");
   const [allUsers, setAllUsers] = useState<DirUser[]>([]);
+  const [folderForm, setFolderForm] = useState<{
+    name: string;
+    scope: DocScope;
+    scopeUserIds: string[];
+  }>({ name: "", scope: "ALL", scopeUserIds: [] });
   const [docForm, setDocForm] = useState<{
     title: string; description: string; tags: string;
     fileUrl: string; fileName: string; fileType: string; fileSize: number;
@@ -55,8 +68,9 @@ export default function DocumentsPage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function load() {
+    // 폴더도 문서와 동일하게 scope 탭으로 필터 — "전체"엔 모두, "팀/개인/사용자지정" 탭엔 해당 범위만.
     const [f, d] = await Promise.all([
-      api<{ folders: Folder[] }>("/api/document/folders"),
+      api<{ folders: Folder[] }>(`/api/document/folders?scope=${scopeTab}`),
       api<{ documents: Doc[] }>(
         `/api/document?folderId=${encodeURIComponent(currentFolder)}&scope=${scopeTab}${q ? `&q=${encodeURIComponent(q)}` : ""}`
       ),
@@ -69,19 +83,40 @@ export default function DocumentsPage() {
     // eslint-disable-next-line
   }, [currentFolder, q, scopeTab]);
 
-  // 사용자지정 범위 선택 시 유저 목록 로드
+  // 사용자지정 범위 선택 시 유저 목록 로드 (문서 / 폴더 모달 공용)
   useEffect(() => {
-    if (creating !== "doc" || allUsers.length > 0) return;
+    if ((creating !== "doc" && creating !== "folder") || allUsers.length > 0) return;
     api<{ users: DirUser[] }>("/api/users").then((r) => setAllUsers(r.users)).catch(() => {});
   }, [creating, allUsers.length]);
 
-  async function addFolder() {
-    const name = prompt("새 폴더 이름");
-    if (!name?.trim()) return;
+  function openFolderModal() {
+    // 현재 보고 있는 scope 탭을 기본값으로 제안 — UX 상 "팀" 탭에서 + 누르면 대개 팀 폴더를 만듦.
+    const preset: DocScope =
+      scopeTab === "team" ? "TEAM"
+      : scopeTab === "private" ? "PRIVATE"
+      : scopeTab === "custom" ? "CUSTOM"
+      : "ALL";
+    setFolderForm({ name: "", scope: preset, scopeUserIds: [] });
+    setCreating("folder");
+  }
+
+  async function createFolder(e: React.FormEvent) {
+    e.preventDefault();
+    if (!folderForm.name.trim()) return;
+    if (folderForm.scope === "CUSTOM" && folderForm.scopeUserIds.length === 0) {
+      return alert("사용자지정 범위에선 최소 한 명 이상을 선택해주세요");
+    }
     await api("/api/document/folders", {
       method: "POST",
-      json: { name: name.trim(), parentId: currentFolder === "root" ? null : currentFolder },
+      json: {
+        name: folderForm.name.trim(),
+        parentId: currentFolder === "root" ? null : currentFolder,
+        scope: folderForm.scope,
+        scopeUserIds: folderForm.scope === "CUSTOM" ? folderForm.scopeUserIds : undefined,
+      },
     });
+    setCreating(null);
+    setFolderForm({ name: "", scope: "ALL", scopeUserIds: [] });
     load();
   }
 
@@ -181,7 +216,7 @@ export default function DocumentsPage() {
         description="회사 규정·양식·매뉴얼 등을 보관하고 공유합니다."
         right={
           <>
-            <button className="btn-ghost" onClick={addFolder}>+ 새 폴더</button>
+            <button className="btn-ghost" onClick={openFolderModal}>+ 새 폴더</button>
             <button className="btn-primary" onClick={() => setCreating("doc")}>+ 문서 업로드</button>
           </>
         }
@@ -352,6 +387,85 @@ export default function DocumentsPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {creating === "folder" && (
+        <div className="fixed inset-0 bg-ink-900/40 grid place-items-center p-4 z-50" onClick={() => setCreating(null)}>
+          <div className="panel w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="section-head">
+              <div className="title">새 폴더</div>
+              <button className="btn-icon" onClick={() => setCreating(null)}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <form onSubmit={createFolder} className="p-5 space-y-3">
+              <div>
+                <label className="field-label">폴더 이름</label>
+                <input
+                  className="input"
+                  autoFocus
+                  value={folderForm.name}
+                  onChange={(e) => setFolderForm({ ...folderForm, name: e.target.value })}
+                  placeholder="예: 회사규정, 양식모음"
+                  required
+                />
+              </div>
+              <div>
+                <label className="field-label">공개 범위</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {(["ALL", "TEAM", "PRIVATE", "CUSTOM"] as DocScope[]).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setFolderForm((p) => ({ ...p, scope: s }))}
+                      className={`h-9 rounded-lg border text-[12px] font-bold transition ${
+                        folderForm.scope === s
+                          ? "border-brand-500 bg-brand-50 text-brand-700"
+                          : "border-ink-200 bg-[color:var(--c-surface)] text-ink-600 hover:border-ink-300"
+                      }`}
+                    >
+                      {SCOPE_LABEL[s]}
+                    </button>
+                  ))}
+                </div>
+                {folderForm.scope === "TEAM" && (
+                  <div className="mt-2 text-[11px] text-ink-500">내가 속한 팀으로 자동 지정돼요.</div>
+                )}
+                {folderForm.scope === "CUSTOM" && (
+                  <div className="mt-2 border border-ink-200 rounded-lg max-h-[180px] overflow-y-auto p-2 space-y-1">
+                    {allUsers.length === 0 ? (
+                      <div className="text-[12px] text-ink-500 p-2">사용자를 불러오는 중…</div>
+                    ) : (
+                      allUsers.map((u) => {
+                        const checked = folderForm.scopeUserIds.includes(u.id);
+                        return (
+                          <label key={u.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-ink-50 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => setFolderForm((p) => ({
+                                ...p,
+                                scopeUserIds: checked
+                                  ? p.scopeUserIds.filter((x) => x !== u.id)
+                                  : [...p.scopeUserIds, u.id],
+                              }))}
+                            />
+                            <div className="w-6 h-6 rounded grid place-items-center text-white text-[10px] font-bold" style={{ background: u.avatarColor ?? "#6B7280" }}>{u.name[0]}</div>
+                            <div className="text-[12px] flex-1">{u.name}{u.team ? <span className="text-ink-400 ml-1">· {u.team}</span> : null}</div>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <button type="button" className="btn-ghost" onClick={() => setCreating(null)}>취소</button>
+                <button className="btn-primary">생성</button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

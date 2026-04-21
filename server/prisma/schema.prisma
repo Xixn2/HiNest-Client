@@ -389,6 +389,13 @@ model Folder {
   parent    Folder?    @relation("FolderChildren", fields: [parentId], references: [id], onDelete: Cascade)
   children  Folder[]   @relation("FolderChildren")
   documents Document[]
+  // 폴더 공개 범위 — Document 의 scope 와 동일 의미.
+  // ALL(전체) | TEAM(팀) | PRIVATE(개인) | CUSTOM(사용자지정)
+  // 탭별로 구분되어 보이도록 추가. authorId 는 PRIVATE / 권한 판단용.
+  scope        String  @default("ALL")
+  scopeTeam    String?
+  scopeUserIds String? // CUSTOM 일 때 접근 허용 유저 id 콤마 구분
+  authorId     String?
   createdAt DateTime   @default(now())
 }
 

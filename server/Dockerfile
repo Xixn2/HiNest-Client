@@ -64,6 +64,10 @@ COPY --from=deps    --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/dist          ./dist
 COPY --from=builder --chown=node:node /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=node:node /app/node_modules/@prisma/client ./node_modules/@prisma/client
+# Prisma CLI 는 devDep 이라 deps 스테이지에 없지만, 컨테이너 기동 시
+# migrate deploy 를 자동 수행하기 위해 builder 스테이지에서 복사.
+COPY --from=builder --chown=node:node /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder --chown=node:node /app/node_modules/@prisma/engines ./node_modules/@prisma/engines
 COPY --chown=node:node prisma ./prisma
 COPY --chown=node:node package.json ./
 
@@ -85,4 +89,7 @@ ENTRYPOINT ["/sbin/tini", "--"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT||4000) + '/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["node", "dist/index.js"]
+# 컨테이너 기동 시: 1) prisma migrate deploy (멱등) → 2) 서버 기동.
+# 새 migration 이 추가되면 배포만으로 자동 적용되어 수동 작업이 필요 없음.
+# 실패 시 (DB 장애 등) exit 1 로 태스크가 재시작되어 배포가 롤백되도록.
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node dist/index.js"]
