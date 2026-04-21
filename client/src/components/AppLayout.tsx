@@ -33,6 +33,7 @@ const WORK_NAV: NavItem[] = [
   { to: "/schedule", label: "일정", icon: CalendarIcon },
   { to: "/attendance", label: "근태·월차", icon: ClockIcon },
   { to: "/journal", label: "업무일지", icon: NoteIcon },
+  { to: "/meetings", label: "회의록", icon: MeetingIcon },
   { to: "/approvals", label: "전자결재", icon: ApprovalIcon },
 ];
 
@@ -428,6 +429,7 @@ function HomeIcon({ active }: I) { return svgBase(!!active, <><path d="M3 10.5 1
 function CalendarIcon({ active }: I) { return svgBase(!!active, <><rect x="3" y="5" width="18" height="16" rx="2.5" /><path d="M3 10h18M8 3v4M16 3v4" /></>); }
 function ClockIcon({ active }: I) { return svgBase(!!active, <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></>); }
 function NoteIcon({ active }: I) { return svgBase(!!active, <><path d="M5 4h10l4 4v12H5z" /><path d="M14 4v5h5M8 13h8M8 16h5" /></>); }
+function MeetingIcon({ active }: I) { return svgBase(!!active, <><path d="M4 5h16v11H4z" /><path d="M4 5 12 12l8-7" /><path d="M8 20h8M12 16v4" /></>); }
 function MegaIcon({ active }: I) { return svgBase(!!active, <><path d="M3 10v4a2 2 0 0 0 2 2h2l8 5V3L7 8H5a2 2 0 0 0-2 2Z" /><path d="M19 8a5 5 0 0 1 0 8" /></>); }
 function PeopleIcon({ active }: I) { return svgBase(!!active, <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>); }
 function OrgIcon({ active }: I) { return svgBase(!!active, <><rect x="8" y="3" width="8" height="6" rx="1" /><rect x="3" y="15" width="6" height="6" rx="1" /><rect x="15" y="15" width="6" height="6" rx="1" /><path d="M12 9v3M6 15v-3h12v3" /></>); }
