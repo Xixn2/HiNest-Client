@@ -1,0 +1,101 @@
+# 서버(API) 배포 — main 브랜치의 server/ 변경이 있을 때 ECR 이미지 빌드 후 ECS 롤링 배포.
+#
+# 인증: AWS IAM 키를 GitHub secret 에 저장하지 않고, GitHub OIDC → AWS IAM Role(`github-deploy-hinest`)
+# 을 STS AssumeRoleWithWebIdentity 로 일시 자격 증명만 받아서 쓴다. 키 유출 리스크 최소화.
+#
+# 배포 흐름:
+#   1) Checkout → 2) Buildx 준비 → 3) OIDC 로 AWS 자격 증명 → 4) ECR 로그인
+#   5) linux/amd64 이미지 빌드 & 태그 2개(:latest, :<git sha>) 푸시
+#   6) ECS `hinest-server` 서비스에 force-new-deployment 를 걸어 신이미지 풀링 강제
+#   7) 새 태스크가 ALB 헬스 통과할 때까지 stable-wait (최대 10분)
+
+name: Deploy server to AWS Fargate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+      - ".github/workflows/deploy-server.yml"
+  workflow_dispatch: # 수동 재배포용
+
+concurrency:
+  # 같은 브랜치 동시 배포 방지. 새 push 가 들어오면 진행 중인 배포 취소 후 재시작.
+  group: deploy-server-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  # OIDC JWT 발급에 필수.
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECR_REPOSITORY: hinest-server
+  ECS_CLUSTER: hinest-prod
+  ECS_SERVICE: hinest-server
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::149536482210:role/github-deploy-hinest
+          role-session-name: gha-deploy-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          SHA_TAG: ${{ github.sha }}
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --tag "$REGISTRY/$ECR_REPOSITORY:latest" \
+            --tag "$REGISTRY/$ECR_REPOSITORY:$SHA_TAG" \
+            --cache-from type=registry,ref=$REGISTRY/$ECR_REPOSITORY:buildcache \
+            --cache-to   type=registry,ref=$REGISTRY/$ECR_REPOSITORY:buildcache,mode=max \
+            --push \
+            ./server
+
+      - name: Force ECS new deployment
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --force-new-deployment \
+            --region "$AWS_REGION" >/dev/null
+          echo "Update triggered."
+
+      - name: Wait for service to stabilize
+        run: |
+          # ECS CLI wait 는 최대 10분 동안 배포가 안정화(rolloutState=COMPLETED) 되는지 폴링.
+          # 안정화 실패 시 workflow 를 실패로 처리해 Slack/이메일 알림이 오게 함.
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --region "$AWS_REGION"
+          echo "Deployment stable."
+
+      - name: Post-deploy health probe
+        run: |
+          for i in 1 2 3 4 5; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" https://api.nest.hi-vits.com/api/health || true)
+            echo "attempt $i: HTTP=$code"
+            [ "$code" = "200" ] && exit 0
+            sleep 5
+          done
+          echo "Health check did not return 200 after 5 attempts."
+          exit 1
