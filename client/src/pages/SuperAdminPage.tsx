@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import PageHeader from "../components/PageHeader";
 import SuperStepUpGate from "../components/SuperStepUpGate";
@@ -95,9 +95,21 @@ function LogsPanel() {
   const [logs, setLogs] = useState<Log[]>([]);
   const [q, setQ] = useState("");
   const [actionFilter, setActionFilter] = useState("");
+  // 500개 로그를 필터할 때 한글 IME 입력이 끊기지 않도록 우선순위 낮춰 실행.
+  const deferredQ = useDeferredValue(q);
+
+  // 언마운트 후 setState 호출 방지 + 새로고침 버튼 연타 시 stale 응답 폐기.
+  const aliveRef = useRef(true);
+  const tokenRef = useRef(0);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => { aliveRef.current = false; };
+  }, []);
 
   async function load() {
+    const myToken = ++tokenRef.current;
     const res = await api<{ logs: Log[] }>("/api/admin/logs?limit=500");
+    if (!aliveRef.current || myToken !== tokenRef.current) return;
     setLogs(res.logs);
   }
 
@@ -110,7 +122,7 @@ function LogsPanel() {
   const filtered = useMemo(() => {
     let arr = logs;
     if (actionFilter) arr = arr.filter((l) => l.action === actionFilter);
-    const keyword = q.trim().toLowerCase();
+    const keyword = deferredQ.trim().toLowerCase();
     if (keyword) {
       arr = arr.filter((l) =>
         [l.action, l.target, l.detail, l.user?.name, l.user?.email]
@@ -119,7 +131,7 @@ function LogsPanel() {
       );
     }
     return arr;
-  }, [logs, actionFilter, q]);
+  }, [logs, actionFilter, deferredQ]);
 
   return (
     <div className="panel p-0 overflow-hidden">
@@ -137,6 +149,7 @@ function LogsPanel() {
             placeholder="검색 (이름·대상·상세)"
             value={q}
             onChange={(e) => setQ(e.target.value)}
+            maxLength={80}
           />
           <button className="btn-ghost btn-xs" onClick={load}>새로고침</button>
         </div>
@@ -185,13 +198,22 @@ function ChatAuditPanel() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [filter, setFilter] = useState<"all" | "direct" | "group">("all");
   const [q, setQ] = useState("");
+  // 방 리스트 필터는 수백개 수준에서 한 번에 일어나므로 deferred 로 스케줄 낮춤.
+  const deferredQ = useDeferredValue(q);
 
   // 방 전환 중 이전 요청이 늦게 돌아오면 새 방의 메시지를 덮어써버리는 race 가 있어,
   // activeIdRef 로 현재 의도한 방을 기억해두고 응답이 stale 이면 버림.
   const activeIdRef = useRef<string | null>(null);
+  // 언마운트 후 setState 방지. loadRooms 는 exit 시점에 오래 걸릴 수도 있음.
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => { aliveRef.current = false; };
+  }, []);
 
   async function loadRooms() {
     const res = await api<{ rooms: Room[] }>("/api/chat/rooms?scope=audit");
+    if (!aliveRef.current) return;
     setRooms(res.rooms);
     // setActive 는 함수형 업데이트로 — loadRooms 진행 중에 유저가 방을 바꿨다면 덮어쓰지 않음.
     setActive((prev) => prev ?? res.rooms[0] ?? null);
@@ -199,6 +221,7 @@ function ChatAuditPanel() {
   async function loadMessages(roomId: string) {
     activeIdRef.current = roomId;
     const res = await api<{ messages: Message[] }>(`/api/chat/rooms/${roomId}/messages`);
+    if (!aliveRef.current) return;
     if (activeIdRef.current !== roomId) return; // 방이 바뀌었으면 stale 응답 무시
     setMessages(res.messages);
   }
@@ -209,7 +232,7 @@ function ChatAuditPanel() {
     let arr = rooms;
     if (filter === "direct") arr = arr.filter((r) => r.type === "DIRECT");
     if (filter === "group") arr = arr.filter((r) => r.type !== "DIRECT");
-    const k = q.trim().toLowerCase();
+    const k = deferredQ.trim().toLowerCase();
     if (k) {
       arr = arr.filter((r) =>
         r.name.toLowerCase().includes(k) ||
@@ -217,7 +240,7 @@ function ChatAuditPanel() {
       );
     }
     return arr;
-  }, [rooms, filter, q]);
+  }, [rooms, filter, deferredQ]);
 
   function roomLabel(r: Room) {
     if (r.type === "DIRECT") {
@@ -241,7 +264,7 @@ function ChatAuditPanel() {
         <div className="flex h-full">
           <div className={`${active ? "hidden md:flex" : "flex w-full"} md:w-[320px] border-r border-ink-150 flex-col`}>
             <div className="p-3 border-b border-ink-150 space-y-2">
-              <input className="input text-[12px] h-[32px]" placeholder="방·참가자 검색" value={q} onChange={(e) => setQ(e.target.value)} />
+              <input className="input text-[12px] h-[32px]" placeholder="방·참가자 검색" value={q} onChange={(e) => setQ(e.target.value)} maxLength={80} />
               <div className="flex items-center gap-1">
                 {(["all", "direct", "group"] as const).map((f) => (
                   <button key={f} onClick={() => setFilter(f)}

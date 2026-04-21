@@ -37,6 +37,14 @@ export default function ProfilePage() {
   const [pwMsg, setPwMsg] = useState("");
   const [pwErr, setPwErr] = useState("");
 
+  // 업로드/저장 중에 사용자가 페이지를 떠나면 setState 가 언마운트 후 호출될 수 있음.
+  // setTimeout 으로 메시지 초기화도 언마운트 후에 불릴 수 있어 일괄 가드.
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => { aliveRef.current = false; };
+  }, []);
+
   useEffect(() => {
     if (user) {
       setName(user.name);
@@ -55,10 +63,13 @@ export default function ProfilePage() {
         json: { name, avatarColor: color, avatarUrl: avatarUrl ?? "" },
       });
       await refresh();
+      if (!aliveRef.current) return;
       setSavedMsg("저장되었습니다");
-      setTimeout(() => setSavedMsg(""), 2000);
+      setTimeout(() => {
+        if (aliveRef.current) setSavedMsg("");
+      }, 2000);
     } catch (e: any) {
-      setErr(e.message ?? "저장 실패");
+      if (aliveRef.current) setErr(e.message ?? "저장 실패");
     }
   }
 
@@ -88,11 +99,12 @@ export default function ProfilePage() {
       const data = await r.json();
       const url: string | undefined = data?.url;
       if (!url) throw new Error("업로드 응답이 올바르지 않습니다.");
+      if (!aliveRef.current) return;
       setAvatarUrl(url);
     } catch (e: any) {
-      setErr(e.message ?? "업로드 실패");
+      if (aliveRef.current) setErr(e.message ?? "업로드 실패");
     } finally {
-      setUploadingAvatar(false);
+      if (aliveRef.current) setUploadingAvatar(false);
     }
   }
 
@@ -112,9 +124,11 @@ export default function ProfilePage() {
       });
       setPwMsg("비밀번호가 변경되었습니다");
       setPwForm({ current: "", next: "", confirm: "" });
-      setTimeout(() => setPwMsg(""), 3000);
+      setTimeout(() => {
+        if (aliveRef.current) setPwMsg("");
+      }, 3000);
     } catch (e: any) {
-      setPwErr(e.message ?? "변경 실패");
+      if (aliveRef.current) setPwErr(e.message ?? "변경 실패");
     }
   }
 
@@ -168,7 +182,13 @@ export default function ProfilePage() {
             <form onSubmit={saveProfile} className="space-y-4">
               <div>
                 <label className="field-label">이름</label>
-                <input className="input" value={name} onChange={(e) => setName(e.target.value)} required />
+                <input
+                  className="input"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  maxLength={200}
+                />
               </div>
               <div>
                 <label className="field-label">프로필 이미지</label>
@@ -263,16 +283,39 @@ export default function ProfilePage() {
             <form onSubmit={changePw} className="space-y-3">
               <div>
                 <label className="field-label">현재 비밀번호</label>
-                <input className="input" type="password" value={pwForm.current} onChange={(e) => setPwForm({ ...pwForm, current: e.target.value })} required />
+                <input
+                  className="input"
+                  type="password"
+                  value={pwForm.current}
+                  onChange={(e) => setPwForm({ ...pwForm, current: e.target.value })}
+                  required
+                  maxLength={200}
+                />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="field-label">새 비밀번호 (8자 이상)</label>
-                  <input className="input" type="password" value={pwForm.next} onChange={(e) => setPwForm({ ...pwForm, next: e.target.value })} required minLength={8} />
+                  <input
+                    className="input"
+                    type="password"
+                    value={pwForm.next}
+                    onChange={(e) => setPwForm({ ...pwForm, next: e.target.value })}
+                    required
+                    minLength={8}
+                    maxLength={128}
+                  />
                 </div>
                 <div>
                   <label className="field-label">새 비밀번호 확인</label>
-                  <input className="input" type="password" value={pwForm.confirm} onChange={(e) => setPwForm({ ...pwForm, confirm: e.target.value })} required minLength={8} />
+                  <input
+                    className="input"
+                    type="password"
+                    value={pwForm.confirm}
+                    onChange={(e) => setPwForm({ ...pwForm, confirm: e.target.value })}
+                    required
+                    minLength={8}
+                    maxLength={128}
+                  />
                 </div>
               </div>
               {pwErr && <InlineAlert tone="error">{pwErr}</InlineAlert>}
