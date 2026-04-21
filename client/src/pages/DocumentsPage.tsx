@@ -190,6 +190,30 @@ export default function DocumentsPage() {
     load();
   }
 
+  // ===== 문서 드래그앤드롭 이동 =====
+  // 행을 폴더 카드(또는 브레드크럼) 위에 떨어뜨려 folderId 만 PATCH.
+  // 서버는 작성자 본인 or ADMIN 에게만 PATCH 를 허용하므로 권한 없는 이동은 403.
+  const [draggingDocId, setDraggingDocId] = useState<string | null>(null);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null); // "folder:<id>" | "root" | "crumb:<id>"
+
+  async function moveDocToFolder(docId: string, folderId: string | null) {
+    const doc = docs.find((x) => x.id === docId);
+    if (!doc) return;
+    // 같은 폴더로 드롭하면 no-op
+    const same =
+      (folderId === null && (doc.folderId === null || doc.folderId === undefined)) ||
+      (folderId !== null && doc.folderId === folderId);
+    if (same) return;
+    // 낙관적 업데이트 — 현재 폴더 뷰에서는 즉시 사라짐
+    setDocs((prev) => prev.filter((x) => x.id !== docId));
+    try {
+      await api(`/api/document/${docId}`, { method: "PATCH", json: { folderId } });
+    } catch (e: any) {
+      alert(e?.message ?? "이동에 실패했어요");
+      load(); // 실패 시 상태 복구
+    }
+  }
+
   // 현재 폴더의 하위 폴더
   const currentChildren = useMemo(() => {
     if (currentFolder === "root") return folders.filter((f) => !f.parentId);
@@ -244,22 +268,55 @@ export default function DocumentsPage() {
       <div className="flex items-center gap-2 mb-4">
         <div className="flex items-center gap-1 text-[13px] flex-1 min-w-0">
           <button
-            className={`px-2 py-1 rounded hover:bg-ink-100 ${currentFolder === "root" ? "font-bold text-ink-900" : "text-ink-600"}`}
+            className={`px-2 py-1 rounded transition ${
+              dragOverKey === "root" ? "bg-brand-100 ring-2 ring-brand-400" : "hover:bg-ink-100"
+            } ${currentFolder === "root" ? "font-bold text-ink-900" : "text-ink-600"}`}
             onClick={() => setCurrentFolder("root")}
+            onDragOver={(e) => {
+              if (!draggingDocId) return;
+              e.preventDefault();
+              setDragOverKey("root");
+            }}
+            onDragLeave={() => setDragOverKey((k) => (k === "root" ? null : k))}
+            onDrop={(e) => {
+              if (!draggingDocId) return;
+              e.preventDefault();
+              moveDocToFolder(draggingDocId, null);
+              setDragOverKey(null);
+              setDraggingDocId(null);
+            }}
           >
             📁 루트
           </button>
-          {crumbs.map((f) => (
-            <span key={f.id} className="flex items-center gap-1">
-              <span className="text-ink-300">/</span>
-              <button
-                className={`px-2 py-1 rounded hover:bg-ink-100 ${f.id === currentFolder ? "font-bold text-ink-900" : "text-ink-600"}`}
-                onClick={() => setCurrentFolder(f.id)}
-              >
-                {f.name}
-              </button>
-            </span>
-          ))}
+          {crumbs.map((f) => {
+            const key = `crumb:${f.id}`;
+            return (
+              <span key={f.id} className="flex items-center gap-1">
+                <span className="text-ink-300">/</span>
+                <button
+                  className={`px-2 py-1 rounded transition ${
+                    dragOverKey === key ? "bg-brand-100 ring-2 ring-brand-400" : "hover:bg-ink-100"
+                  } ${f.id === currentFolder ? "font-bold text-ink-900" : "text-ink-600"}`}
+                  onClick={() => setCurrentFolder(f.id)}
+                  onDragOver={(e) => {
+                    if (!draggingDocId) return;
+                    e.preventDefault();
+                    setDragOverKey(key);
+                  }}
+                  onDragLeave={() => setDragOverKey((k) => (k === key ? null : k))}
+                  onDrop={(e) => {
+                    if (!draggingDocId) return;
+                    e.preventDefault();
+                    moveDocToFolder(draggingDocId, f.id);
+                    setDragOverKey(null);
+                    setDraggingDocId(null);
+                  }}
+                >
+                  {f.name}
+                </button>
+              </span>
+            );
+          })}
         </div>
         <div className="relative w-[220px]">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8E959E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="absolute left-3 top-1/2 -translate-y-1/2">
@@ -275,12 +332,32 @@ export default function DocumentsPage() {
         <div className="mb-5">
           <div className="text-[11px] font-extrabold text-ink-500 uppercase tracking-[0.08em] mb-2">폴더</div>
           <div className="grid grid-cols-4 gap-3">
-            {currentChildren.map((f) => (
+            {currentChildren.map((f) => {
+              const dropKey = `folder:${f.id}`;
+              const isDropTarget = dragOverKey === dropKey;
+              return (
               <div
                 key={f.id}
                 onDoubleClick={() => setCurrentFolder(f.id)}
-                className="panel p-4 flex items-center gap-3 hover:border-ink-300 cursor-pointer group"
+                className={`panel p-4 flex items-center gap-3 cursor-pointer group transition ${
+                  isDropTarget
+                    ? "border-brand-500 bg-brand-50 ring-2 ring-brand-400"
+                    : "hover:border-ink-300"
+                }`}
                 onClick={() => setCurrentFolder(f.id)}
+                onDragOver={(e) => {
+                  if (!draggingDocId) return;
+                  e.preventDefault();
+                  setDragOverKey(dropKey);
+                }}
+                onDragLeave={() => setDragOverKey((k) => (k === dropKey ? null : k))}
+                onDrop={(e) => {
+                  if (!draggingDocId) return;
+                  e.preventDefault();
+                  moveDocToFolder(draggingDocId, f.id);
+                  setDragOverKey(null);
+                  setDraggingDocId(null);
+                }}
               >
                 <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 grid place-items-center flex-shrink-0">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -300,7 +377,8 @@ export default function DocumentsPage() {
                   </button>
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         </div>
       )}
@@ -332,7 +410,24 @@ export default function DocumentsPage() {
             </thead>
             <tbody>
               {docs.map((d) => (
-                <tr key={d.id}>
+                <tr
+                  key={d.id}
+                  draggable
+                  onDragStart={(e) => {
+                    setDraggingDocId(d.id);
+                    // 일부 브라우저는 dataTransfer 에 무언가 실려있지 않으면 드래그를 취소함
+                    e.dataTransfer.setData("text/plain", d.id);
+                    e.dataTransfer.effectAllowed = "move";
+                  }}
+                  onDragEnd={() => {
+                    setDraggingDocId(null);
+                    setDragOverKey(null);
+                  }}
+                  style={{
+                    cursor: "grab",
+                    opacity: draggingDocId === d.id ? 0.5 : 1,
+                  }}
+                >
                   <td>
                     <div className="flex items-start gap-2.5">
                       <div className="w-8 h-8 rounded-lg bg-sky-50 text-sky-700 grid place-items-center flex-shrink-0">
