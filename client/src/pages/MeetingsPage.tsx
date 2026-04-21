@@ -90,6 +90,7 @@ export default function MeetingsPage() {
             placeholder="제목·작성자로 검색"
             value={q}
             onChange={(e) => setQ(e.target.value)}
+            maxLength={80}
           />
           <select
             className="input w-[140px]"

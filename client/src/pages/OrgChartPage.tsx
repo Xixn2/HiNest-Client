@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
@@ -26,11 +26,21 @@ export default function OrgChartPage() {
   // 찾는 로직을 두 번 타고 이벤트도 두 번 발사돼 채팅 창이 깜빡임.
   const [dmBusyId, setDmBusyId] = useState<string | null>(null);
 
+  // 초기 로딩 중 빠르게 탭 이탈해도 setState 누수 안 나도록 guard.
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
+
   async function load() {
     const [u, p] = await Promise.all([
       api<{ users: DirUser[] }>("/api/users"),
       api<{ teams: string[] }>("/api/users/teams").catch(() => ({ teams: [] })),
     ]);
+    if (!aliveRef.current) return;
     setUsers(u.users);
     void p;
   }
@@ -39,6 +49,7 @@ export default function OrgChartPage() {
     // 직급 등록된 리스트를 가져오려면 관리자 API 필요. 일반 유저는 hint 만 사용.
     try {
       const r = await api<{ positions: Position[] }>("/api/admin/positions");
+      if (!aliveRef.current) return;
       setPositions(r.positions);
     } catch {}
   }

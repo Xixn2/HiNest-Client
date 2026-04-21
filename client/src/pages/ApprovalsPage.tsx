@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
@@ -74,8 +74,21 @@ export default function ApprovalsPage() {
   // 뒤쪽 페이지를 가리거나 버튼 탭 타깃이 작은 문제 해결.
   const [cancelingId, setCancelingId] = useState<string | null>(null);
 
+  // 승인/반려/취소 직후 load() 가 또 돌 때 사용자가 빠르게 이탈하면 setState 누수.
+  // scope 토글을 빠르게 눌러 응답이 거꾸로 도착해도 마지막 것만 반영.
+  const aliveRef = useRef(true);
+  const loadTokenRef = useRef(0);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
+
   async function load() {
+    const myToken = ++loadTokenRef.current;
     const res = await api<{ approvals: Approval[] }>(`/api/approval?scope=${scope}`);
+    if (!aliveRef.current || myToken !== loadTokenRef.current) return;
     setApprovals(res.approvals);
     if (selected) {
       const fresh = res.approvals.find((a) => a.id === selected.id);
@@ -84,6 +97,7 @@ export default function ApprovalsPage() {
   }
   async function loadDirectory() {
     const res = await api<{ users: DirUser[] }>("/api/users");
+    if (!aliveRef.current) return;
     setDirectory(res.users);
   }
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [scope]);
@@ -534,11 +548,23 @@ function CreateModal({
 
           <div>
             <label className="field-label">제목</label>
-            <input className="input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
+            <input
+              className="input"
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              required
+              maxLength={200}
+            />
           </div>
           <div>
             <label className="field-label">내용</label>
-            <textarea className="input" rows={3} value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} />
+            <textarea
+              className="input"
+              rows={3}
+              value={form.content}
+              onChange={(e) => setForm({ ...form, content: e.target.value })}
+              maxLength={5000}
+            />
           </div>
 
           {needDates && (
@@ -557,7 +583,13 @@ function CreateModal({
           {needDestination && (
             <div>
               <label className="field-label">목적지</label>
-              <input className="input" value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} placeholder="예: 부산 지사" />
+              <input
+                className="input"
+                value={form.destination}
+                onChange={(e) => setForm({ ...form, destination: e.target.value })}
+                placeholder="예: 부산 지사"
+                maxLength={200}
+              />
             </div>
           )}
 
