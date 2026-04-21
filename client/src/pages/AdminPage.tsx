@@ -171,6 +171,56 @@ type Position = { id: string; name: string; rank: number; createdAt: string };
 
 type Tab = "users" | "invites" | "teams" | "positions";
 
+// 내보내기 버튼에 쓰는 작은 브랜드 로고들. 외부 에셋 없이 inline SVG 로 둬서
+// 번들 사이즈/네트워크 요청 영향 없음. 크기는 16px 고정 — 버튼 높이(32)에 맞춘 값.
+function ExcelLogo() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+      <rect x="0.5" y="0.5" width="15" height="15" rx="2" fill="#107C41" />
+      <path
+        d="M4.6 4.4 L7.2 8 L4.6 11.6 H6.3 L8.0 9.1 L9.7 11.6 H11.4 L8.8 8 L11.4 4.4 H9.7 L8.0 6.9 L6.3 4.4 Z"
+        fill="#ffffff"
+      />
+    </svg>
+  );
+}
+function CsvLogo() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="M3 1.5 A0.5 0.5 0 0 1 3.5 1 H10 L13 4 V14.5 A0.5 0.5 0 0 1 12.5 15 H3.5 A0.5 0.5 0 0 1 3 14.5 Z"
+        fill="#64748B"
+      />
+      <path d="M10 1 V4 H13 Z" fill="#94A3B8" />
+      <rect x="5" y="7" width="6" height="1" fill="#ffffff" />
+      <rect x="5" y="9.2" width="6" height="1" fill="#ffffff" />
+      <rect x="5" y="11.4" width="4" height="1" fill="#ffffff" />
+    </svg>
+  );
+}
+function PdfLogo() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="M3 1.5 A0.5 0.5 0 0 1 3.5 1 H10 L13 4 V14.5 A0.5 0.5 0 0 1 12.5 15 H3.5 A0.5 0.5 0 0 1 3 14.5 Z"
+        fill="#DC2626"
+      />
+      <path d="M10 1 V4 H13 Z" fill="#F87171" />
+      <text
+        x="8"
+        y="12"
+        textAnchor="middle"
+        fontSize="4.2"
+        fontWeight="700"
+        fontFamily="Arial, Helvetica, sans-serif"
+        fill="#ffffff"
+      >
+        PDF
+      </text>
+    </svg>
+  );
+}
+
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>("users");
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -329,29 +379,31 @@ function UsersTab({
           {/* 현재 필터/검색 결과 기준으로 내보내기 — 권한/상태는 앱 UI 전용이므로 제외. */}
           <button
             type="button"
-            className="btn-ghost !h-[32px] !px-3 text-[12px]"
+            className="btn-ghost !h-[32px] !px-3 text-[12px] inline-flex items-center gap-1.5"
             onClick={() => {
               const stamp = new Date().toISOString().slice(0, 10);
               downloadXLSX(`hinest-구성원목록-${stamp}`, filtered, HR_EXPORT_COLUMNS, "구성원");
             }}
             title="현재 필터된 목록을 엑셀(.xlsx) 파일로 저장"
           >
+            <ExcelLogo />
             Excel
           </button>
           <button
             type="button"
-            className="btn-ghost !h-[32px] !px-3 text-[12px]"
+            className="btn-ghost !h-[32px] !px-3 text-[12px] inline-flex items-center gap-1.5"
             onClick={() => {
               const stamp = new Date().toISOString().slice(0, 10);
               downloadCSV(`hinest-구성원목록-${stamp}`, filtered, HR_EXPORT_COLUMNS);
             }}
             title="CSV 파일로 저장 (범용)"
           >
+            <CsvLogo />
             CSV
           </button>
           <button
             type="button"
-            className="btn-ghost !h-[32px] !px-3 text-[12px]"
+            className="btn-ghost !h-[32px] !px-3 text-[12px] inline-flex items-center gap-1.5"
             onClick={() => {
               openPrintable("HiNest · 구성원 목록", filtered, HR_EXPORT_COLUMNS, {
                 subtitle: `${roleFilter || "전체 권한"} · ${activeFilter === "all" ? "전체" : activeFilter === "active" ? "활성" : "비활성"}${q ? ` · 검색: "${q}"` : ""}`,
@@ -359,6 +411,7 @@ function UsersTab({
             }}
             title="인쇄 창을 열어 PDF 로 저장"
           >
+            <PdfLogo />
             PDF
           </button>
           <span className="mx-1 h-4 w-px bg-ink-200" />
