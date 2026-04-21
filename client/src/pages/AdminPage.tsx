@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import PageHeader from "../components/PageHeader";
 import { downloadCSV, downloadXLSX, openPrintable, parseSheet, type TableColumn } from "../lib/exportTable";
@@ -318,14 +319,37 @@ function UsersTab({
   // 기본 뷰(컴팩트) ↔ 상세 뷰(엑셀 포맷 전 컬럼)
   const [view, setView] = useState<"basic" | "detail">("basic");
 
+  const nav = useNavigate();
+  const [updateErr, setUpdateErr] = useState<string | null>(null);
+
   async function update(id: string, data: any) {
-    await api(`/api/admin/users/${id}`, { method: "PATCH", json: data });
-    reload();
+    setUpdateErr(null);
+    try {
+      await api(`/api/admin/users/${id}`, { method: "PATCH", json: data });
+      reload();
+    } catch (e: any) {
+      const msg: string = e?.message ?? "변경에 실패했습니다.";
+      // 역할 변경은 총관리자 step-up 세션이 필요함. 안내 + 이동 유도.
+      if (msg.includes("비밀번호 재확인") || msg.includes("SUPER_STEPUP")) {
+        setUpdateErr("역할 변경은 총관리자 세션이 필요합니다. /super-admin 에서 비밀번호 재확인 후 다시 시도해주세요.");
+        if (confirm("역할 변경은 총관리자 재인증이 필요합니다.\n지금 총관리자 페이지로 이동할까요?")) {
+          nav("/super-admin");
+        }
+      } else {
+        setUpdateErr(msg);
+      }
+      // UI 의 select 를 원래 값으로 되돌리기 위해 reload.
+      reload();
+    }
   }
   async function remove(id: string) {
     if (!confirm("정말 삭제할까요? 모든 관련 데이터가 삭제됩니다.")) return;
-    await api(`/api/admin/users/${id}`, { method: "DELETE" });
-    reload();
+    try {
+      await api(`/api/admin/users/${id}`, { method: "DELETE" });
+      reload();
+    } catch (e: any) {
+      setUpdateErr(e?.message ?? "삭제에 실패했습니다.");
+    }
   }
 
   const filtered = useMemo(() => {
@@ -345,6 +369,15 @@ function UsersTab({
 
   return (
     <div className="panel p-0 overflow-hidden">
+      {updateErr && (
+        <div className="px-5 py-2.5 bg-red-50 border-b border-red-100 text-[12px] font-semibold text-red-700 flex items-start gap-2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 flex-shrink-0">
+            <circle cx="12" cy="12" r="9" /><path d="M12 8v4M12 16h.01" />
+          </svg>
+          <div className="flex-1">{updateErr}</div>
+          <button onClick={() => setUpdateErr(null)} className="text-red-500 hover:text-red-700">닫기</button>
+        </div>
+      )}
       <div className="section-head">
         <div className="title">구성원 목록 <span className="text-ink-400 font-medium tabular ml-1">{filtered.length}</span></div>
         <div className="flex items-center gap-2">
