@@ -221,17 +221,63 @@ export default function ChatMiniApp({
       markRead(activeId);
       markRoomRead(activeId);
     }
-    // 증분 폴링 — 1.5초 주기로 새 메시지만. 기존 메시지 편집/리액션은
-    // 아래 주기적 full 동기화(15초) 와 focus 이벤트에서 잡힌다.
+    // SSE 가 정상이면 실시간 푸시로 새 메시지/수정이 들어온다. 폴링은 안전망:
+    // - 새 메시지 증분 조회 주기 10초 (SSE 끊김 시 최대 10초 지연으로 복구)
+    // - 30초마다 full 동기화로 편집/삭제/리액션 누락도 회수
+    // - 포커스 복귀 / visibility 변화 시 즉시 full 재조회
     let tick = 0;
     const t = setInterval(() => {
       tick++;
-      const full = tick % 10 === 0; // 15초마다 한 번은 full 동기화
+      const full = tick % 3 === 0; // 30초마다 full
       loadMessages(activeId, { full });
       if (isChatVisible()) markRead(activeId);
-    }, 1500);
+    }, 10_000);
     return () => clearInterval(t);
   }, [activeId, isPanelOpen]);
+
+  // SSE 수신 — NotificationProvider 의 EventSource 가 여기로 재방송한 chat:* 이벤트.
+  // 대상 방이 현재 열려있는 방과 일치할 때만 상태에 반영. 아니면 rooms 목록만 갱신
+  // (마지막 메시지 미리보기 / 미읽음 뱃지용).
+  useEffect(() => {
+    const onMessage = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { message: Message } | undefined;
+      if (!detail?.message) return;
+      const msg = detail.message;
+      if (msg.roomId === activeId) {
+        setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+        if (isChatVisible()) markRead(msg.roomId);
+      }
+      // rooms 리스트의 마지막 메시지/정렬 갱신
+      loadRooms();
+    };
+    const onUpdate = (e: Event) => {
+      const detail = (e as CustomEvent).detail as
+        | { kind: "edit" | "pin"; message: Message }
+        | { kind: "delete"; messageId: string }
+        | { kind: "reactions"; messageId: string; reactions: Message["reactions"] }
+        | undefined;
+      if (!detail) return;
+      if (detail.kind === "edit" || detail.kind === "pin") {
+        const incoming = detail.message;
+        if (incoming.roomId !== activeId) return;
+        setMessages((prev) => prev.map((m) => (m.id === incoming.id ? { ...m, ...incoming } : m)));
+      } else if (detail.kind === "delete") {
+        setMessages((prev) => prev.map((m) => (m.id === detail.messageId ? { ...m, deletedAt: new Date().toISOString() } : m)));
+      } else if (detail.kind === "reactions") {
+        setMessages((prev) => prev.map((m) => (m.id === detail.messageId ? { ...m, reactions: detail.reactions ?? [] } : m)));
+      }
+    };
+    const onRoom = () => { loadRooms(); };
+    window.addEventListener("chat:sse-message", onMessage);
+    window.addEventListener("chat:sse-update", onUpdate);
+    window.addEventListener("chat:sse-room", onRoom);
+    return () => {
+      window.removeEventListener("chat:sse-message", onMessage);
+      window.removeEventListener("chat:sse-update", onUpdate);
+      window.removeEventListener("chat:sse-room", onRoom);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId]);
 
   // 창이 다시 포커스/visibility 복귀할 때 즉시 읽음 처리
   useEffect(() => {

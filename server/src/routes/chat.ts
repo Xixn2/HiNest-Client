@@ -3,6 +3,31 @@ import { z } from "zod";
 import { prisma } from "../lib/db.js";
 import { requireAuth, verifySuperToken, writeLog } from "../lib/auth.js";
 import { notifyMany } from "../lib/notify.js";
+import { publishMany } from "../lib/sse.js";
+
+/**
+ * SSE 채팅 브로드캐스트.
+ * 기존 알림용 스트림(/api/notification/stream) 을 재활용해서 "chat:*" 이벤트를
+ * 같은 파이프로 흘려보낸다. 유저당 EventSource 한 개만 유지 → 연결 수 절반.
+ *
+ * 이벤트 종류:
+ *  - chat:message     — 새 메시지 (즉시 전송분만. 예약은 제외)
+ *  - chat:update      — 기존 메시지 수정/삭제/고정/리액션 변화
+ *  - chat:room        — 방 생성/멤버 변화 등 방 목록 재조회가 필요할 때
+ *
+ * 수신 대상: 해당 방의 RoomMember 전부 (본인 포함 — 다른 탭/데스크톱 동기화).
+ */
+async function broadcastToRoom(roomId: string, event: "chat:message" | "chat:update" | "chat:room", data: unknown) {
+  try {
+    const members = await prisma.roomMember.findMany({
+      where: { roomId },
+      select: { userId: true },
+    });
+    publishMany(members.map((m) => m.userId), event, data);
+  } catch {
+    // SSE 실패해도 요청 흐름은 막지 않는다 — 클라 증분 폴링이 안전망.
+  }
+}
 
 const router = Router();
 router.use(requireAuth);
@@ -100,6 +125,8 @@ router.post("/rooms", async (req, res) => {
       },
     });
     await writeLog(u.id, "DM_CREATE", room.id, `with:${other}`);
+    // 방 생성 직후 — 상대방 클라이언트가 rooms 목록을 다시 받을 수 있도록 신호.
+    await broadcastToRoom(room.id, "chat:room", { kind: "create", roomId: room.id });
     return res.json({ room });
   }
 
@@ -117,6 +144,7 @@ router.post("/rooms", async (req, res) => {
     },
   });
   await writeLog(u.id, "ROOM_CREATE", room.id, `${d.type}:${d.name}`);
+  await broadcastToRoom(room.id, "chat:room", { kind: "create", roomId: room.id });
   res.json({ room });
 });
 
@@ -354,6 +382,11 @@ router.post("/rooms/:id/messages", async (req, res) => {
     }).catch(() => {});
   }
 
+  // SSE 즉시 푸시 — 예약 메시지는 실제 발송 시점까지 숨김.
+  if (!scheduledAt) {
+    await broadcastToRoom(req.params.id, "chat:message", { message: msg });
+  }
+
   // 알림 정책
   // - DIRECT: 상대에게 DM 알림
   // - GROUP/TEAM: 멘션된 유저에게만 MENTION 알림 (소음 방지)
@@ -419,6 +452,11 @@ router.post("/messages/:id/reactions", async (req, res) => {
     where: { messageId: msg.id },
     select: { userId: true, emoji: true, user: { select: { name: true } } },
   });
+  await broadcastToRoom(msg.roomId, "chat:update", {
+    kind: "reactions",
+    messageId: msg.id,
+    reactions: list,
+  });
   res.json({ reactions: list });
 });
 
@@ -446,6 +484,7 @@ router.patch("/messages/:id", async (req, res) => {
     data,
     include: { sender: { select: { id: true, name: true, avatarColor: true } } },
   });
+  await broadcastToRoom(msg.roomId, "chat:update", { kind: "edit", message: updated });
   res.json({ message: updated });
 });
 
@@ -470,6 +509,7 @@ router.post("/messages/:id/pin", async (req, res) => {
     },
     include: { sender: { select: { id: true, name: true, avatarColor: true } } },
   });
+  await broadcastToRoom(msg.roomId, "chat:update", { kind: "pin", message: updated });
   res.json({ message: updated });
 });
 
@@ -486,6 +526,7 @@ router.delete("/messages/:id", async (req, res) => {
     where: { id: msg.id },
     data: { deletedAt: new Date() },
   });
+  await broadcastToRoom(msg.roomId, "chat:update", { kind: "delete", messageId: msg.id });
   res.json({ ok: true, message: updated });
 });
 

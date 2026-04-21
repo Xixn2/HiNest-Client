@@ -27,6 +27,9 @@ export type Reaction = {
 
 export type Message = {
   id: string;
+  // 서버는 include 여부에 따라 roomId 를 포함하기도/생략하기도 한다. SSE 푸시
+  // 페이로드엔 항상 포함 — 클라는 optional 로 읽고 활용.
+  roomId?: string;
   content: string;
   kind: "TEXT" | "IMAGE" | "VIDEO" | "FILE";
   fileUrl?: string | null;
