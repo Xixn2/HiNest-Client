@@ -32,10 +32,10 @@ router.get("/", async (req, res) => {
     where,
     orderBy: { createdAt: "desc" },
     include: {
-      requester: { select: { id: true, name: true, avatarColor: true, position: true, team: true } },
+      requester: { select: { id: true, name: true, avatarColor: true, avatarUrl: true, position: true, team: true } },
       steps: {
         orderBy: { order: "asc" },
-        include: { reviewer: { select: { id: true, name: true, avatarColor: true } } },
+        include: { reviewer: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } } },
       },
     },
   });
@@ -53,10 +53,10 @@ router.get("/:id", async (req, res) => {
   const a = await prisma.approval.findUnique({
     where: { id: req.params.id },
     include: {
-      requester: { select: { id: true, name: true, avatarColor: true, position: true, team: true, email: true } },
+      requester: { select: { id: true, name: true, avatarColor: true, avatarUrl: true, position: true, team: true, email: true } },
       steps: {
         orderBy: { order: "asc" },
-        include: { reviewer: { select: { id: true, name: true, avatarColor: true, position: true } } },
+        include: { reviewer: { select: { id: true, name: true, avatarColor: true, avatarUrl: true, position: true } } },
       },
     },
   });

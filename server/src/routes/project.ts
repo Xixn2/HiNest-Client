@@ -32,7 +32,7 @@ router.get("/:id", async (req, res) => {
     where: { id: req.params.id },
     include: {
       members: {
-        include: { user: { select: { id: true, name: true, email: true, team: true, position: true, avatarColor: true } } },
+        include: { user: { select: { id: true, name: true, email: true, team: true, position: true, avatarColor: true, avatarUrl: true } } },
       },
       createdBy: { select: { id: true, name: true } },
     },

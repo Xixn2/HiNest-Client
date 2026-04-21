@@ -218,7 +218,7 @@ router.get("/", async (req, res) => {
       where: { AND: ands },
       orderBy: { updatedAt: "desc" },
       include: {
-        author: { select: { name: true, avatarColor: true } },
+        author: { select: { name: true, avatarColor: true, avatarUrl: true } },
         folder: { select: { name: true } },
       },
     });
@@ -244,7 +244,7 @@ router.get("/", async (req, res) => {
     where: { AND: ands },
     orderBy: { updatedAt: "desc" },
     include: {
-      author: { select: { name: true, avatarColor: true } },
+      author: { select: { name: true, avatarColor: true, avatarUrl: true } },
       folder: { select: { name: true } },
     },
   });

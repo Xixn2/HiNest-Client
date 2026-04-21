@@ -65,6 +65,7 @@ router.post("/login", async (req, res) => {
       team: user.team,
       position: user.position,
       avatarColor: user.avatarColor,
+      avatarUrl: user.avatarUrl,
       superAdmin: user.superAdmin,
     },
   });
@@ -125,6 +126,7 @@ router.post("/signup", async (req, res) => {
       team: user.team,
       position: user.position,
       avatarColor: user.avatarColor,
+      avatarUrl: user.avatarUrl,
       superAdmin: user.superAdmin,
     },
   });

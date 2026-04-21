@@ -70,6 +70,7 @@ const HR_SELECT = {
   position: true,
   active: true,
   avatarColor: true,
+  avatarUrl: true,
   createdAt: true,
   hrCode: true,
   affiliation: true,

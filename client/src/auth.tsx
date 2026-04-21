@@ -9,6 +9,7 @@ export type User = {
   team?: string | null;
   position?: string | null;
   avatarColor?: string;
+  avatarUrl?: string | null;
   superAdmin?: boolean;
   employeeNo?: string | null;
   presenceStatus?: string | null;
