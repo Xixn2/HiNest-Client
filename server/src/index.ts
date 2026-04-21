@@ -155,14 +155,27 @@ app.use("/api/webhook", webhookRouter);
 // Supabase Storage 활성화 시: 서버가 버킷에서 스트림으로 받아 그대로 중계 (프록시).
 // 비활성화 시: 기존 디스크 정적 서빙 (로컬 dev 용).
 const INLINE_MIME_PREFIXES = ["image/", "video/", "audio/"];
-function applyUploadSecurityHeaders(res: express.Response, name: string, contentType: string) {
+function applyUploadSecurityHeaders(
+  res: express.Response,
+  name: string,
+  contentType: string,
+  forceDownload: boolean,
+  downloadName?: string,
+) {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "no-referrer");
   // defense-in-depth — /uploads 에서 내려가는 HTML 이 실수로라도 실행되지 않도록 tight CSP
   res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox; frame-ancestors 'none'");
   const inline = INLINE_MIME_PREFIXES.some((p) => contentType.startsWith(p));
-  if (!inline) {
-    res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+  if (forceDownload || !inline) {
+    // ?download=1 이 오거나 비-인라인 타입이면 강제 첨부. 원본 파일명이 있으면 그걸 사용.
+    const fn = downloadName || name;
+    // RFC 5987 로 UTF-8 파일명 인코딩 — 한글/공백 파일명도 깨지지 않게.
+    const encoded = encodeURIComponent(fn).replace(/['()]/g, escape).replace(/\*/g, "%2A");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${fn.replace(/"/g, "")}"; filename*=UTF-8''${encoded}`,
+    );
   }
 }
 
@@ -172,13 +185,17 @@ app.use("/uploads", requireAuth, async (req, res) => {
   if (!/^[A-Za-z0-9._-]+$/.test(name)) {
     return res.status(400).json({ error: "invalid filename" });
   }
+  const forceDownload = req.query.download === "1" || req.query.download === "true";
+  // ?name=<원본파일명> — 다운로드 대화상자에 표시할 이름. 서버 키는 해시라 보기 좋지 않음.
+  const rawName = typeof req.query.name === "string" ? req.query.name : undefined;
+  const downloadName = rawName ? sanitizeDownloadName(rawName) : undefined;
 
   // 1) Supabase Storage 우선 — 새 업로드는 여기 있음
   if (isStorageEnabled()) {
     const file = await downloadFile(name);
     if (file) {
       const mt = file.contentType || mime.lookup(name) || "application/octet-stream";
-      applyUploadSecurityHeaders(res, name, String(mt));
+      applyUploadSecurityHeaders(res, name, String(mt), forceDownload, downloadName);
       res.setHeader("Content-Type", String(mt));
       res.setHeader("Content-Length", String(file.size));
       res.setHeader("Cache-Control", "private, max-age=86400");
@@ -193,11 +210,16 @@ app.use("/uploads", requireAuth, async (req, res) => {
     return res.status(404).json({ error: "not found" });
   }
   const mt = mime.lookup(name) || "application/octet-stream";
-  applyUploadSecurityHeaders(res, name, String(mt));
+  applyUploadSecurityHeaders(res, name, String(mt), forceDownload, downloadName);
   res.setHeader("Content-Type", String(mt));
   res.setHeader("Cache-Control", "private, max-age=86400");
   res.sendFile(diskPath);
 });
+
+/** CR/LF 나 쌍따옴표 같은 헤더 인젝션 위험 문자 제거. */
+function sanitizeDownloadName(s: string): string {
+  return s.replace(/[\r\n"]/g, "").slice(0, 255);
+}
 
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);
