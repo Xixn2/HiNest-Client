@@ -34,14 +34,23 @@ const S3_BUCKET = process.env.S3_BUCKET?.trim();
 const S3_ACCESS_KEY = process.env.AWS_ACCESS_KEY_ID?.trim();
 const S3_SECRET_KEY = process.env.AWS_SECRET_ACCESS_KEY?.trim();
 
+// S3 활성 조건: region + bucket 은 반드시. 자격증명은 2가지 경로 지원.
+//  1) 정적 키 (AWS_ACCESS_KEY_ID / SECRET) — Render 같은 외부 PaaS, 로컬 개발
+//  2) IAM 역할 (ECS Task Role, EC2 Instance Profile) — SDK 가 메타데이터 서비스에서 자동 회수
+// 2번은 환경변수가 없어도 되므로, 여기선 region+bucket 만 보고 S3 클라이언트를 생성.
+// 키가 있으면 명시 주입, 없으면 SDK default credential chain 에 맡김 (ECS → task role).
 let s3: S3Client | null = null;
-if (S3_REGION && S3_BUCKET && S3_ACCESS_KEY && S3_SECRET_KEY) {
+if (S3_REGION && S3_BUCKET) {
   s3 = new S3Client({
     region: S3_REGION,
-    credentials: {
-      accessKeyId: S3_ACCESS_KEY,
-      secretAccessKey: S3_SECRET_KEY,
-    },
+    ...(S3_ACCESS_KEY && S3_SECRET_KEY
+      ? {
+          credentials: {
+            accessKeyId: S3_ACCESS_KEY,
+            secretAccessKey: S3_SECRET_KEY,
+          },
+        }
+      : {}),
   });
 }
 
