@@ -60,8 +60,11 @@ export default function AppLayout() {
 function AppLayoutInner() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
+  const loc = useLocation();
   const isMacDesktop = !!window.hinest?.isDesktop && window.hinest?.platform === "darwin";
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // 모바일 사이드바 드로어 — md 미만에서만 의미 있음 (md 이상은 항상 고정 배치)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     if (!isMacDesktop || !window.hinest?.onFullscreenChange) return;
@@ -71,12 +74,39 @@ function AppLayoutInner() {
     };
   }, [isMacDesktop]);
 
+  // 라우트가 바뀌면 드로어는 자동으로 닫는다 — 모바일에서 탭하면 같은 창 위로
+  // 메뉴가 덮여 있어 바로 닫혀야 자연스럽다.
+  useEffect(() => { setMobileNavOpen(false); }, [loc.pathname]);
+  // 드로어 열렸을 때 body 스크롤 잠금 — 데스크톱에는 영향 없음.
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [mobileNavOpen]);
+
   // 창모드에서만 신호등 버튼 여백 필요, 전체화면에선 숨어있으므로 여백 제거
   const showTitlebarSpace = isMacDesktop && !isFullscreen;
 
   return (
     <div className="h-screen flex bg-ink-50 overflow-hidden">
-      <aside className="w-[232px] bg-white border-r border-ink-150 flex flex-col flex-shrink-0">
+      {/* 모바일 드로어 백드롭 — md 미만에서 열렸을 때만 보임 */}
+      {mobileNavOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          onClick={() => setMobileNavOpen(false)}
+          aria-hidden
+        />
+      )}
+      <aside
+        className={`
+          w-[232px] bg-white border-r border-ink-150 flex flex-col flex-shrink-0
+          md:static md:translate-x-0
+          fixed inset-y-0 left-0 z-40
+          transition-transform duration-200 ease-out
+          ${mobileNavOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
+        `}
+      >
         {/* 신호등 영역용 드래그 가능 상단바 — 사이드바 배경과 통일 */}
         {showTitlebarSpace && (
           <div
@@ -173,9 +203,9 @@ function AppLayoutInner() {
             }}
           />
         )}
-        <TopBar draggable={showTitlebarSpace} />
+        <TopBar draggable={showTitlebarSpace} onOpenNav={() => setMobileNavOpen(true)} />
         <main className="flex-1 overflow-y-auto">
-          <div className="max-w-[1400px] mx-auto px-8 py-6">
+          <div className="max-w-[1400px] mx-auto px-4 md:px-8 py-4 md:py-6">
             <Outlet />
           </div>
         </main>
@@ -364,7 +394,7 @@ const BREADCRUMB: Record<string, string> = {
   "/profile": "내 프로필",
 };
 
-function TopBar({ draggable = false }: { draggable?: boolean }) {
+function TopBar({ draggable = false, onOpenNav }: { draggable?: boolean; onOpenNav?: () => void }) {
   const loc = useLocation();
   const label = loc.pathname.startsWith("/projects/")
     ? "프로젝트"
@@ -391,12 +421,29 @@ function TopBar({ draggable = false }: { draggable?: boolean }) {
   return (
     <>
       <header
-        className="h-[48px] flex items-center justify-between px-6 border-b border-ink-150 bg-white"
+        className="h-[48px] flex items-center justify-between px-3 md:px-6 border-b border-ink-150 bg-white"
         style={draggable ? ({ WebkitAppRegion: "drag" } as React.CSSProperties) : undefined}
       >
-        <div className="flex items-center gap-2 text-[13px]">
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--c-brand)" }} />
-          <span className="text-ink-900 font-bold">{label || "HiNest"}</span>
+        <div
+          className="flex items-center gap-2 text-[13px] min-w-0"
+          style={draggable ? ({ WebkitAppRegion: "no-drag" } as React.CSSProperties) : undefined}
+        >
+          {/* 모바일 햄버거 — md 이상은 숨김 */}
+          {onOpenNav && (
+            <button
+              type="button"
+              className="md:hidden w-9 h-9 -ml-1 mr-0.5 grid place-items-center rounded-full text-ink-700 hover:bg-ink-100"
+              onClick={onOpenNav}
+              title="메뉴"
+              aria-label="메뉴 열기"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 6h18M3 12h18M3 18h18" />
+              </svg>
+            </button>
+          )}
+          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: "var(--c-brand)" }} />
+          <span className="text-ink-900 font-bold truncate">{label || "HiNest"}</span>
         </div>
 
         <div

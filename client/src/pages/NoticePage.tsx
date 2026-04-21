@@ -84,7 +84,7 @@ export default function NoticePage() {
         right={canPost && <button className="btn-primary" onClick={() => setOpen(true)}>+ 공지 작성</button>}
       />
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="card p-0 overflow-hidden">
           <div className="p-4 border-b border-slate-100 text-sm font-bold">공지 목록 ({list.length})</div>
           <div className="divide-y divide-slate-100 max-h-[70vh] overflow-auto">
@@ -119,7 +119,7 @@ export default function NoticePage() {
           </div>
         </div>
 
-        <div className="col-span-2 card">
+        <div className="lg:col-span-2 card">
           {selected ? (
             <div>
               <div className="flex items-start justify-between">

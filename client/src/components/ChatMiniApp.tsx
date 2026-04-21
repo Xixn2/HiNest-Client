@@ -8,11 +8,14 @@ import {
   FONT,
   Avatar,
   formatBytes,
+  formatClock,
   formatDetailed,
+  formatDayDivider,
   formatRelative,
   loadAllRoomSettings,
   previewForMessage,
   roomColor,
+  roomImageUrl,
   roomTitle,
   saveAllRoomSettings,
 } from "./chat/theme";
@@ -682,7 +685,7 @@ function ListView({
             <ListRow
               key={r.id}
               onClick={() => onOpen(r.id)}
-              avatar={{ name: title, color: roomColor(r, meId) }}
+              avatar={{ name: title, color: roomColor(r, meId), imageUrl: roomImageUrl(r, meId) }}
               title={title}
               titleHighlight={q}
               subtitle={preview}
@@ -709,7 +712,7 @@ function ListView({
                 <ListRow
                   key={h.message.id}
                   onClick={() => onOpen(h.roomId)}
-                  avatar={{ name: title, color: roomColor(h.room, meId) }}
+                  avatar={{ name: title, color: roomColor(h.room, meId), imageUrl: roomImageUrl(h.room, meId) }}
                   title={title}
                   subtitle={h.message.content}
                   subtitleHighlight={q}
@@ -755,7 +758,7 @@ function ListRow({
   onClick, avatar, title, titleHighlight, subtitle, subtitleHighlight, subtitlePrefix, rightTop, unread, muted, presenceColor, presenceTitle,
 }: {
   onClick: () => void;
-  avatar: { name: string; color: string };
+  avatar: { name: string; color: string; imageUrl?: string | null };
   title: string;
   titleHighlight?: string;
   subtitle: string;
@@ -783,7 +786,7 @@ function ListRow({
       onMouseEnter={(e) => (e.currentTarget.style.background = C.gray100)}
       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
     >
-      <Avatar name={avatar.name} color={avatar.color} size={46} presenceColor={presenceColor} presenceTitle={presenceTitle} />
+      <Avatar name={avatar.name} color={avatar.color} imageUrl={avatar.imageUrl ?? null} size={46} presenceColor={presenceColor} presenceTitle={presenceTitle} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div
@@ -866,7 +869,7 @@ function highlight(text: string, q?: string) {
 }
 
 /* ======================= 새 그룹 만들기 ======================= */
-type DirUser = { id: string; name: string; email?: string; team?: string | null; position?: string | null; avatarColor?: string };
+type DirUser = { id: string; name: string; email?: string; team?: string | null; position?: string | null; avatarColor?: string; avatarUrl?: string | null };
 
 function CreateGroupView({
   meId, onCancel, onCreated,
@@ -977,7 +980,7 @@ function CreateGroupView({
                   }}
                   title="선택 해제"
                 >
-                  <Avatar name={u.name} color={u.avatarColor ?? "rgba(255,255,255,.3)"} size={22} />
+                  <Avatar name={u.name} color={u.avatarColor ?? "rgba(255,255,255,.3)"} imageUrl={u.avatarUrl ?? null} size={22} />
                   {u.name}
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M18 6 6 18M6 6l12 12" />
@@ -1037,7 +1040,7 @@ function CreateGroupView({
               onMouseEnter={(e) => (e.currentTarget.style.background = C.gray100)}
               onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
             >
-              <Avatar name={u.name} color={u.avatarColor ?? C.blue} size={40} />
+              <Avatar name={u.name} color={u.avatarColor ?? C.blue} imageUrl={u.avatarUrl ?? null} size={40} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: C.ink, letterSpacing: "-0.015em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {u.name}
@@ -1131,7 +1134,7 @@ function SettingsView({
     <div style={{ flex: 1, overflowY: "auto", padding: "6px 18px 18px", background: C.surface }}>
       {/* 프로필 블록 — 중앙 정렬 */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "12px 0 20px" }}>
-        <Avatar name={settings.nickname || originalTitle} color={roomColor(room, meId)} size={72} />
+        <Avatar name={settings.nickname || originalTitle} color={roomColor(room, meId)} imageUrl={roomImageUrl(room, meId)} size={72} />
         <div
           style={{
             marginTop: 12,
@@ -1405,10 +1408,19 @@ function RoomView({
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].sender.id !== meId) { lastFromOtherIdx = i; break; }
     }
+    // 같은 발신자가 연속으로 보낸 묶음의 "마지막" 메시지에만 시각을 표시한다 —
+    // KakaoTalk 처럼. 기준: 다음 메시지가 없거나, 발신자가 바뀌었거나, 5분 이상 공백.
+    const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
     return messages.map((m, i) => {
       const prev = messages[i - 1];
+      const next = messages[i + 1];
       const showMeta = !prev || prev.sender.id !== m.sender.id
         || new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() > 5 * 60_000;
+      const showTime = !next || next.sender.id !== m.sender.id
+        || new Date(next.createdAt).getTime() - new Date(m.createdAt).getTime() > 5 * 60_000;
+      // 날짜가 바뀌는 첫 메시지에 "오늘/어제/M월 D일" 구분선을 붙인다.
+      const today = dayKey(new Date(m.createdAt));
+      const showDayDivider = !prev || dayKey(new Date(prev.createdAt)) !== today;
       const isLast = i === messages.length - 1;
       const isLastFromOther = i === lastFromOtherIdx;
 
@@ -1425,7 +1437,7 @@ function RoomView({
           if (mem) unreadNames.push(mem.user.name);
         }
       }
-      return { ...m, showMeta, isLast, isLastFromOther, unread, unreadNames };
+      return { ...m, showMeta, showTime, showDayDivider, isLast, isLastFromOther, unread, unreadNames };
     });
   }, [messages, meId, readStates]);
   // 헤더는 상위 ChatFab이 렌더링 — 여기서는 메시지 + 입력만
@@ -1472,7 +1484,34 @@ function RoomView({
           const mine = m.sender.id === meId;
           const isPicking = reactingId === m.id;
           return (
-            <div key={m.id} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", marginBottom: 4 }}>
+            <div key={m.id}>
+              {m.showDayDivider && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    margin: "14px 4px 10px",
+                  }}
+                >
+                  <div style={{ flex: 1, height: 1, background: C.gray200 }} />
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: C.gray600,
+                      letterSpacing: "0.02em",
+                      padding: "3px 10px",
+                      borderRadius: 999,
+                      background: C.gray100,
+                    }}
+                  >
+                    {formatDayDivider(new Date(m.createdAt))}
+                  </div>
+                  <div style={{ flex: 1, height: 1, background: C.gray200 }} />
+                </div>
+              )}
+            <div style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", marginBottom: 4 }}>
               <div style={{ display: "flex", alignItems: "flex-end", gap: 8, maxWidth: "78%", flexDirection: mine ? "row-reverse" : "row" }}>
                 {!mine && m.showMeta ? (
                   (() => {
@@ -1485,6 +1524,7 @@ function RoomView({
                       <Avatar
                         name={m.sender.name}
                         color={m.sender.avatarColor ?? C.blue}
+                        imageUrl={m.sender.avatarUrl ?? null}
                         size={26}
                         presenceColor={info.color}
                         presenceTitle={info.label + (p?.presenceMessage ? ` · ${p.presenceMessage}` : "")}
@@ -1511,6 +1551,21 @@ function RoomView({
                       maxWidth: "100%",
                     }}
                   >
+                    {/* 버블 옆 시각 — 같은 발신자 연속 묶음의 마지막에만 표시 */}
+                    {m.showTime && !m.deletedAt && (
+                      <span
+                        style={{
+                          fontSize: 10.5,
+                          fontWeight: 500,
+                          color: C.gray500,
+                          marginBottom: 2,
+                          fontVariantNumeric: "tabular-nums",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {formatClock(new Date(m.createdAt))}
+                      </span>
+                    )}
                     {/* 안읽음 숫자 — 버블 옆에 작게 (테마 따라 톤 변경) */}
                     {m.unread > 0 && (
                       <span
@@ -1589,22 +1644,6 @@ function RoomView({
                     </div>
                   )}
 
-                  {/* 상대방이 마지막으로 보낸 메시지 — 상대 시각 표시
-                      내가 그 뒤에 답장했으면 내 메시지엔 따로 표시 안 함 */}
-                  {!mine && m.isLastFromOther && (
-                    <div
-                      style={{
-                        marginTop: 4,
-                        fontSize: 11,
-                        color: C.gray500,
-                        fontWeight: 500,
-                        textAlign: "left",
-                      }}
-                    >
-                      {formatRelative(new Date(m.createdAt))}
-                    </div>
-                  )}
-
                   {/* 컨텍스트 메뉴: 이모지 + 액션 — 헤더는 상세 시각 */}
                   {isPicking && (
                     <ReactionPicker
@@ -1617,6 +1656,7 @@ function RoomView({
                   )}
                 </div>
               </div>
+            </div>
             </div>
           );
         })}

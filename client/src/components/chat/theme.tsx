@@ -54,6 +54,16 @@ export function roomColor(r: Room, meId: string): string {
   return r.type === "TEAM" ? "#00C4B4" : "#4E5968";
 }
 
+/** 방 아바타 이미지 — DIRECT 일 때만 상대방 업로드 이미지를 사용. 그룹/팀은 null.
+ * DIRECT 아닌 경우 여러 명의 이미지를 썸네일로 합성할 수도 있지만 현재 단계에선 생략. */
+export function roomImageUrl(r: Room, meId: string): string | null {
+  if (r.type === "DIRECT") {
+    const other = r.members.find((m) => m.user.id !== meId)?.user;
+    return other?.avatarUrl ?? null;
+  }
+  return null;
+}
+
 /** 리스트 미리보기 텍스트 — 첨부는 종류 라벨, 없으면 content */
 export function previewForMessage(m: {
   content?: string;
@@ -114,6 +124,25 @@ export function formatShort(d: Date): string {
 }
 
 /**
+ * 채팅 메시지 사이 날짜 구분선 라벨.
+ *   - 오늘: "오늘"
+ *   - 어제: "어제"
+ *   - 같은 해: "4월 18일 (목)"
+ *   - 다른 해: "2024년 4월 18일 (목)"
+ */
+export function formatDayDivider(d: Date): string {
+  const now = new Date();
+  const sameYear = d.getFullYear() === now.getFullYear();
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const dayDiff = Math.round((startOf(now) - startOf(d)) / 86400000);
+  if (dayDiff === 0) return "오늘";
+  if (dayDiff === 1) return "어제";
+  const weekday = ["일", "월", "화", "수", "목", "금", "토"][d.getDay()];
+  const body = `${d.getMonth() + 1}월 ${d.getDate()}일 (${weekday})`;
+  return sameYear ? body : `${d.getFullYear()}년 ${body}`;
+}
+
+/**
  * 상세 시각 — 같은 해/같은 날 기준으로 축약:
  *  - 오늘: "오늘 오후 3:24"
  *  - 어제: "어제 오후 3:24"
@@ -133,17 +162,20 @@ export function formatDetailed(d: Date): string {
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 ${clock}`;
 }
 
-/** 이름 첫 글자 기반 원형 아바타. presence 전달 시 오른쪽 아래 상태 점 표시. */
+/** 이름 첫 글자 기반 원형 아바타. imageUrl 이 있으면 이미지, 없으면 색+이니셜.
+ * presence 전달 시 오른쪽 아래 상태 점 표시. */
 export function Avatar({
   name,
   color,
   size,
+  imageUrl,
   presenceColor,
   presenceTitle,
 }: {
   name: string;
   color: string;
   size: number;
+  imageUrl?: string | null;
   presenceColor?: string;
   presenceTitle?: string;
 }) {
@@ -156,7 +188,7 @@ export function Avatar({
         width: size,
         height: size,
         borderRadius: "50%",
-        background: color,
+        background: imageUrl ? "transparent" : color,
         color: "#fff",
         display: "grid",
         placeItems: "center",
@@ -164,9 +196,18 @@ export function Avatar({
         fontWeight: 700,
         flexShrink: 0,
         letterSpacing: "-0.02em",
+        overflow: "hidden",
       }}
     >
-      {name?.[0] ?? "?"}
+      {imageUrl ? (
+        <img
+          src={imageUrl}
+          alt={name}
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+        />
+      ) : (
+        name?.[0] ?? "?"
+      )}
       {presenceColor && (
         <span
           title={presenceTitle}

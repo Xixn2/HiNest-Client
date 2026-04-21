@@ -130,8 +130,8 @@ export default function ApprovalsPage() {
         }
       />
 
-      <div className="grid grid-cols-5 gap-4">
-        <div className="col-span-2 panel p-0 overflow-hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+        <div className="lg:col-span-2 panel p-0 overflow-hidden">
           <div className="section-head">
             <div className="title">{scope === "mine" ? "내 신청 목록" : "결재 대기"}</div>
             <span className="text-[11px] text-ink-400 tabular">{approvals.length}건</span>
@@ -171,7 +171,7 @@ export default function ApprovalsPage() {
           </div>
         </div>
 
-        <div className="col-span-3 panel p-0 overflow-hidden">
+        <div className="lg:col-span-3 panel p-0 overflow-hidden">
           {selected ? (
             <ApprovalDetail
               a={selected}
@@ -350,7 +350,7 @@ function CreateModal({
         <form onSubmit={submit} className="p-5 space-y-3 max-h-[80vh] overflow-auto">
           <div>
             <label className="field-label">결재 종류</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {(Object.keys(TYPE_META) as ApprovalType[]).map((t) => {
                 const meta = TYPE_META[t];
                 const active = form.type === t;

@@ -3,7 +3,7 @@
  * ChatMiniApp / MessageBubble / 확장 뷰들에서 공통으로 사용.
  */
 
-export type RoomMember = { user: { id: string; name: string; avatarColor?: string } };
+export type RoomMember = { user: { id: string; name: string; avatarColor?: string; avatarUrl?: string | null } };
 
 export type Room = {
   id: string;
@@ -40,7 +40,7 @@ export type Message = {
   pinnedAt?: string | null;
   pinnedById?: string | null;
   createdAt: string;
-  sender: { id: string; name: string; avatarColor?: string };
+  sender: { id: string; name: string; avatarColor?: string; avatarUrl?: string | null };
   reactions?: Reaction[];
 };
 
@@ -59,7 +59,7 @@ export type MessageHit = {
     id: string;
     content: string;
     createdAt: string;
-    sender: { id: string; name: string; avatarColor?: string };
+    sender: { id: string; name: string; avatarColor?: string; avatarUrl?: string | null };
   };
 };
 

@@ -96,8 +96,8 @@ export default function DirectoryPage() {
       {me && <MyProfileHero me={me} totalCount={users.length} teamCount={teams.length} />}
 
       {/* Toolbar */}
-      <div className="mt-6 mb-4 flex items-center gap-2">
-        <div className="relative flex-1 max-w-md">
+      <div className="mt-6 mb-4 flex items-center gap-2 flex-wrap">
+        <div className="relative flex-1 min-w-[200px] max-w-md">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8E959E" strokeWidth="2"
             strokeLinecap="round" strokeLinejoin="round" className="absolute left-3.5 top-1/2 -translate-y-1/2">
             <circle cx="11" cy="11" r="7" />
@@ -161,7 +161,7 @@ export default function DirectoryPage() {
                 <div className="flex-1 h-px bg-ink-150 ml-2" />
               </div>
               {view === "grid" ? (
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   {members.map((u) => <GridCard key={u.id} u={u} onDM={() => startDM(u)} />)}
                 </div>
               ) : (
@@ -318,20 +318,20 @@ function ListRow({ u, onDM, divider }: { u: DirectoryUser; onDM: () => void; div
         {u.name[0]}
         <PresenceDot u={u} size={12} ring={2} />
       </div>
-      <div className="min-w-0 w-[28%]">
+      <div className="min-w-0 flex-1 md:w-[28%] md:flex-initial">
         <div className="flex items-center gap-1.5">
           <div className="text-[14px] font-extrabold text-ink-900 truncate tracking-tight">{u.name}</div>
           <PresenceBadge u={u} />
         </div>
         <div className="text-[11px] text-ink-500 tabular truncate">{u.email}</div>
       </div>
-      <div className="w-[14%]">
+      <div className="hidden md:block md:w-[14%]">
         <div className="text-[12px] font-semibold text-ink-800">{u.position ?? "—"}</div>
       </div>
-      <div className="flex-1 min-w-0">
+      <div className="hidden md:block flex-1 min-w-0">
         {u.team && <span className="chip-blue">{u.team}</span>}
       </div>
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+      <div className="flex items-center gap-1 md:opacity-0 md:group-hover:opacity-100 transition">
         <a href={`mailto:${u.email}`} className="btn-icon" title="이메일">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="5" width="18" height="14" rx="2" />
