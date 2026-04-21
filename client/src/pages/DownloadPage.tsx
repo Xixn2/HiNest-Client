@@ -13,6 +13,9 @@ import Logo from "../components/Logo";
  * 설치 파일 호스팅:
  *   현재는 GitHub Releases 에 올릴 예정이며, 아래 링크는 임시 플레이스홀더.
  *   실제 릴리스 레포가 확정되면 `DESKTOP_RELEASES_BASE` 만 바꾸면 된다.
+ *
+ * 다크 모드: html.dark 클래스 + CSS 변수(--c-bg / --c-surface / --c-text ...)로 자동 전환.
+ *   → 배경/상단바에 var(--c-bg) 사용. 텍스트는 --c-text / --c-text-2 / --c-text-3.
  */
 
 const DESKTOP_RELEASES_BASE =
@@ -43,31 +46,54 @@ function isStandalonePWA() {
 }
 
 // ─── 아이콘 ──────────────────────────────────────────────────────────────
+// 각 플랫폼의 공식 심볼로 통일 — currentColor 로 그려서 다크/라이트 자동 대응.
+
 function IconWindows() {
+  // Windows 11 4-quadrant 로고 (작은 gap)
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M3 5.2 10.4 4v7.3H3V5.2zM11.3 3.9 21 2.5v8.8h-9.7V3.9zM3 12.7h7.4V20L3 18.8v-6.1zM11.3 12.7H21v8.8l-9.7-1.4v-7.4z" />
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <rect x="2" y="2" width="9" height="9" rx="0.6" />
+      <rect x="13" y="2" width="9" height="9" rx="0.6" />
+      <rect x="2" y="13" width="9" height="9" rx="0.6" />
+      <rect x="13" y="13" width="9" height="9" rx="0.6" />
     </svg>
   );
 }
+
 function IconApple() {
+  // macOS 공식 Apple 로고 (잎 달린 한 입 베어문 사과)
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M16.5 12.5c0-2.4 2-3.6 2.1-3.6-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.6.9-.8 0-1.9-.9-3.2-.8C6.6 7.1 5 8 4.1 9.5c-1.9 3.3-.5 8.2 1.4 10.9.9 1.3 2 2.8 3.4 2.7 1.4-.1 1.9-.9 3.5-.9s2.1.9 3.5.9c1.5 0 2.4-1.3 3.3-2.7 1-1.5 1.5-3 1.5-3.1-.1 0-2.8-1.1-2.9-4.3zM14.1 4.7c.8-.9 1.3-2.2 1.1-3.5-1.1.1-2.3.7-3.1 1.6-.7.8-1.4 2.1-1.2 3.4 1.2.1 2.5-.6 3.2-1.5z" />
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M17.543 12.584c-.02-2.19 1.789-3.246 1.87-3.296-1.019-1.488-2.605-1.691-3.17-1.716-1.349-.137-2.633.793-3.32.793-.685 0-1.744-.772-2.868-.752-1.476.021-2.838.858-3.598 2.177-1.532 2.652-.39 6.58 1.103 8.74.728 1.057 1.597 2.247 2.735 2.205 1.098-.044 1.513-.71 2.842-.71 1.33 0 1.703.71 2.868.687 1.184-.02 1.934-1.079 2.66-2.14.837-1.229 1.182-2.418 1.203-2.48-.027-.011-2.304-.883-2.325-3.508zm-2.191-6.445c.607-.735 1.016-1.755.904-2.77-.873.035-1.933.582-2.561 1.316-.562.648-1.055 1.685-.923 2.682.975.075 1.972-.495 2.58-1.228z" />
     </svg>
   );
 }
-function IconIOS() {
+
+function IconIPhone() {
+  // iPhone 실루엣 — macOS 카드(사과)와 구분되도록 기기 아이콘으로.
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M7.5 2A2.5 2.5 0 0 0 5 4.5v15A2.5 2.5 0 0 0 7.5 22h9a2.5 2.5 0 0 0 2.5-2.5v-15A2.5 2.5 0 0 0 16.5 2h-9zm0 2h9c.3 0 .5.2.5.5V18H7V4.5c0-.3.2-.5.5-.5zM12 19.2a1 1 0 1 1 0 2 1 1 0 0 1 0-2z" />
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+      <rect x="6" y="2" width="12" height="20" rx="2.6" />
+      <path d="M10 5.4h4" strokeLinecap="round" />
+      <circle cx="12" cy="19.2" r="0.9" fill="currentColor" stroke="none" />
     </svg>
   );
 }
+
 function IconAndroid() {
+  // Android 로봇 마스코트 (머리 실루엣 + 안테나 2개 + 눈 2개)
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M7.2 8.5c-.7 0-1.2.5-1.2 1.2v5.6c0 .7.5 1.2 1.2 1.2s1.2-.5 1.2-1.2V9.7c0-.7-.5-1.2-1.2-1.2zm9.6 0c-.7 0-1.2.5-1.2 1.2v5.6c0 .7.5 1.2 1.2 1.2s1.2-.5 1.2-1.2V9.7c0-.7-.5-1.2-1.2-1.2zM8.5 17.5c0 .6.4 1 1 1h.5V21c0 .7.5 1.2 1.2 1.2s1.2-.5 1.2-1.2v-2.5h1V21c0 .7.5 1.2 1.2 1.2s1.2-.5 1.2-1.2v-2.5h.5c.6 0 1-.4 1-1v-8h-9v8zM15.8 4.3l.9-1.6c.1-.1 0-.3-.1-.4-.1-.1-.3 0-.4.1l-.9 1.6C14.5 3.4 13.3 3 12 3s-2.5.4-3.3 1l-.9-1.6c-.1-.1-.3-.2-.4-.1-.1.1-.2.3-.1.4l.9 1.6C6.8 5.2 6 6.7 6 8.5h12c0-1.8-.8-3.3-2.2-4.2zM10 7a.5.5 0 1 1 0-1 .5.5 0 0 1 0 1zm4 0a.5.5 0 1 1 0-1 .5.5 0 0 1 0 1z" />
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M6.5 10h11a.5.5 0 0 1 .5.5V17a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-6.5a.5.5 0 0 1 .5-.5z" />
+      <rect x="3" y="10.2" width="2.2" height="6.6" rx="1.1" />
+      <rect x="18.8" y="10.2" width="2.2" height="6.6" rx="1.1" />
+      <rect x="9" y="18" width="2.2" height="4.6" rx="1.1" />
+      <rect x="12.8" y="18" width="2.2" height="4.6" rx="1.1" />
+      <path
+        d="M7.2 9.2c.3-2 1.7-3.6 3.7-4.4l-.9-1.6a.3.3 0 0 1 .5-.3l1 1.7c.5-.2 1-.2 1.5-.2s1 0 1.5.2l1-1.7a.3.3 0 0 1 .5.3l-.9 1.6c2 .8 3.4 2.4 3.7 4.4H7.2z"
+      />
+      <circle cx="9.6" cy="7.3" r="0.7" style={{ fill: "var(--c-surface-3)" }} />
+      <circle cx="14.4" cy="7.3" r="0.7" style={{ fill: "var(--c-surface-3)" }} />
     </svg>
   );
 }
@@ -77,6 +103,7 @@ function Card({
   id,
   highlighted,
   icon,
+  iconColor,
   title,
   subtitle,
   children,
@@ -84,6 +111,7 @@ function Card({
   id: OS;
   highlighted: boolean;
   icon: React.ReactNode;
+  iconColor?: string;
   title: string;
   subtitle: string;
   children: React.ReactNode;
@@ -101,12 +129,28 @@ function Card({
         </div>
       )}
       <div className="flex items-center gap-3 mb-4">
-        <div className="w-12 h-12 rounded-xl bg-ink-50 grid place-items-center text-ink-900">
+        <div
+          className="w-12 h-12 rounded-xl grid place-items-center flex-shrink-0"
+          style={{
+            background: "var(--c-surface-3)",
+            color: iconColor ?? "var(--c-text)",
+          }}
+        >
           {icon}
         </div>
         <div className="min-w-0">
-          <div className="text-[16px] font-bold text-ink-900 truncate">{title}</div>
-          <div className="text-[12px] text-ink-500 truncate">{subtitle}</div>
+          <div
+            className="text-[16px] font-bold truncate"
+            style={{ color: "var(--c-text)" }}
+          >
+            {title}
+          </div>
+          <div
+            className="text-[12px] truncate"
+            style={{ color: "var(--c-text-3)" }}
+          >
+            {subtitle}
+          </div>
         </div>
       </div>
       {children}
@@ -120,7 +164,12 @@ function Step({ n, children }: { n: number; children: React.ReactNode }) {
       <span className="flex-shrink-0 w-5 h-5 rounded-full bg-brand-500 text-white text-[11px] font-bold grid place-items-center mt-0.5">
         {n}
       </span>
-      <div className="text-[13px] text-ink-700 leading-relaxed">{children}</div>
+      <div
+        className="text-[13px] leading-relaxed"
+        style={{ color: "var(--c-text-2)" }}
+      >
+        {children}
+      </div>
     </li>
   );
 }
@@ -131,14 +180,24 @@ export default function DownloadPage() {
   const standalone = useMemo(() => isStandalonePWA(), []);
 
   return (
-    <div className="min-h-screen bg-ink-50">
-      {/* 상단 바 */}
-      <header className="border-b border-ink-100 bg-white/80 backdrop-blur sticky top-0 z-10">
+    <div className="min-h-screen" style={{ background: "var(--c-bg)" }}>
+      {/* 상단 바 — 배경/테두리를 테마 변수로 처리해서 다크모드에서도 자연스럽게 */}
+      <header
+        className="sticky top-0 z-10 backdrop-blur"
+        style={{
+          background: "color-mix(in srgb, var(--c-bg) 82%, transparent)",
+          borderBottom: "1px solid var(--c-border)",
+        }}
+      >
         <div className="max-w-[980px] mx-auto px-5 py-3 flex items-center justify-between">
           <Link to="/" className="flex items-center">
             <Logo size={20} />
           </Link>
-          <Link to="/login" className="text-[12.5px] text-brand-600 font-semibold">
+          <Link
+            to="/login"
+            className="text-[12.5px] font-semibold"
+            style={{ color: "var(--c-brand)" }}
+          >
             로그인 →
           </Link>
         </div>
@@ -147,20 +206,38 @@ export default function DownloadPage() {
       <main className="max-w-[980px] mx-auto px-5 py-8 sm:py-12">
         {/* 헤드라인 */}
         <div className="text-center mb-8 sm:mb-12">
-          <h1 className="text-[24px] sm:text-[32px] font-extrabold text-ink-900 tracking-tight">
+          <h1
+            className="text-[24px] sm:text-[32px] font-extrabold tracking-tight"
+            style={{ color: "var(--c-text)" }}
+          >
             HiNest 다운로드
           </h1>
-          <p className="mt-2 text-[13px] sm:text-[14px] text-ink-600">
+          <p
+            className="mt-2 text-[13px] sm:text-[14px]"
+            style={{ color: "var(--c-text-3)" }}
+          >
             사용하시는 기기에 맞춰 설치하세요.
           </p>
         </div>
 
         {standalone && (
-          <div className="mb-6 panel p-4 bg-emerald-50 border-emerald-200">
-            <div className="text-[13px] font-bold text-emerald-900">
+          <div
+            className="mb-6 panel p-4"
+            style={{
+              background: "color-mix(in srgb, var(--c-success) 12%, var(--c-surface))",
+              borderColor: "color-mix(in srgb, var(--c-success) 35%, var(--c-border))",
+            }}
+          >
+            <div
+              className="text-[13px] font-bold"
+              style={{ color: "var(--c-success)" }}
+            >
               이미 앱으로 실행 중이에요
             </div>
-            <div className="text-[12px] text-emerald-700 mt-0.5">
+            <div
+              className="text-[12px] mt-0.5"
+              style={{ color: "var(--c-text-2)" }}
+            >
               홈 화면에서 HiNest 를 바로 열 수 있어요.
             </div>
           </div>
@@ -173,6 +250,7 @@ export default function DownloadPage() {
             id="win"
             highlighted={os === "win"}
             icon={<IconWindows />}
+            iconColor="#00A4EF"
             title="Windows"
             subtitle="Windows 10 이상 · 64-bit"
           >
@@ -183,7 +261,10 @@ export default function DownloadPage() {
               >
                 설치 파일 다운로드
               </a>
-              <p className="text-[11.5px] text-ink-500 leading-relaxed">
+              <p
+                className="text-[11.5px] leading-relaxed"
+                style={{ color: "var(--c-text-3)" }}
+              >
                 다운로드 후 설치 파일을 실행하세요. 첫 실행 시 SmartScreen 경고가 뜨면
                 "추가 정보 → 실행"을 눌러주세요.
               </p>
@@ -213,7 +294,10 @@ export default function DownloadPage() {
                   Intel
                 </a>
               </div>
-              <p className="text-[11.5px] text-ink-500 leading-relaxed">
+              <p
+                className="text-[11.5px] leading-relaxed"
+                style={{ color: "var(--c-text-3)" }}
+              >
                 M1 / M2 / M3 맥은 Apple Silicon, 그 외 예전 맥은 Intel 을 받으세요.
               </p>
             </div>
@@ -223,7 +307,7 @@ export default function DownloadPage() {
           <Card
             id="ios"
             highlighted={os === "ios"}
-            icon={<IconIOS />}
+            icon={<IconIPhone />}
             title="iPhone · iPad"
             subtitle="Safari 에서 홈 화면에 추가"
           >
@@ -248,6 +332,7 @@ export default function DownloadPage() {
             id="android"
             highlighted={os === "android"}
             icon={<IconAndroid />}
+            iconColor="#3DDC84"
             title="Android"
             subtitle="Chrome 에서 앱 설치"
           >
@@ -265,7 +350,10 @@ export default function DownloadPage() {
         </div>
 
         {/* 도움말 */}
-        <div className="mt-8 text-center text-[12px] text-ink-500">
+        <div
+          className="mt-8 text-center text-[12px]"
+          style={{ color: "var(--c-text-3)" }}
+        >
           설치 중 문제가 생기면 관리자에게 문의해주세요.
         </div>
       </main>
