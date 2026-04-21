@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { api, apiSWR } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
@@ -28,11 +28,11 @@ export default function DirectoryPage() {
   const [view, setView] = useState<ViewMode>("grid");
   // DM 버튼 연타 방지 — OrgChartPage 와 동일한 이유.
   const [dmBusyId, setDmBusyId] = useState<string | null>(null);
+  // 복사 버튼 피드백 — 클릭 후 1.2초 간 "복사됨" 표시.
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  // 대량 인원 + 그룹핑 필터가 IME 입력을 지연시키지 않도록 deferred.
+  const deferredQ = useDeferredValue(q);
 
-  async function load() {
-    const res = await api<{ users: DirectoryUser[] }>("/api/users");
-    setUsers(res.users);
-  }
   // SWR — 팀원 목록은 변동이 느리므로 캐시 히트 효과가 크다.
   useEffect(() => {
     apiSWR<{ users: DirectoryUser[] }>("/api/users", {
@@ -49,7 +49,7 @@ export default function DirectoryPage() {
   const filtered = useMemo(() => {
     let arr = users;
     if (teamFilter) arr = arr.filter((u) => u.team === teamFilter);
-    const k = q.trim().toLowerCase();
+    const k = deferredQ.trim().toLowerCase();
     if (k) {
       arr = arr.filter((u) =>
         u.name.toLowerCase().includes(k) ||
@@ -59,7 +59,7 @@ export default function DirectoryPage() {
       );
     }
     return arr;
-  }, [users, q, teamFilter]);
+  }, [users, deferredQ, teamFilter]);
 
   const others = useMemo(() => filtered.filter((u) => u.id !== user?.id), [filtered, user?.id]);
 
@@ -93,6 +93,14 @@ export default function DirectoryPage() {
     }
   }
 
+  function copyEmail(target: DirectoryUser) {
+    // navigator.clipboard 는 http(s) + secure context 에서만 동작. 구식 브라우저 대비 optional chaining.
+    navigator.clipboard?.writeText(target.email).catch(() => {});
+    setCopiedId(target.id);
+    // 1.2초 뒤 해제 — 클립보드 API 가 실패해도 피드백은 일관되게.
+    setTimeout(() => setCopiedId((curr) => (curr === target.id ? null : curr)), 1_200);
+  }
+
   const me = useMemo(() => users.find((u) => u.id === user?.id), [users, user?.id]);
 
   return (
@@ -119,6 +127,7 @@ export default function DirectoryPage() {
             placeholder="이름·이메일·팀·직급으로 검색"
             value={q}
             onChange={(e) => setQ(e.target.value)}
+            maxLength={80}
           />
         </div>
 
@@ -178,7 +187,14 @@ export default function DirectoryPage() {
               {view === "grid" ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   {members.map((u) => (
-                    <GridCard key={u.id} u={u} onDM={() => startDM(u)} dmBusy={dmBusyId === u.id} />
+                    <GridCard
+                      key={u.id}
+                      u={u}
+                      onDM={() => startDM(u)}
+                      dmBusy={dmBusyId === u.id}
+                      onCopyEmail={() => copyEmail(u)}
+                      copied={copiedId === u.id}
+                    />
                   ))}
                 </div>
               ) : (
@@ -257,7 +273,19 @@ function MyProfileHero({
 }
 
 /* =============== Grid Card =============== */
-function GridCard({ u, onDM, dmBusy }: { u: DirectoryUser; onDM: () => void; dmBusy?: boolean }) {
+function GridCard({
+  u,
+  onDM,
+  dmBusy,
+  onCopyEmail,
+  copied,
+}: {
+  u: DirectoryUser;
+  onDM: () => void;
+  dmBusy?: boolean;
+  onCopyEmail: () => void;
+  copied?: boolean;
+}) {
   return (
     <div className="group panel p-0 overflow-hidden relative hover:border-ink-200 transition">
       {/* color band */}
@@ -310,14 +338,22 @@ function GridCard({ u, onDM, dmBusy }: { u: DirectoryUser; onDM: () => void; dmB
             </svg>
           </a>
           <button
-            onClick={() => { navigator.clipboard.writeText(u.email); }}
+            onClick={onCopyEmail}
             className="btn-ghost btn-xs"
-            title="이메일 복사"
+            title={copied ? "복사됨" : "이메일 복사"}
+            aria-live="polite"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="8" y="8" width="13" height="13" rx="2" />
-              <path d="M16 8V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2" />
-            </svg>
+            {copied ? (
+              // 성공 체크 아이콘 — 1.2초 동안 표시.
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            ) : (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="8" y="8" width="13" height="13" rx="2" />
+                <path d="M16 8V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2" />
+              </svg>
+            )}
           </button>
         </div>
       </div>
