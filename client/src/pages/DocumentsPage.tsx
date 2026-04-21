@@ -432,7 +432,7 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
             );
           })}
         </div>
-        <div className="relative w-[220px]">
+        <div className="relative w-full sm:w-[220px]">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8E959E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="absolute left-3 top-1/2 -translate-y-1/2">
             <circle cx="11" cy="11" r="7" />
             <path d="m20 20-3.5-3.5" />
@@ -445,7 +445,7 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
       {currentChildren.length > 0 && (
         <div className="mb-5">
           <div className="text-[11px] font-extrabold text-ink-500 uppercase tracking-[0.08em] mb-2">폴더</div>
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {currentChildren.map((f) => {
               const dropKey = `folder:${f.id}`;
               const isDropTarget = dragOverKey === dropKey;
@@ -513,7 +513,7 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
           <div className="text-[12px] text-ink-500 mt-1">우측 상단 "문서 업로드" 버튼으로 첫 문서를 추가해보세요.</div>
         </div>
       ) : (
-        <div className="panel p-0 overflow-hidden">
+        <div className="panel p-0 overflow-hidden overflow-x-auto">
           <table className="pro">
             <thead>
               <tr>
@@ -633,7 +633,7 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
               </div>
               <div>
                 <label className="field-label">공개 범위</label>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {(["ALL", "TEAM", "PRIVATE", "CUSTOM"] as DocScope[]).map((s) => (
                     <button
                       key={s}
@@ -730,7 +730,7 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
               </div>
               <div>
                 <label className="field-label">공개 범위</label>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {(["ALL", "TEAM", "PRIVATE", "CUSTOM"] as DocScope[]).map((s) => (
                     <button
                       key={s}

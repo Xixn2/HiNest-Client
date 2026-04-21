@@ -87,7 +87,7 @@ export default function OrgChartPage() {
         description={`총 ${users.length}명 · ${grouped.length}개 팀 · 직급순 배열`}
       />
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {grouped.map(([team, members]) => (
           <div key={team} className="panel p-0 overflow-hidden">
             <div className="px-4 py-3 border-b border-ink-150 bg-gradient-to-r from-brand-50 to-white">
@@ -115,7 +115,7 @@ export default function OrgChartPage() {
                   {u.id !== user?.id && (
                     <button
                       onClick={() => startDM(u)}
-                      className="opacity-0 group-hover:opacity-100 btn-icon"
+                      className="md:opacity-0 md:group-hover:opacity-100 btn-icon"
                       title="1:1 대화"
                     >
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

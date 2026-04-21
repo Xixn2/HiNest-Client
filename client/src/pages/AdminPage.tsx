@@ -260,7 +260,7 @@ export default function AdminPage() {
       />
 
       {/* 통계 스트립 */}
-      <div className="grid grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         <StatCard label="전체 구성원" value={users.length} sub={`활성 ${users.filter((u) => u.active).length}명`} />
         <StatCard label="미사용 초대키" value={invites.filter((k) => !k.used).length} sub={`총 ${invites.length}건 발급`} />
         <StatCard label="팀" value={teams.length} sub="전사 팀 수" />
@@ -378,9 +378,9 @@ function UsersTab({
           <button onClick={() => setUpdateErr(null)} className="text-red-500 hover:text-red-700">닫기</button>
         </div>
       )}
-      <div className="section-head">
+      <div className="section-head flex-wrap">
         <div className="title">구성원 목록 <span className="text-ink-400 font-medium tabular ml-1">{filtered.length}</span></div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {/* 기본/상세 뷰 토글 */}
           <div className="tabs">
             {(["basic", "detail"] as const).map((v) => (
@@ -448,8 +448,8 @@ function UsersTab({
             PDF
           </button>
           <span className="mx-1 h-4 w-px bg-ink-200" />
-          <input className="input text-[12px] h-[32px] w-[200px]" placeholder="이름·이메일·팀 검색" value={q} onChange={(e) => setQ(e.target.value)} />
-          <select className="input text-[12px] h-[32px] w-[120px]" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+          <input className="input text-[12px] h-[32px] w-full sm:w-[200px]" placeholder="이름·이메일·팀 검색" value={q} onChange={(e) => setQ(e.target.value)} />
+          <select className="input text-[12px] h-[32px] w-full sm:w-[120px]" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
             <option value="">모든 권한</option>
             <option value="ADMIN">ADMIN</option>
             <option value="MANAGER">MANAGER</option>
@@ -469,7 +469,8 @@ function UsersTab({
         <DetailUserTable rows={filtered} positions={positions} update={update} remove={remove} />
       )}
       {view === "basic" && (
-      <table className="pro">
+      <div className="overflow-x-auto">
+      <table className="pro" style={{ minWidth: 720 }}>
         <thead>
           <tr>
             <th style={{ width: "30%" }}>구성원</th>
@@ -575,6 +576,7 @@ function UsersTab({
           )}
         </tbody>
       </table>
+      </div>
       )}
       {attendanceTarget && (
         <AttendanceEditModal
@@ -1258,9 +1260,9 @@ function InvitesTab({
   }
 
   return (
-    <div className="grid grid-cols-5 gap-4">
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
       {/* 발급 폼 */}
-      <div className="col-span-2 panel p-6">
+      <div className="lg:col-span-2 panel p-6">
         <div className="flex items-center gap-2 mb-4">
           <div className="w-8 h-8 rounded-lg bg-brand-50 text-brand-600 grid place-items-center">
             <KeyIcon />
@@ -1327,11 +1329,12 @@ function InvitesTab({
       </div>
 
       {/* 목록 */}
-      <div className="col-span-3 panel p-0 overflow-hidden">
+      <div className="lg:col-span-3 panel p-0 overflow-hidden">
         <div className="section-head">
           <div className="title">초대키 목록 <span className="text-ink-400 font-medium tabular ml-1">{invites.length}</span></div>
         </div>
-        <table className="pro">
+        <div className="overflow-x-auto">
+        <table className="pro" style={{ minWidth: 640 }}>
           <thead>
             <tr>
               <th>키</th>
@@ -1395,6 +1398,7 @@ function InvitesTab({
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
@@ -1427,8 +1431,8 @@ function TeamsTab({ teams, reload }: { teams: Team[]; reload: () => void }) {
   }
 
   return (
-    <div className="grid grid-cols-5 gap-4">
-      <div className="col-span-2 panel p-6">
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+      <div className="lg:col-span-2 panel p-6">
         <div className="flex items-center gap-2 mb-4">
           <div className="w-8 h-8 rounded-lg bg-sky-50 text-sky-600 grid place-items-center">
             <TeamIcon />
@@ -1447,7 +1451,7 @@ function TeamsTab({ teams, reload }: { teams: Team[]; reload: () => void }) {
         </form>
       </div>
 
-      <div className="col-span-3 panel p-0 overflow-hidden">
+      <div className="lg:col-span-3 panel p-0 overflow-hidden">
         <div className="section-head">
           <div className="title">팀 목록 <span className="text-ink-400 font-medium tabular ml-1">{teams.length}</span></div>
         </div>
@@ -1497,8 +1501,8 @@ function PositionsTab({ positions, reload }: { positions: Position[]; reload: ()
   }
 
   return (
-    <div className="grid grid-cols-5 gap-4">
-      <div className="col-span-2 panel p-6">
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+      <div className="lg:col-span-2 panel p-6">
         <div className="flex items-center gap-2 mb-4">
           <div className="w-8 h-8 rounded-lg bg-brand-50 text-brand-600 grid place-items-center">
             <RankIcon />
@@ -1521,7 +1525,7 @@ function PositionsTab({ positions, reload }: { positions: Position[]; reload: ()
         </form>
       </div>
 
-      <div className="col-span-3 panel p-0 overflow-hidden">
+      <div className="lg:col-span-3 panel p-0 overflow-hidden">
         <div className="section-head">
           <div className="title">직급 목록 <span className="text-ink-400 font-medium tabular ml-1">{positions.length}</span></div>
         </div>

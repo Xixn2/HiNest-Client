@@ -125,9 +125,9 @@ export default function ProfilePage() {
         description="프로필 이름과 아바타 색을 변경하고 비밀번호를 관리합니다."
       />
 
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* 미리보기 */}
-        <div className="col-span-1">
+        <div className="lg:col-span-1">
           <div className="panel p-6 sticky top-4">
             <div className="flex items-center gap-3">
               {avatarUrl ? (
@@ -159,7 +159,7 @@ export default function ProfilePage() {
         </div>
 
         {/* 편집 */}
-        <div className="col-span-2 space-y-5">
+        <div className="lg:col-span-2 space-y-5">
           <div className="panel p-6">
             <div className="h-sub mb-4">기본 정보</div>
             <form onSubmit={saveProfile} className="space-y-4">
@@ -435,7 +435,7 @@ function ThemePanel() {
           <div className="t-caption mt-0.5">현재 적용: <b className="text-ink-900">{resolved === "dark" ? "다크" : "라이트"}</b></div>
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {options.map((opt) => {
           const active = mode === opt.value;
           return (

@@ -128,7 +128,7 @@ export default function ExpensePage() {
         }
       />
 
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {/* 월 합계: 브랜드 컬러 강조 카드 */}
         <div
           className="panel p-5 text-white relative overflow-hidden"
@@ -163,7 +163,7 @@ export default function ExpensePage() {
         })}
       </div>
 
-      <div className="card p-0 overflow-hidden">
+      <div className="card p-0 overflow-hidden overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-slate-500 text-xs">
             <tr>

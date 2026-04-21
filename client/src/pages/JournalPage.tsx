@@ -70,7 +70,7 @@ export default function JournalPage() {
           </button>
         }
       />
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="card p-0 overflow-hidden">
           <div className="p-4 border-b border-slate-100 text-sm font-bold text-slate-800">
             내 일지 ({list.length})
@@ -90,7 +90,7 @@ export default function JournalPage() {
           </div>
         </div>
 
-        <div className="col-span-2 card">
+        <div className="lg:col-span-2 card">
           {editing ? (
             <form onSubmit={create} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">

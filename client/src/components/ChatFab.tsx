@@ -117,11 +117,13 @@ export default function ChatFab() {
               : "opacity-0 translate-y-3 scale-[.98] pointer-events-none"
           }`}
           style={{
-            right: 28,
-            bottom: 108,
-            width: 380,
+            // 모바일에선 좌우 여백을 12px 로 줄이고 너비를 뷰포트에 맞춰 축소.
+            // 데스크톱에선 기존처럼 380px 고정.
+            right: "max(12px, env(safe-area-inset-right))",
+            bottom: "calc(96px + env(safe-area-inset-bottom))",
+            width: "min(380px, calc(100vw - 24px))",
             height: 580,
-            maxHeight: "calc(100vh - 140px)",
+            maxHeight: "calc(100vh - 140px - env(safe-area-inset-bottom))",
             transformOrigin: "bottom right",
             borderRadius: 20,
             overflow: "hidden",

@@ -123,17 +123,17 @@ function LogsPanel() {
 
   return (
     <div className="panel p-0 overflow-hidden">
-      <div className="section-head">
+      <div className="section-head flex-wrap">
         <div className="title">
           활동 로그 <span className="text-ink-400 font-medium ml-1 tabular">{filtered.length}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <select className="input text-[12px] h-[30px] w-[160px]" value={actionFilter} onChange={(e) => setActionFilter(e.target.value)}>
+        <div className="flex items-center gap-2 flex-wrap">
+          <select className="input text-[12px] h-[30px] w-full sm:w-[160px]" value={actionFilter} onChange={(e) => setActionFilter(e.target.value)}>
             <option value="">모든 액션</option>
             {uniqueActions.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
           <input
-            className="input text-[12px] h-[30px] w-[200px]"
+            className="input text-[12px] h-[30px] w-full sm:w-[200px]"
             placeholder="검색 (이름·대상·상세)"
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -141,7 +141,8 @@ function LogsPanel() {
           <button className="btn-ghost btn-xs" onClick={load}>새로고침</button>
         </div>
       </div>
-      <table className="pro">
+      <div className="overflow-x-auto">
+      <table className="pro" style={{ minWidth: 820 }}>
         <thead>
           <tr>
             <th>시각</th>
@@ -172,6 +173,7 @@ function LogsPanel() {
           )}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
@@ -230,7 +232,7 @@ function ChatAuditPanel() {
 
       <div className="panel p-0 overflow-hidden" style={{ height: "calc(100vh - 280px)" }}>
         <div className="flex h-full">
-          <div className="w-[320px] border-r border-ink-150 flex flex-col">
+          <div className={`${active ? "hidden md:flex" : "flex w-full"} md:w-[320px] border-r border-ink-150 flex-col`}>
             <div className="p-3 border-b border-ink-150 space-y-2">
               <input className="input text-[12px] h-[32px]" placeholder="방·참가자 검색" value={q} onChange={(e) => setQ(e.target.value)} />
               <div className="flex items-center gap-1">
@@ -263,11 +265,20 @@ function ChatAuditPanel() {
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col min-w-0">
+          <div className={`${active ? "flex" : "hidden md:flex"} flex-1 flex-col min-w-0`}>
             {active ? (
               <>
                 <div className="h-[52px] px-5 border-b border-ink-150 flex items-center justify-between bg-ink-25">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="md:hidden btn-icon"
+                      onClick={() => setActive(null)}
+                      aria-label="목록으로"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                    </button>
+                    <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <RoomTypeChip type={active.type} />
                       <div className="text-[14px] font-bold text-ink-900 truncate">{roomLabel(active)}</div>
@@ -275,6 +286,7 @@ function ChatAuditPanel() {
                     </div>
                     <div className="text-[11px] text-ink-500 mt-0.5 truncate">
                       참가자 {active.members.length}명 · {active.members.map((m) => m.user.name).join(", ")}
+                    </div>
                     </div>
                   </div>
                   <button className="btn-ghost btn-xs" onClick={() => active && loadMessages(active.id)}>새로고침</button>

@@ -602,7 +602,7 @@ function EventModal({
             </div>
 
             {/* 시간 */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="field-label">시작</label>
                 <DateTimePicker
@@ -649,7 +649,7 @@ function EventModal({
             {/* 범위 */}
             <div>
               <label className="field-label">공유 범위</label>
-              <div className={`grid gap-2 ${canMakeCompany ? "grid-cols-4" : "grid-cols-3"}`}>
+              <div className={`grid gap-2 ${canMakeCompany ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}>
                 {scopes.map((s) => {
                   const meta = SCOPE_META[s];
                   const active = form.scope === s;

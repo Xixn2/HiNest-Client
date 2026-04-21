@@ -83,7 +83,7 @@ export default function DashboardPage() {
       />
 
       {/* KPI strip */}
-      <div className="grid grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         <KPI label="오늘 상태" value={status} valueClass="text-ink-900" sub={dateStr.split(" ").slice(-1)[0]} badge={<span className={statusClass}><span className="badge-dot" style={{ background: statusDot }} />{status}</span>} />
         <KPI
           label="출근 시각"
@@ -105,8 +105,8 @@ export default function DashboardPage() {
         />
       </div>
 
-      <div className="grid grid-cols-3 gap-5">
-        <div className="col-span-2 space-y-5">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="md:col-span-2 space-y-5">
           {/* 출퇴근 */}
           <div className="panel">
             <div className="section-head">
