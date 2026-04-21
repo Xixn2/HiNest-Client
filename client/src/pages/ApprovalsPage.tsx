@@ -65,6 +65,13 @@ export default function ApprovalsPage() {
   const [directory, setDirectory] = useState<DirUser[]>([]);
   // 승인/반려/취소 버튼 연속 클릭 방지 — 네트워크 끊겨도 같은 요청이 2중 들어가면 결재선이 이상해짐.
   const [actingId, setActingId] = useState<string | null>(null);
+  // 반려 사유 모달 — 기존에 window.prompt() 를 쓰다가 iOS Safari 에서 IME(한글) 입력이
+  // 깨지고 긴 문장을 쓰기 어려워 모달로 교체. 사유가 비어 있어도 반려는 가능.
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectComment, setRejectComment] = useState("");
+  // 결재 취소 역시 window.confirm() 대신 모달로 — 모바일에서 네이티브 다이얼로그가
+  // 뒤쪽 페이지를 가리거나 버튼 탭 타깃이 작은 문제 해결.
+  const [cancelingId, setCancelingId] = useState<string | null>(null);
 
   async function load() {
     const res = await api<{ approvals: Approval[] }>(`/api/approval?scope=${scope}`);
@@ -96,10 +103,15 @@ export default function ApprovalsPage() {
 
   async function act(id: string, action: "approve" | "reject") {
     if (actingId) return; // 이미 처리 중이면 무시
-    const comment = action === "reject" ? prompt("반려 사유 (선택)") ?? undefined : undefined;
+    // 반려는 사유 입력 모달을 거치도록 — act() 는 승인만 즉시 처리.
+    if (action === "reject") {
+      setRejectingId(id);
+      setRejectComment("");
+      return;
+    }
     setActingId(id);
     try {
-      await api(`/api/approval/${id}/act`, { method: "POST", json: { action, comment } });
+      await api(`/api/approval/${id}/act`, { method: "POST", json: { action } });
       await load();
     } catch (err: any) {
       alert(err?.message ?? "처리에 실패했어요");
@@ -108,9 +120,34 @@ export default function ApprovalsPage() {
     }
   }
 
-  async function cancel(id: string) {
+  async function performReject() {
+    const id = rejectingId;
+    if (!id) return;
+    setRejectingId(null);
+    setActingId(id);
+    try {
+      await api(`/api/approval/${id}/act`, {
+        method: "POST",
+        json: { action: "reject", comment: rejectComment.trim() || undefined },
+      });
+      await load();
+    } catch (err: any) {
+      alert(err?.message ?? "반려에 실패했어요");
+    } finally {
+      setActingId(null);
+      setRejectComment("");
+    }
+  }
+
+  function askCancel(id: string) {
     if (actingId) return;
-    if (!confirm("결재를 취소하시겠습니까?")) return;
+    setCancelingId(id);
+  }
+
+  async function performCancel() {
+    const id = cancelingId;
+    if (!id) return;
+    setCancelingId(null);
     setActingId(id);
     try {
       await api(`/api/approval/${id}/cancel`, { method: "POST" });
@@ -195,7 +232,7 @@ export default function ApprovalsPage() {
               a={selected}
               meId={user?.id}
               onAct={act}
-              onCancel={cancel}
+              onCancel={askCancel}
               busy={actingId === selected.id}
             />
           ) : (
@@ -214,6 +251,90 @@ export default function ApprovalsPage() {
       </div>
 
       {creating && <CreateModal directory={directory} meId={user?.id} onClose={() => setCreating(false)} onDone={() => { setCreating(false); load(); }} />}
+
+      {rejectingId && (
+        <ConfirmModal
+          title="반려 사유"
+          description="반려 사유를 입력해주세요. (선택)"
+          confirmLabel={actingId ? "처리 중…" : "반려"}
+          confirmTone="danger"
+          onCancel={() => { setRejectingId(null); setRejectComment(""); }}
+          onConfirm={performReject}
+          busy={!!actingId}
+        >
+          <textarea
+            className="input"
+            rows={3}
+            autoFocus
+            value={rejectComment}
+            onChange={(e) => setRejectComment(e.target.value.slice(0, 500))}
+            placeholder="예: 예산 초과로 반려합니다"
+          />
+          <div className="text-[11px] text-ink-400 tabular mt-1 text-right">
+            {rejectComment.length} / 500
+          </div>
+        </ConfirmModal>
+      )}
+
+      {cancelingId && (
+        <ConfirmModal
+          title="결재 취소"
+          description="이 결재를 취소하시겠습니까? 취소된 결재는 다시 되돌릴 수 없습니다."
+          confirmLabel={actingId ? "처리 중…" : "결재 취소"}
+          confirmTone="danger"
+          onCancel={() => setCancelingId(null)}
+          onConfirm={performCancel}
+          busy={!!actingId}
+        />
+      )}
+    </div>
+  );
+}
+
+// 작은 범용 확인 모달 — 반려 사유·결재 취소 등에서 재사용. alert()/confirm() 대체.
+function ConfirmModal({
+  title, description, confirmLabel, confirmTone = "primary", onCancel, onConfirm, busy, children,
+}: {
+  title: string;
+  description?: string;
+  confirmLabel: string;
+  confirmTone?: "primary" | "danger";
+  onCancel: () => void;
+  onConfirm: () => void;
+  busy?: boolean;
+  children?: React.ReactNode;
+}) {
+  // ESC 키로 닫기 — 데스크톱에서 즉시 닫히게. 모달이 열려 있을 때만 바인딩.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && !busy) onCancel();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [busy, onCancel]);
+
+  return (
+    <div className="fixed inset-0 bg-ink-900/40 grid place-items-center p-4 z-50" onClick={() => !busy && onCancel()}>
+      <div className="panel w-full max-w-[420px] shadow-pop" onClick={(e) => e.stopPropagation()}>
+        <div className="section-head">
+          <div className="title">{title}</div>
+        </div>
+        <div className="p-5 space-y-3">
+          {description && <div className="text-[13px] text-ink-700 leading-[1.55]">{description}</div>}
+          {children}
+        </div>
+        <div className="border-t border-ink-150 px-5 py-3 flex justify-end gap-2">
+          <button type="button" className="btn-ghost" disabled={busy} onClick={onCancel}>취소</button>
+          <button
+            type="button"
+            className={confirmTone === "danger" ? "btn-danger" : "btn-primary"}
+            disabled={busy}
+            onClick={onConfirm}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

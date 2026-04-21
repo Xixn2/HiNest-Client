@@ -93,10 +93,12 @@ const HR_SELECT = {
 
 router.get("/users", async (req, res) => {
   const u = (req as any).user;
+  // 상한 5000 — 엑셀 업로드 상한과 맞춤. 조직이 더 커지면 cursor pagination 으로 전환.
   const users = await prisma.user.findMany({
     where: u.superAdmin ? {} : { superAdmin: false }, // 일반 관리자에겐 총관리자 계정 은닉
     orderBy: { createdAt: "desc" },
     select: HR_SELECT,
+    take: 5000,
   });
   res.json({ users });
 });
@@ -307,7 +309,7 @@ router.delete("/users/:id", async (req, res) => {
 
 /* ===== 팀 ===== */
 router.get("/teams", async (_req, res) => {
-  const teams = await prisma.team.findMany({ orderBy: { createdAt: "asc" } });
+  const teams = await prisma.team.findMany({ orderBy: { createdAt: "asc" }, take: 500 });
   res.json({ teams });
 });
 
@@ -353,7 +355,10 @@ router.delete("/teams/:id", async (req, res) => {
 
 /* ===== 직급 ===== */
 router.get("/positions", async (_req, res) => {
-  const positions = await prisma.position.findMany({ orderBy: [{ rank: "asc" }, { createdAt: "asc" }] });
+  const positions = await prisma.position.findMany({
+    orderBy: [{ rank: "asc" }, { createdAt: "asc" }],
+    take: 500,
+  });
   res.json({ positions });
 });
 

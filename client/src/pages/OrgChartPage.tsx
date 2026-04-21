@@ -21,6 +21,9 @@ export default function OrgChartPage() {
   const { user } = useAuth();
   const [users, setUsers] = useState<DirUser[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
+  // DM 버튼 연타 방지 — 같은 유저에게 방 생성 요청이 중복 나가면 서버에서 기존 방을
+  // 찾는 로직을 두 번 타고 이벤트도 두 번 발사돼 채팅 창이 깜빡임.
+  const [dmBusyId, setDmBusyId] = useState<string | null>(null);
 
   async function load() {
     const [u, p] = await Promise.all([
@@ -71,12 +74,20 @@ export default function OrgChartPage() {
 
   async function startDM(target: DirUser) {
     if (target.id === user?.id) return;
-    const res = await api<{ room: { id: string } }>("/api/chat/rooms", {
-      method: "POST",
-      json: { type: "DIRECT", memberIds: [target.id] },
-    });
-    window.dispatchEvent(new CustomEvent("chat:open"));
-    window.dispatchEvent(new CustomEvent("chat:open-room", { detail: { roomId: res.room.id } }));
+    if (dmBusyId) return; // 이미 어떤 유저와 방 생성 중이면 무시
+    setDmBusyId(target.id);
+    try {
+      const res = await api<{ room: { id: string } }>("/api/chat/rooms", {
+        method: "POST",
+        json: { type: "DIRECT", memberIds: [target.id] },
+      });
+      window.dispatchEvent(new CustomEvent("chat:open"));
+      window.dispatchEvent(new CustomEvent("chat:open-room", { detail: { roomId: res.room.id } }));
+    } catch (err: any) {
+      alert(err?.message ?? "대화 시작에 실패했어요");
+    } finally {
+      setDmBusyId(null);
+    }
   }
 
   return (
@@ -115,7 +126,8 @@ export default function OrgChartPage() {
                   {u.id !== user?.id && (
                     <button
                       onClick={() => startDM(u)}
-                      className="md:opacity-0 md:group-hover:opacity-100 btn-icon"
+                      disabled={dmBusyId === u.id}
+                      className="md:opacity-0 md:group-hover:opacity-100 btn-icon disabled:opacity-60"
                       title="1:1 대화"
                     >
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

@@ -111,3 +111,23 @@ export function clearApiCache() {
     /* noop */
   }
 }
+
+/**
+ * 특정 경로의 캐시만 무효화 — POST/PATCH/DELETE 뒤에 GET 캐시를 버려서
+ * 다음 방문 때 stale data 가 잠깐 보이는 flash 를 없앰.
+ * pathPrefix 를 prefix 로 받으면 해당 prefix 로 시작하는 모든 경로를 비움
+ * (예: "/api/meeting" → "/api/meeting", "/api/meeting?mine=1" 둘 다).
+ */
+export function invalidateCache(pathPrefix: string) {
+  try {
+    const prefix = cacheKey(pathPrefix);
+    const keys: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (k && k.startsWith(prefix)) keys.push(k);
+    }
+    for (const k of keys) sessionStorage.removeItem(k);
+  } catch {
+    /* noop */
+  }
+}

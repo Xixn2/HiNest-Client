@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import PageHeader from "../components/PageHeader";
 import SuperStepUpGate from "../components/SuperStepUpGate";
@@ -186,13 +186,20 @@ function ChatAuditPanel() {
   const [filter, setFilter] = useState<"all" | "direct" | "group">("all");
   const [q, setQ] = useState("");
 
+  // 방 전환 중 이전 요청이 늦게 돌아오면 새 방의 메시지를 덮어써버리는 race 가 있어,
+  // activeIdRef 로 현재 의도한 방을 기억해두고 응답이 stale 이면 버림.
+  const activeIdRef = useRef<string | null>(null);
+
   async function loadRooms() {
     const res = await api<{ rooms: Room[] }>("/api/chat/rooms?scope=audit");
     setRooms(res.rooms);
-    if (!active && res.rooms.length) setActive(res.rooms[0]);
+    // setActive 는 함수형 업데이트로 — loadRooms 진행 중에 유저가 방을 바꿨다면 덮어쓰지 않음.
+    setActive((prev) => prev ?? res.rooms[0] ?? null);
   }
   async function loadMessages(roomId: string) {
+    activeIdRef.current = roomId;
     const res = await api<{ messages: Message[] }>(`/api/chat/rooms/${roomId}/messages`);
+    if (activeIdRef.current !== roomId) return; // 방이 바뀌었으면 stale 응답 무시
     setMessages(res.messages);
   }
   useEffect(() => { loadRooms(); }, []);

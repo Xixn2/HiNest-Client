@@ -34,6 +34,9 @@ export default function JournalPage() {
   const [mode, setMode] = useState<Mode>("view");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  // 삭제 버튼 중복 클릭 방지 + native confirm() 대체용 모달 상태.
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
 
   async function load() {
     const res = await api<{ journals: Journal[] }>("/api/journal");
@@ -81,14 +84,18 @@ export default function JournalPage() {
           method: "PATCH",
           json: form,
         });
+        // 낙관적 업데이트 — 전체 load() 대신 응답값으로 리스트 내 해당 항목만 교체.
+        // 서버 왕복 한 번 아끼고 스크롤 위치·선택 상태 유지.
+        setList((arr) => arr.map((j) => (j.id === res.journal.id ? res.journal : j)));
         setSelected(res.journal);
       } else {
         const res = await api<{ journal: Journal }>("/api/journal", { method: "POST", json: form });
+        // 새 일지를 리스트 맨 앞에 넣음 — 서버도 createdAt desc 로 정렬하므로 동일 순서.
+        setList((arr) => [res.journal, ...arr.filter((j) => j.id !== res.journal.id)]);
         setSelected(res.journal);
       }
       setMode("view");
       setForm({ date: today(), title: "", content: "" });
-      load();
     } catch (e: any) {
       setErr(e?.message ?? "저장 실패");
     } finally {
@@ -97,11 +104,19 @@ export default function JournalPage() {
   }
 
   async function remove(id: string) {
-    if (!confirm("삭제하시겠습니까?")) return;
-    await api(`/api/journal/${id}`, { method: "DELETE" });
-    if (selected?.id === id) setSelected(null);
-    setMode("view");
-    load();
+    if (removingId) return;
+    setRemovingId(id);
+    try {
+      await api(`/api/journal/${id}`, { method: "DELETE" });
+      setList((arr) => arr.filter((j) => j.id !== id));
+      if (selected?.id === id) setSelected(null);
+      setMode("view");
+    } catch (e: any) {
+      alert(e?.message ?? "삭제에 실패했어요");
+    } finally {
+      setRemovingId(null);
+      setConfirmRemoveId(null);
+    }
   }
 
   const editing = mode !== "view";
@@ -183,11 +198,15 @@ export default function JournalPage() {
                   <h2 className="text-xl font-bold mt-1 break-words">{selected.title}</h2>
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <button className="btn-ghost btn-xs" onClick={() => openEdit(selected)}>
+                  <button className="btn-ghost btn-xs" onClick={() => openEdit(selected)} disabled={removingId === selected.id}>
                     수정
                   </button>
-                  <button className="btn-ghost btn-xs text-red-600 hover:text-red-700" onClick={() => remove(selected.id)}>
-                    삭제
+                  <button
+                    className="btn-ghost btn-xs text-red-600 hover:text-red-700 disabled:opacity-60"
+                    onClick={() => setConfirmRemoveId(selected.id)}
+                    disabled={removingId === selected.id}
+                  >
+                    {removingId === selected.id ? "삭제 중…" : "삭제"}
                   </button>
                 </div>
               </div>
@@ -200,6 +219,36 @@ export default function JournalPage() {
           )}
         </div>
       </div>
+
+      {confirmRemoveId && (
+        <div
+          className="fixed inset-0 bg-slate-900/40 grid place-items-center p-4 z-50"
+          onClick={() => removingId ? null : setConfirmRemoveId(null)}
+        >
+          <div className="card w-full max-w-[400px]" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold">일지 삭제</h3>
+            <p className="text-sm text-slate-600 mt-2">
+              이 일지를 삭제하시겠습니까? 삭제 후에는 복구할 수 없습니다.
+            </p>
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                className="btn-ghost"
+                onClick={() => setConfirmRemoveId(null)}
+                disabled={!!removingId}
+              >
+                취소
+              </button>
+              <button
+                className="btn-primary bg-red-600 hover:bg-red-700"
+                onClick={() => remove(confirmRemoveId)}
+                disabled={!!removingId}
+              >
+                {removingId ? "삭제 중…" : "삭제"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
