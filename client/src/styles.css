@@ -17,6 +17,8 @@
   --c-surface-3:  #F2F4F6;
   --c-border:     #E6E8EC;
   --c-border-strong: #DDE0E4;
+  /* 채팅 상대 버블 — surface(white) 위에 올라가므로 한 톤 더 어둡게 잡아야 보임 */
+  --c-chat-bubble-other: #E9EDF2;
 
   --c-text:       #14161B;  /* primary text */
   --c-text-2:     #343942;  /* secondary */
@@ -46,6 +48,8 @@ html.dark {
   --c-surface-3:  #23272F;
   --c-border:     #2A2F38;
   --c-border-strong: #363B45;
+  /* 다크에선 surface(#171A20) 위에 올라가므로 surface-3 정도면 충분 */
+  --c-chat-bubble-other: #2A2F38;
 
   --c-text:       #F2F4F7;  /* 라이트의 ink-900 → 이제 흰 */
   --c-text-2:     #D4D8DE;

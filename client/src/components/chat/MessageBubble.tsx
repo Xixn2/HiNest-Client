@@ -564,7 +564,7 @@ function MessageBubbleInner({ msg, mine }: { msg: Message; mine: boolean }) {
             alignItems: "center",
             gap: 10,
             padding: "10px 12px",
-            background: mine ? C.blue : C.gray100,
+            background: mine ? C.blue : C.bubbleOther,
             color: mine ? C.brandFg : C.ink,
             borderRadius: 14,
             textDecoration: "none",
@@ -711,7 +711,7 @@ export function TextBubble({
         minWidth: 0,
         maxWidth: "100%",
         color: mine ? C.brandFg : C.ink,
-        background: mine ? C.blue : C.gray100,
+        background: mine ? C.blue : C.bubbleOther,
         borderRadius: 16,
         fontFamily: FONT,
       }}

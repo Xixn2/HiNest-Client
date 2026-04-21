@@ -76,43 +76,42 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const markRead = useCallback(async (ids?: string[], all?: boolean) => {
+    // 낙관적 업데이트 — API 왕복을 기다리지 않고 즉시 벨/룸 뱃지에서 숫자 사라지게.
+    // 실패해도 다음 reload(30s) / SSE 에서 서버가 진실을 다시 싱크하므로 롤백 불필요.
+    const now = new Date().toISOString();
+    setItems((prev) =>
+      prev.map((n) =>
+        (all || (ids && ids.includes(n.id))) && !n.readAt
+          ? { ...n, readAt: now }
+          : n
+      )
+    );
     try {
       await api("/api/notification/read", {
         method: "POST",
         json: all ? { all: true } : { ids: ids ?? [] },
       });
-      setItems((prev) =>
-        prev.map((n) =>
-          (all || (ids && ids.includes(n.id))) && !n.readAt
-            ? { ...n, readAt: new Date().toISOString() }
-            : n
-        )
-      );
     } catch {}
   }, []);
 
   const markRoomRead = useCallback(async (roomId: string) => {
-    // 현재 items 에서 해당 방에 연결된 미읽음 DM/MENTION 을 추려서 읽음 처리
+    // 현재 items 에서 해당 방에 연결된 미읽음 DM/MENTION 을 추려서 즉시 읽음 처리.
     // linkUrl 패턴은 /chat?room=<roomId>
-    const targetIds: string[] = [];
+    const now = new Date().toISOString();
+    let targetIds: string[] = [];
     setItems((prev) => {
-      prev.forEach((n) => {
+      const next = prev.map((n) => {
         if (!n.readAt && isChatType(n.type) && n.linkUrl && n.linkUrl.includes(`room=${roomId}`)) {
           targetIds.push(n.id);
+          return { ...n, readAt: now };
         }
+        return n;
       });
-      return prev;
+      return next;
     });
     if (targetIds.length === 0) return;
     try {
       await api("/api/notification/read", { method: "POST", json: { ids: targetIds } });
-      setItems((prev) =>
-        prev.map((n) =>
-          targetIds.includes(n.id) && !n.readAt
-            ? { ...n, readAt: new Date().toISOString() }
-            : n
-        )
-      );
     } catch {}
   }, []);
 
