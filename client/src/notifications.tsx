@@ -133,13 +133,14 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         es.addEventListener("notification", (ev: MessageEvent) => {
           try {
             const n = JSON.parse(ev.data) as Notif;
+            // 낙관적 삽입 — 서버 왕복 없이 즉시 벨에 반영.
+            // (기존에는 매 이벤트마다 reload() 를 한 번 더 불렀지만, 공지사항 일괄 브로드캐스트 때
+            //  같은 유저 세션이 동시에 여러 번 GET /api/notification 치는 문제 → 서버 부하 증가.
+            //  30초 주기 poll + visibilitychange poll 으로 서버 기준 재싱크는 이미 커버됨.)
             setItems((prev) => (prev.some((x) => x.id === n.id) ? prev : [n, ...prev]));
             deliverPendingNotifications([
               { id: n.id, title: n.title, body: n.body, linkUrl: n.linkUrl },
             ]);
-            // 서버 정렬/중복제거 기준으로 한 번 더 동기화 — 혹시 SSE 가 한 건도 빠뜨리면
-            // 벨 목록이 카운트만 맞고 항목이 비는 현상을 막기 위함.
-            reload();
           } catch {}
         });
         // 채팅 실시간 푸시 — ChatMiniApp 이 window 리스너로 수신.
@@ -179,6 +180,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     };
     // eslint-disable-next-line
   }, []);
+
+  // 데스크톱 앱: dock / 태스크바 뱃지에 총 미읽음 개수 반영.
+  // 숫자가 바뀔 때만 IPC 호출 (매 렌더마다 보내지 않게 값으로 memo).
+  // 웹 브라우저에서는 window.hinest 가 없어 no-op.
+  useEffect(() => {
+    const total = unread + chatUnread;
+    try {
+      window.hinest?.setBadge?.(total);
+    } catch {}
+  }, [unread, chatUnread]);
 
   return (
     <NotificationCtx.Provider value={{ items, bellItems, unread, chatUnread, ready, reload, markRead, markRoomRead }}>

@@ -36,13 +36,14 @@ router.patch("/", async (req, res) => {
 
 const pwSchema = z.object({
   current: z.string().min(1),
-  next: z.string().min(6),
+  // 8자 이상 — 가입 시 기준과 일치. 과거 6자 계정도 다음 변경 시 이 규칙을 따라 8자로 강제.
+  next: z.string().min(8),
 });
 
 router.post("/password", async (req, res) => {
   const u = (req as any).user;
   const parsed = pwSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "새 비밀번호는 6자 이상" });
+  if (!parsed.success) return res.status(400).json({ error: "새 비밀번호는 8자 이상" });
   const user = await prisma.user.findUnique({ where: { id: u.id } });
   if (!user) return res.status(404).json({ error: "not found" });
   const ok = await bcrypt.compare(parsed.data.current, user.passwordHash);

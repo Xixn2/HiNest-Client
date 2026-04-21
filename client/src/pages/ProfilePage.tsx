@@ -101,7 +101,7 @@ export default function ProfilePage() {
     e.preventDefault();
     setPwErr(""); setPwMsg("");
     if (pwForm.next !== pwForm.confirm) return setPwErr("새 비밀번호 확인이 일치하지 않습니다");
-    if (pwForm.next.length < 6) return setPwErr("새 비밀번호는 6자 이상이어야 합니다");
+    if (pwForm.next.length < 8) return setPwErr("새 비밀번호는 8자 이상이어야 합니다");
     try {
       await api("/api/profile/password", {
         method: "POST",
@@ -264,12 +264,12 @@ export default function ProfilePage() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="field-label">새 비밀번호 (6자 이상)</label>
-                  <input className="input" type="password" value={pwForm.next} onChange={(e) => setPwForm({ ...pwForm, next: e.target.value })} required minLength={6} />
+                  <label className="field-label">새 비밀번호 (8자 이상)</label>
+                  <input className="input" type="password" value={pwForm.next} onChange={(e) => setPwForm({ ...pwForm, next: e.target.value })} required minLength={8} />
                 </div>
                 <div>
                   <label className="field-label">새 비밀번호 확인</label>
-                  <input className="input" type="password" value={pwForm.confirm} onChange={(e) => setPwForm({ ...pwForm, confirm: e.target.value })} required minLength={6} />
+                  <input className="input" type="password" value={pwForm.confirm} onChange={(e) => setPwForm({ ...pwForm, confirm: e.target.value })} required minLength={8} />
                 </div>
               </div>
               {pwErr && <InlineAlert tone="error">{pwErr}</InlineAlert>}
