@@ -127,17 +127,17 @@ export default function SchedulePage() {
         title="일정관리"
         description="전사/팀/개인 일정을 월별로 관리합니다."
         right={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button className="btn-ghost" onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}>
               ←
             </button>
-            <div className="font-bold text-ink-900 w-32 text-center">
+            <div className="font-bold text-ink-900 w-28 sm:w-32 text-center">
               {cursor.getFullYear()}년 {cursor.getMonth() + 1}월
             </div>
             <button className="btn-ghost" onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}>
               →
             </button>
-            <button className="btn-primary ml-3" onClick={() => setOpen(true)}>
+            <button className="btn-primary sm:ml-3" onClick={() => setOpen(true)}>
               + 일정 추가
             </button>
           </div>
@@ -145,6 +145,8 @@ export default function SchedulePage() {
       />
 
       <div className="card p-0 overflow-hidden">
+        <div className="overflow-x-auto">
+        <div className="min-w-[640px]">
         <div className="grid grid-cols-7 bg-slate-50 border-b border-slate-100">
           {["일", "월", "화", "수", "목", "금", "토"].map((d, i) => (
             <div key={d} className={`px-3 py-2 text-xs font-bold text-center ${i === 0 ? "text-rose-500" : i === 6 ? "text-accent-500" : "text-ink-500"}`}>
@@ -215,6 +217,8 @@ export default function SchedulePage() {
               </div>
             );
           })}
+        </div>
+        </div>
         </div>
       </div>
 
@@ -649,7 +653,7 @@ function EventModal({
             {/* 범위 */}
             <div>
               <label className="field-label">공유 범위</label>
-              <div className={`grid gap-2 ${canMakeCompany ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}>
+              <div className={`grid gap-2 ${canMakeCompany ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-1 sm:grid-cols-3"}`}>
                 {scopes.map((s) => {
                   const meta = SCOPE_META[s];
                   const active = form.scope === s;

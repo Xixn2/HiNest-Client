@@ -270,12 +270,12 @@ export default function ProjectCalendar({
   return (
     <div>
       {/* 헤더: 뷰 스위처 + 네비 */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2 mb-4">
+        <div className="flex items-center gap-2 flex-wrap">
           <button className="btn-ghost !px-2 !py-1" onClick={() => shift(-1)} aria-label="이전">
             ‹
           </button>
-          <div className="font-bold text-slate-900 min-w-[180px] text-center">{headerLabel}</div>
+          <div className="font-bold text-slate-900 min-w-[140px] sm:min-w-[180px] text-center">{headerLabel}</div>
           <button className="btn-ghost !px-2 !py-1" onClick={() => shift(1)} aria-label="다음">
             ›
           </button>
@@ -286,7 +286,7 @@ export default function ProjectCalendar({
             오늘
           </button>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-wrap">
           {/* 캘린더 ↔ 리스트 모드 토글 — 시각적으로 구분해서 첫번째 그룹 */}
           <div className="flex items-center gap-1 mr-2 pr-2 border-r border-slate-200">
             <ViewBtn active={mode === "calendar"} onClick={() => setMode("calendar")}>캘린더</ViewBtn>
@@ -363,7 +363,7 @@ export default function ProjectCalendar({
                 <label className="label">제목</label>
                 <input className="input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
                   <label className="label">시작</label>
                   <input type="datetime-local" className="input" value={form.startAt} onChange={(e) => setForm({ ...form, startAt: e.target.value })} required />
@@ -669,7 +669,8 @@ function MonthGrid({
 
   const today = new Date();
   return (
-    <div className="border border-slate-200 rounded-lg overflow-hidden">
+    <div className="border border-slate-200 rounded-lg overflow-hidden overflow-x-auto">
+      <div className="min-w-[640px]">
       <div className="grid grid-cols-7 bg-slate-50 text-xs font-bold text-slate-500">
         {["일", "월", "화", "수", "목", "금", "토"].map((w, i) => (
           <div
@@ -724,6 +725,7 @@ function MonthGrid({
           );
         })}
       </div>
+      </div>
     </div>
   );
 }
@@ -752,7 +754,8 @@ function WeekView({
   });
   const today = new Date();
   return (
-    <div className="grid grid-cols-7 gap-2">
+    <div className="overflow-x-auto">
+    <div className="grid grid-cols-7 gap-2 min-w-[720px]">
       {days.map((d, i) => {
         const evs = eventsOnDay(d);
         const isToday = sameDay(d, today);
@@ -798,6 +801,7 @@ function WeekView({
           </div>
         );
       })}
+    </div>
     </div>
   );
 }
