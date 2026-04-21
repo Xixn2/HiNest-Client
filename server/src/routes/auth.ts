@@ -26,20 +26,20 @@ const loginSchema = z.object({
 
 /**
  * 유니크한 사번(employeeNo)을 자동 생성.
- * 포맷: HN + 6자리 숫자 (예: HN123456)
+ * 포맷: HB + 6자리 숫자 (예: HB123456)
  * 충돌 시 최대 50회 재시도 후 타임스탬프 기반 fallback.
  */
 export async function generateUniqueEmployeeNo(): Promise<string> {
   for (let i = 0; i < 50; i++) {
     const n = Math.floor(100000 + Math.random() * 900000);
-    const candidate = `HN${n}`;
+    const candidate = `HB${n}`;
     const dup = await prisma.user.findFirst({
       where: { employeeNo: candidate },
       select: { id: true },
     });
     if (!dup) return candidate;
   }
-  return `HN${Date.now().toString().slice(-8)}`;
+  return `HB${Date.now().toString().slice(-8)}`;
 }
 
 router.post("/login", async (req, res) => {
