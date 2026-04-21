@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { apiSWR } from "../api";
+import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
 import ProjectCalendar from "../components/ProjectCalendar";
 import ProjectWebhooks from "../components/ProjectWebhooks";
+import ProjectSettingsModal from "../components/ProjectSettingsModal";
 
 type Member = {
   id: string;
@@ -29,9 +31,11 @@ type Project = {
  */
 export default function ProjectPage() {
   const { id } = useParams();
+  const { user } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -79,19 +83,42 @@ export default function ProjectPage() {
   if (!id) return null;
 
   const members = project?.members ?? [];
+  const myMember = members.find((m) => m.userId === user?.id);
+  const myRole: "OWNER" | "MANAGER" | "MEMBER" | "ADMIN" | null = user?.role === "ADMIN"
+    ? "ADMIN"
+    : (myMember?.role ?? null);
+  const canOpenSettings = myRole === "OWNER" || myRole === "MANAGER" || myRole === "ADMIN";
 
   return (
     <div>
-      <PageHeader
-        title={
-          project
-            ? project.name + (project.status === "ARCHIVED" ? " (보관됨)" : "")
-            : loading
-              ? "불러오는 중…"
-              : "프로젝트"
-        }
-        description={project?.description || (loading ? "" : "아직 설명이 없습니다.")}
-      />
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <PageHeader
+            title={
+              project
+                ? project.name + (project.status === "ARCHIVED" ? " (보관됨)" : "")
+                : loading
+                  ? "불러오는 중…"
+                  : "프로젝트"
+            }
+            description={project?.description || (loading ? "" : "아직 설명이 없습니다.")}
+          />
+        </div>
+        {project && canOpenSettings && (
+          <button
+            type="button"
+            className="btn-icon mt-2"
+            title="프로젝트 설정"
+            aria-label="프로젝트 설정"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+            </svg>
+          </button>
+        )}
+      </div>
 
       {/* 캘린더를 전체 폭으로 사용하고, 멤버 리스트는 아래로. */}
       <div className="space-y-6">
@@ -113,8 +140,19 @@ export default function ProjectPage() {
         </div>
 
         <div className="card">
-          <div className="text-sm font-bold mb-3">
-            멤버 <span className="text-slate-400 font-normal">({members.length})</span>
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-sm font-bold">
+              멤버 <span className="text-slate-400 font-normal">({members.length})</span>
+            </div>
+            {canOpenSettings && (
+              <button
+                type="button"
+                className="text-[12px] text-brand-600 hover:underline"
+                onClick={() => setSettingsOpen(true)}
+              >
+                멤버 관리
+              </button>
+            )}
           </div>
           {/* 가로 그리드 — 넓은 영역을 활용해 카드 형태로 나열 */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -143,6 +181,17 @@ export default function ProjectPage() {
           </div>
         </div>
       </div>
+
+      {project && myRole && (
+        <ProjectSettingsModal
+          open={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          project={project}
+          myRole={myRole}
+          onUpdated={(p) => setProject((prev) => (prev ? { ...prev, ...p, members: p.members ?? prev.members } : prev))}
+          onDeleted={() => setProject(null)}
+        />
+      )}
     </div>
   );
 }
