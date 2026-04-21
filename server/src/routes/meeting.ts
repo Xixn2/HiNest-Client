@@ -21,16 +21,18 @@ const createSchema = z.object({
   title: z.string().min(1).max(200),
   content: z.any(), // TipTap JSON document
   visibility: z.enum(VIS).default("ALL"),
-  projectId: z.string().optional().nullable(),
-  viewerIds: z.array(z.string()).optional(),
+  // CUID/UUID 길이는 36자 이내. 50자면 여유 있음.
+  projectId: z.string().max(50).optional().nullable(),
+  // 지정 열람자 최대 200명 — 특정 대상 회의록 자리의 합리적 상한.
+  viewerIds: z.array(z.string().max(50)).max(200).optional(),
 });
 
 const updateSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   content: z.any().optional(),
   visibility: z.enum(VIS).optional(),
-  projectId: z.string().optional().nullable(),
-  viewerIds: z.array(z.string()).optional(),
+  projectId: z.string().max(50).optional().nullable(),
+  viewerIds: z.array(z.string().max(50)).max(200).optional(),
 });
 
 /** 내가 읽을 수 있는 회의록 목록. */

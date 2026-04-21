@@ -18,11 +18,11 @@ router.get("/invites", async (_req, res) => {
 });
 
 const createKeySchema = z.object({
-  email: z.string().email().optional().or(z.literal("")),
-  name: z.string().optional(),
+  email: z.string().email().max(200).optional().or(z.literal("")),
+  name: z.string().max(200).optional(),
   role: z.enum(["ADMIN", "MANAGER", "MEMBER"]).default("MEMBER"),
-  team: z.string().optional(),
-  position: z.string().optional(),
+  team: z.string().max(80).optional(),
+  position: z.string().max(80).optional(),
   expiresInDays: z.number().int().positive().max(365).optional(),
 });
 
