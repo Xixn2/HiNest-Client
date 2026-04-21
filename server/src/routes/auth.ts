@@ -19,9 +19,28 @@ import {
 const router = Router();
 
 const loginSchema = z.object({
-  email: z.string().min(1), // 이메일 형식 또는 사내 ID 모두 허용
+  // 이메일 전용. 과거에는 사내 ID 도 허용했지만 정책 단순화로 이메일로만 로그인.
+  email: z.string().email(),
   password: z.string().min(1),
 });
+
+/**
+ * 유니크한 사번(employeeNo)을 자동 생성.
+ * 포맷: HN + 6자리 숫자 (예: HN123456)
+ * 충돌 시 최대 50회 재시도 후 타임스탬프 기반 fallback.
+ */
+export async function generateUniqueEmployeeNo(): Promise<string> {
+  for (let i = 0; i < 50; i++) {
+    const n = Math.floor(100000 + Math.random() * 900000);
+    const candidate = `HN${n}`;
+    const dup = await prisma.user.findFirst({
+      where: { employeeNo: candidate },
+      select: { id: true },
+    });
+    if (!dup) return candidate;
+  }
+  return `HN${Date.now().toString().slice(-8)}`;
+}
 
 router.post("/login", async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
@@ -74,6 +93,8 @@ router.post("/signup", async (req, res) => {
   if (dup) return res.status(400).json({ error: "이미 가입된 이메일" });
 
   const passwordHash = await bcrypt.hash(password, 10);
+  // 사번은 서버가 자동 부여 — 사용자가 입력하지 않음. 중복 절대 없음 (유니크 체크 반복).
+  const employeeNo = await generateUniqueEmployeeNo();
   const user = await prisma.user.create({
     data: {
       email,
@@ -82,6 +103,7 @@ router.post("/signup", async (req, res) => {
       role: key.role,
       team: key.team,
       position: key.position,
+      employeeNo,
     },
   });
 

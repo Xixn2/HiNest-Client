@@ -113,7 +113,7 @@ export default function ExpensePage() {
         title="법인카드 사용내역"
         description="법인카드 사용건을 등록하고 영수증을 첨부합니다."
         right={
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             <MonthPicker value={month} onChange={setMonth} />
             {isReviewer && (
               <select className="input" value={scope} onChange={(e) => setScope(e.target.value as any)}>
@@ -121,7 +121,7 @@ export default function ExpensePage() {
                 <option value="all">전체</option>
               </select>
             )}
-            <button className="btn-primary" onClick={() => setOpen(true)}>
+            <button className="btn-primary btn-lg" onClick={() => setOpen(true)}>
               + 사용내역 등록
             </button>
           </div>

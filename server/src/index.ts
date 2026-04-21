@@ -215,6 +215,53 @@ process.on("uncaughtException", (err) => {
 // 기존 공지 알림 백필 — linkUrl 이 "/notice" 로만 저장돼있던 예전 알림을 "/notice?id=..." 로 보정.
 // 알림 title 에서 📌 접두어를 제거하고 notice.title 과 매칭.
 import { prisma } from "./lib/db.js";
+import { generateUniqueEmployeeNo } from "./routes/auth.js";
+
+/**
+ * 기존 유저 마이그레이션 백필:
+ *  1) email 에 "@" 가 없거나 기타 식별자(사번/사내ID)로 저장된 경우 → @hinest.local 을 붙여 유효한 이메일 형식으로 정리
+ *  2) employeeNo 가 비어있는 기존 유저에게 자동 생성된 사번 부여
+ *
+ * 정책 변경("이메일 전용 로그인 + 사번 자동 부여")에 맞춰 기존 데이터를 한 번 보정.
+ * 이미 보정된 행은 건너뛰므로 재시작에도 안전.
+ */
+async function backfillUserIdentity() {
+  try {
+    // 1) 이메일 형식 보정
+    const bad = await prisma.user.findMany({
+      where: { NOT: { email: { contains: "@" } } },
+      select: { id: true, email: true },
+    });
+    let emailFixed = 0;
+    for (const u of bad) {
+      const base = (u.email || u.id).replace(/[^A-Za-z0-9._-]/g, "").toLowerCase() || u.id.slice(0, 8);
+      let candidate = `${base}@hinest.local`;
+      let i = 1;
+      while (await prisma.user.findUnique({ where: { email: candidate }, select: { id: true } })) {
+        candidate = `${base}.${i}@hinest.local`;
+        i++;
+      }
+      await prisma.user.update({ where: { id: u.id }, data: { email: candidate } });
+      emailFixed++;
+    }
+    if (emailFixed) console.log(`[backfill] 이메일 형식 보정: ${emailFixed}건`);
+
+    // 2) 사번 자동 부여 (null 또는 빈 문자열)
+    const noEmp = await prisma.user.findMany({
+      where: { OR: [{ employeeNo: null }, { employeeNo: "" }] },
+      select: { id: true },
+    });
+    let empFixed = 0;
+    for (const u of noEmp) {
+      const no = await generateUniqueEmployeeNo();
+      await prisma.user.update({ where: { id: u.id }, data: { employeeNo: no } });
+      empFixed++;
+    }
+    if (empFixed) console.log(`[backfill] 사번 자동 생성: ${empFixed}건`);
+  } catch (e) {
+    console.error("[backfill] user identity backfill 실패:", e);
+  }
+}
 async function backfillNoticeLinks() {
   try {
     const stale = await prisma.notification.findMany({
@@ -248,4 +295,5 @@ async function backfillNoticeLinks() {
 app.listen(PORT, () => {
   console.log(`[HiNest API] http://localhost:${PORT}`);
   backfillNoticeLinks();
+  backfillUserIdentity();
 });

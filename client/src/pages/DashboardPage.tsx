@@ -112,7 +112,12 @@ export default function DashboardPage() {
             <div className="section-head">
               <div className="title">근태</div>
               <div className="flex gap-1.5">
-                <button className="btn-primary btn-xs" onClick={checkIn}>
+                <button
+                  className="btn-primary btn-xs"
+                  onClick={checkIn}
+                  disabled={!!att?.checkIn && !att?.checkOut}
+                  title={!!att?.checkIn && !att?.checkOut ? "이미 출근 상태입니다" : undefined}
+                >
                   {att?.checkOut ? "다시 출근" : "출근"}
                 </button>
                 <button className="btn-ghost btn-xs" disabled={!att?.checkIn || !!att?.checkOut} onClick={checkOut}>
