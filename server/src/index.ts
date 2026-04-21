@@ -246,10 +246,17 @@ async function backfillUserIdentity() {
     }
     if (emailFixed) console.log(`[backfill] 이메일 형식 보정: ${emailFixed}건`);
 
-    // 2) 사번 자동 부여 (null 또는 빈 문자열)
+    // 2) 사번 자동 부여 (null / 빈 문자열 / 구 HN 접두어)
+    // 정책 변경: HN → HB 로 프리픽스 변경. HN 접두어 유저는 새 HB 사번으로 재부여.
     const noEmp = await prisma.user.findMany({
-      where: { OR: [{ employeeNo: null }, { employeeNo: "" }] },
-      select: { id: true },
+      where: {
+        OR: [
+          { employeeNo: null },
+          { employeeNo: "" },
+          { employeeNo: { startsWith: "HN" } },
+        ],
+      },
+      select: { id: true, employeeNo: true },
     });
     let empFixed = 0;
     for (const u of noEmp) {
@@ -257,7 +264,7 @@ async function backfillUserIdentity() {
       await prisma.user.update({ where: { id: u.id }, data: { employeeNo: no } });
       empFixed++;
     }
-    if (empFixed) console.log(`[backfill] 사번 자동 생성: ${empFixed}건`);
+    if (empFixed) console.log(`[backfill] 사번 자동 생성/갱신: ${empFixed}건`);
   } catch (e) {
     console.error("[backfill] user identity backfill 실패:", e);
   }
