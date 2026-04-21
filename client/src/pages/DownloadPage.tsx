@@ -19,7 +19,7 @@ import Logo from "../components/Logo";
  */
 
 const DESKTOP_RELEASES_BASE =
-  "https://github.com/hi-vits/hinest-desktop/releases/latest/download";
+  "https://github.com/Xixn2/HiNest-Desktop/releases/latest/download";
 
 type OS = "win" | "mac" | "ios" | "android" | "other";
 
@@ -257,6 +257,8 @@ export default function DownloadPage() {
             <div className="space-y-2">
               <a
                 href={`${DESKTOP_RELEASES_BASE}/HiNest-Setup.exe`}
+                download
+                rel="noopener"
                 className="btn-primary w-full"
               >
                 설치 파일 다운로드
@@ -283,12 +285,16 @@ export default function DownloadPage() {
               <div className="grid grid-cols-2 gap-2">
                 <a
                   href={`${DESKTOP_RELEASES_BASE}/HiNest-arm64.dmg`}
+                  download
+                  rel="noopener"
                   className="btn-primary"
                 >
                   Apple Silicon
                 </a>
                 <a
                   href={`${DESKTOP_RELEASES_BASE}/HiNest-x64.dmg`}
+                  download
+                  rel="noopener"
                   className="btn-ghost"
                 >
                   Intel

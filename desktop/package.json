@@ -45,10 +45,12 @@
         {
           "target": "dmg",
           "arch": [
-            "arm64"
+            "arm64",
+            "x64"
           ]
         }
       ],
+      "artifactName": "HiNest-${arch}.${ext}",
       "icon": "assets/icon.icns",
       "identity": "jiwan seo (3NVCLTSP9V)",
       "hardenedRuntime": true,
@@ -71,6 +73,7 @@
           ]
         }
       ],
+      "artifactName": "HiNest-Setup.${ext}",
       "icon": "assets/icon.png"
     },
     "nsis": {
@@ -92,8 +95,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "hi-vits",
-        "repo": "hinest-desktop",
+        "owner": "Xixn2",
+        "repo": "HiNest-Desktop",
         "releaseType": "release"
       }
     ]
