@@ -1,0 +1,43 @@
+# 이미지 크기/빌드 캐시 보호용 — 컨테이너에 들어갈 이유 없는 것들.
+# COPY 때 node_modules 통째로 얹는 실수를 막는 게 핵심. ci 로 clean install 이 정석.
+
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 빌드 산출물 — builder 스테이지에서 새로 생성됨
+dist
+.tsbuildinfo
+
+# 로컬 개발 파일
+.env
+.env.local
+.env.*.local
+uploads/*
+!uploads/.gitkeep
+
+# 로컬 SQLite (프로덕션은 postgres)
+prisma/dev.db
+prisma/dev.db-journal
+
+# IDE / OS
+.vscode
+.idea
+.DS_Store
+*.swp
+
+# 테스트/문서 (프로덕션 이미지 불필요)
+coverage
+.nyc_output
+*.md
+!README.md
+
+# git
+.git
+.gitignore
+.github
+
+# Docker 자체
+Dockerfile
+.dockerignore
