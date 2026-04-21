@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain, shell, Notificati
 import path from "node:path";
 import fs from "node:fs";
 import crypto from "node:crypto";
+import { setupAutoUpdater } from "./autoUpdater";
 
 /**
  * HiNest 데스크톱 메인 프로세스.
@@ -15,7 +16,7 @@ import crypto from "node:crypto";
 const isDev = !!process.env.HINEST_DEV;
 // 배포 빌드는 기본적으로 Vercel 에 올라간 웹앱을 로드.
 // HINEST_URL 환경변수로 덮어쓰기 가능 (스테이징/로컬 테스트용).
-const PROD_URL = "https://team-hivits.vercel.app";
+const PROD_URL = "https://nest.hi-vits.com";
 const DEFAULT_URL = isDev
   ? "http://localhost:1000"
   : process.env.HINEST_URL ?? PROD_URL;
@@ -183,6 +184,7 @@ app.whenReady().then(() => {
   }
   createWindow();
   createTray();
+  setupAutoUpdater(() => mainWindow);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

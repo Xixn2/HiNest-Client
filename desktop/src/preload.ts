@@ -23,4 +23,19 @@ contextBridge.exposeInMainWorld("hinest", {
     ipcRenderer.on("hinest:fullscreen", handler);
     return () => ipcRenderer.removeListener("hinest:fullscreen", handler);
   },
+
+  // ─── 자동 업데이트 (electron-updater) ────────────────────────────────
+  checkForUpdates: () =>
+    ipcRenderer.invoke("hinest:checkForUpdates") as Promise<{ ok: boolean; version?: string | null; error?: string }>,
+  quitAndInstall: () => ipcRenderer.invoke("hinest:quitAndInstall"),
+  onUpdateDownloaded: (cb: (info: { version: string; notes?: string }) => void) => {
+    const handler = (_e: unknown, v: { version: string; notes?: string }) => cb(v);
+    ipcRenderer.on("hinest:updateDownloaded", handler);
+    return () => ipcRenderer.removeListener("hinest:updateDownloaded", handler);
+  },
+  onUpdateProgress: (cb: (p: { percent: number }) => void) => {
+    const handler = (_e: unknown, v: { percent: number }) => cb(v);
+    ipcRenderer.on("hinest:updateProgress", handler);
+    return () => ipcRenderer.removeListener("hinest:updateProgress", handler);
+  },
 });

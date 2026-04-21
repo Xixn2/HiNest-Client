@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
+import InstallAppBanner from "../components/InstallAppBanner";
 
 type Notice = { id: string; title: string; content: string; createdAt: string; author: { name: string }; pinned: boolean };
 type Event = { id: string; title: string; startAt: string; endAt: string; scope: string; color: string };
@@ -81,6 +82,8 @@ export default function DashboardPage() {
         title={`${user?.name}님, 안녕하세요`}
         description={dateStr}
       />
+
+      <InstallAppBanner />
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">

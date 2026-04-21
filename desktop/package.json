@@ -14,6 +14,9 @@
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:win": "npm run build && electron-builder --win"
   },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
   "devDependencies": {
     "@types/node": "^22.8.4",
     "cross-env": "^7.0.3",
@@ -84,6 +87,14 @@
         "schemes": [
           "hinest"
         ]
+      }
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "hi-vits",
+        "repo": "hinest-desktop",
+        "releaseType": "release"
       }
     ]
   }

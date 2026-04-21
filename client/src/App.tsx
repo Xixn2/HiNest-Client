@@ -2,8 +2,10 @@ import { Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth";
 import UpdateBanner from "./components/UpdateBanner";
+import DesktopUpdateBanner from "./components/DesktopUpdateBanner";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
+import DownloadPage from "./pages/DownloadPage";
 import AppLayout from "./components/AppLayout";
 import DashboardPage from "./pages/DashboardPage";
 import {
@@ -61,10 +63,12 @@ export default function App() {
   return (
     <>
     <UpdateBanner />
+    <DesktopUpdateBanner />
     <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
+        <Route path="/download" element={<DownloadPage />} />
         <Route
           path="/"
           element={
