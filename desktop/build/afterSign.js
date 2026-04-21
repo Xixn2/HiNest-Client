@@ -12,6 +12,7 @@
 // DMG 자체는 electron-builder 가 후속 단계에서 만들고 자동 스테이플 해준다 (afterAllArtifactBuild).
 
 const { execSync } = require("child_process");
+const fs = require("node:fs");
 const path = require("node:path");
 
 const KEYCHAIN_PROFILE = "hinest-notary";
@@ -29,11 +30,22 @@ module.exports = async function (context) {
     context.appOutDir,
     `${context.packager.appInfo.productFilename}.app`
   );
+  // notarytool 은 .app 을 직접 받지 않는다 — zip/pkg/dmg 만 받음.
+  // ditto 로 번들 전체를 압축해서 제출 → 승인 후에 원본 .app 을 staple.
+  const zipPath = `${appPath}.zip`;
 
-  console.log(`[afterSign] notarytool submit: ${appPath}`);
+  console.log(`[afterSign] zipping app for notarization: ${zipPath}`);
+  try {
+    execSync(`ditto -c -k --keepParent "${appPath}" "${zipPath}"`, { stdio: "inherit" });
+  } catch (e) {
+    console.error("[afterSign] zip failed:", e && e.message ? e.message : e);
+    throw e;
+  }
+
+  console.log(`[afterSign] notarytool submit: ${zipPath}`);
   try {
     execSync(
-      `xcrun notarytool submit "${appPath}" --keychain-profile "${KEYCHAIN_PROFILE}" --wait`,
+      `xcrun notarytool submit "${zipPath}" --keychain-profile "${KEYCHAIN_PROFILE}" --wait`,
       { stdio: "inherit" }
     );
     console.log("[afterSign] notarize accepted — stapling app");
@@ -42,5 +54,7 @@ module.exports = async function (context) {
   } catch (e) {
     console.error("[afterSign] notarize/staple failed:", e && e.message ? e.message : e);
     throw e;
+  } finally {
+    try { fs.unlinkSync(zipPath); } catch {}
   }
 };
