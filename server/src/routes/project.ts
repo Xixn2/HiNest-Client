@@ -306,7 +306,7 @@ router.get("/:id/webhook/:channelId/events", async (req, res) => {
   res.json({ events });
 });
 
-/** 멤버 추가 — OWNER/MANAGER 만. */
+/** 멤버 추가 — OWNER/MANAGER 만. OWNER 승격은 기존 OWNER 또는 ADMIN 만 가능. */
 router.post("/:id/member", async (req, res) => {
   const u = (req as any).user;
   const body = z.object({ userId: z.string(), role: z.enum(["OWNER", "MANAGER", "MEMBER"]).optional() }).safeParse(req.body);
@@ -316,10 +316,16 @@ router.post("/:id/member", async (req, res) => {
   });
   if (!me && u.role !== "ADMIN") return res.status(403).json({ error: "forbidden" });
   if (me && me.role === "MEMBER" && u.role !== "ADMIN") return res.status(403).json({ error: "forbidden" });
+  // OWNER 부여 권한 체크 — MANAGER 가 임의로 OWNER 를 만드는 것을 막는다.
+  // 프로젝트 삭제 권한(line 112 부근) 이 OWNER 한 명만 갖는 구조라 OWNER 수를 엄격히 통제해야 함.
+  const targetRole = body.data.role ?? "MEMBER";
+  if (targetRole === "OWNER" && !(me?.role === "OWNER" || u.role === "ADMIN")) {
+    return res.status(403).json({ error: "OWNER 역할은 기존 OWNER 또는 시스템 관리자만 부여할 수 있어요" });
+  }
   const created = await prisma.projectMember.upsert({
     where: { projectId_userId: { projectId: req.params.id, userId: body.data.userId } },
-    update: { role: body.data.role ?? "MEMBER" },
-    create: { projectId: req.params.id, userId: body.data.userId, role: body.data.role ?? "MEMBER" },
+    update: { role: targetRole },
+    create: { projectId: req.params.id, userId: body.data.userId, role: targetRole },
   });
   res.json({ member: created });
 });

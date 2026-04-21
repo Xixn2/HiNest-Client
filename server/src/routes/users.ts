@@ -11,12 +11,15 @@ router.use(requireAuth);
 
 router.get("/", async (req, res) => {
   const u = (req as any).user;
+  // 현재는 한 회사 전원을 한 번에 반환하지만, 안전 상한을 걸어 메모리 폭주/응답 비대화 방지.
+  // 10,000 명 이상일 경우에는 별도 검색 API로 페이징해야 함.
   const users = await prisma.user.findMany({
     where: {
       active: true,
       OR: [{ superAdmin: false }, { id: u.id }],
     },
     orderBy: { name: "asc" },
+    take: 5000,
     select: {
       id: true,
       name: true,

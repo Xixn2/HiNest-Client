@@ -149,10 +149,36 @@ router.post("/folders", async (req, res) => {
   res.json({ folder });
 });
 
+/**
+ * 폴더 권한 모델:
+ *   - ADMIN: 모두 가능
+ *   - 폴더 작성자(authorId == u.id): 수정/삭제 가능
+ *   - 프로젝트 폴더(projectId 존재): 프로젝트 멤버 수정/삭제 가능
+ * 이전엔 아무 검사도 없어서 일반 유저가 임의 폴더를 리네임/삭제할 수 있는 치명적 결함이었음.
+ * 폴더 삭제는 cascade 로 내부 문서까지 지우므로 절대 권한 없는 사용자에게 허용 불가.
+ */
+async function assertFolderWritable(
+  u: { id: string; role: string },
+  folderId: string,
+): Promise<{ ok: boolean; folder?: { id: string; projectId: string | null; authorId: string | null } }> {
+  const folder = await prisma.folder.findUnique({
+    where: { id: folderId },
+    select: { id: true, projectId: true, authorId: true },
+  });
+  if (!folder) return { ok: false };
+  if (u.role === "ADMIN") return { ok: true, folder };
+  if (folder.authorId && folder.authorId === u.id) return { ok: true, folder };
+  if (folder.projectId && (await assertProjectMember(u, folder.projectId))) return { ok: true, folder };
+  return { ok: false, folder };
+}
+
 router.patch("/folders/:id", async (req, res) => {
   const u = (req as any).user;
   const name = req.body?.name !== undefined ? String(req.body.name).trim() : undefined;
   if (!name) return res.status(400).json({ error: "이름이 필요합니다" });
+  const check = await assertFolderWritable(u, req.params.id);
+  if (!check.folder) return res.status(404).json({ error: "not found" });
+  if (!check.ok) return res.status(403).json({ error: "forbidden" });
   const folder = await prisma.folder.update({ where: { id: req.params.id }, data: { name } });
   await writeLog(u.id, "FOLDER_UPDATE", folder.id, name);
   res.json({ folder });
@@ -160,6 +186,9 @@ router.patch("/folders/:id", async (req, res) => {
 
 router.delete("/folders/:id", async (req, res) => {
   const u = (req as any).user;
+  const check = await assertFolderWritable(u, req.params.id);
+  if (!check.folder) return res.status(404).json({ error: "not found" });
+  if (!check.ok) return res.status(403).json({ error: "forbidden" });
   await prisma.folder.delete({ where: { id: req.params.id } });
   await writeLog(u.id, "FOLDER_DELETE", req.params.id);
   res.json({ ok: true });
@@ -214,9 +243,12 @@ router.get("/", async (req, res) => {
         { tags: { contains: q } },
       ],
     });
+    // 상한 500 — 문서함은 폴더/검색으로 좁혀지는 UX 라 실질적으로 넘지 않지만,
+    // 누적된 워크스페이스에서 한 번에 모든 문서를 끌어와 수십 MB 응답이 나오는 것을 방지.
     const docs = await prisma.document.findMany({
       where: { AND: ands },
       orderBy: { updatedAt: "desc" },
+      take: 500,
       include: {
         author: { select: { name: true, avatarColor: true, avatarUrl: true } },
         folder: { select: { name: true } },
@@ -315,6 +347,9 @@ router.patch("/:id", async (req, res) => {
   const exist = await prisma.document.findUnique({ where: { id: req.params.id } });
   if (!exist) return res.status(404).json({ error: "not found" });
   // 작성자 본인 or ADMIN or (프로젝트 문서라면 프로젝트 멤버) 만 수정.
+  // 다만 scope/scopeTeam/scopeUserIds/projectId 처럼 **가시성에 영향을 주는 필드는**
+  // 작성자 또는 ADMIN 만 변경 가능. 프로젝트 멤버에게 허용하면 원래 PRIVATE 문서가
+  // CUSTOM/ALL 로 풀려 회사 전체에 노출될 수 있음.
   const isAuthor = exist.authorId === u.id;
   const isAdmin = u.role === "ADMIN";
   const isProjectMember = exist.projectId

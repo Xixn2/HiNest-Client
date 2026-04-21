@@ -61,6 +61,10 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
   const [q, setQ] = useState("");
   const [creating, setCreating] = useState<null | "folder" | "doc">(null);
   const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [modalErr, setModalErr] = useState<string | null>(null);
+  const [busyFolderId, setBusyFolderId] = useState<string | null>(null);
+  const [busyDocId, setBusyDocId] = useState<string | null>(null);
   const [scopeTab, setScopeTab] = useState<ScopeTab>("all");
   const [allUsers, setAllUsers] = useState<DirUser[]>([]);
   // 내가 접근 가능한 프로젝트 칩 목록. fixedProjectId 로 고정된 모드에선 안 쓴다.
@@ -134,43 +138,70 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
       : scopeTab === "custom" ? "CUSTOM"
       : "ALL";
     setFolderForm({ name: "", scope: preset, scopeUserIds: [] });
+    setModalErr(null);
     setCreating("folder");
   }
 
   async function createFolder(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return;
     if (!folderForm.name.trim()) return;
     if (folderForm.scope === "CUSTOM" && folderForm.scopeUserIds.length === 0) {
-      return alert("사용자지정 범위에선 최소 한 명 이상을 선택해주세요");
+      setModalErr("사용자지정 범위에선 최소 한 명 이상을 선택해주세요");
+      return;
     }
-    await api("/api/document/folders", {
-      method: "POST",
-      json: {
-        name: folderForm.name.trim(),
-        parentId: currentFolder === "root" ? null : currentFolder,
-        // 프로젝트 문서함에선 scope/scopeUserIds 무시 — 서버가 ALL 로 고정.
-        scope: inProject ? undefined : folderForm.scope,
-        scopeUserIds: !inProject && folderForm.scope === "CUSTOM" ? folderForm.scopeUserIds : undefined,
-        projectId: activeProjectId ?? undefined,
-      },
-    });
-    setCreating(null);
-    setFolderForm({ name: "", scope: "ALL", scopeUserIds: [] });
-    load();
+    setSubmitting(true);
+    setModalErr(null);
+    try {
+      await api("/api/document/folders", {
+        method: "POST",
+        json: {
+          name: folderForm.name.trim(),
+          parentId: currentFolder === "root" ? null : currentFolder,
+          // 프로젝트 문서함에선 scope/scopeUserIds 무시 — 서버가 ALL 로 고정.
+          scope: inProject ? undefined : folderForm.scope,
+          scopeUserIds: !inProject && folderForm.scope === "CUSTOM" ? folderForm.scopeUserIds : undefined,
+          projectId: activeProjectId ?? undefined,
+        },
+      });
+      setCreating(null);
+      setFolderForm({ name: "", scope: "ALL", scopeUserIds: [] });
+      await load();
+    } catch (e: any) {
+      setModalErr(e?.message ?? "폴더 생성에 실패했어요");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function renameFolder(f: Folder) {
     const name = prompt("새 이름", f.name);
     if (!name?.trim() || name === f.name) return;
-    await api(`/api/document/folders/${f.id}`, { method: "PATCH", json: { name: name.trim() } });
-    load();
+    if (busyFolderId) return;
+    setBusyFolderId(f.id);
+    try {
+      await api(`/api/document/folders/${f.id}`, { method: "PATCH", json: { name: name.trim() } });
+      await load();
+    } catch (e: any) {
+      alert(e?.message ?? "이름 변경에 실패했어요");
+    } finally {
+      setBusyFolderId(null);
+    }
   }
 
   async function deleteFolder(f: Folder) {
     if (!confirm(`'${f.name}' 폴더를 삭제할까요? 하위 폴더·문서가 모두 삭제됩니다.`)) return;
-    await api(`/api/document/folders/${f.id}`, { method: "DELETE" });
-    if (currentFolder === f.id) setCurrentFolder("root");
-    else load();
+    if (busyFolderId) return;
+    setBusyFolderId(f.id);
+    try {
+      await api(`/api/document/folders/${f.id}`, { method: "DELETE" });
+      if (currentFolder === f.id) setCurrentFolder("root");
+      else await load();
+    } catch (e: any) {
+      alert(e?.message ?? "폴더 삭제에 실패했어요");
+    } finally {
+      setBusyFolderId(null);
+    }
   }
 
   async function uploadFile(file: File) {
@@ -197,37 +228,58 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
 
   async function createDoc(e: React.FormEvent) {
     e.preventDefault();
-    if (!docForm.title.trim()) return alert("제목을 입력해주세요");
-    if (docForm.scope === "CUSTOM" && docForm.scopeUserIds.length === 0) {
-      return alert("사용자지정 범위에선 최소 한 명 이상을 선택해주세요");
+    if (submitting) return;
+    if (!docForm.title.trim()) {
+      setModalErr("제목을 입력해주세요");
+      return;
     }
-    await api("/api/document", {
-      method: "POST",
-      json: {
-        title: docForm.title,
-        description: docForm.description,
-        tags: docForm.tags,
-        fileUrl: docForm.fileUrl,
-        fileName: docForm.fileName,
-        fileType: docForm.fileType,
-        fileSize: docForm.fileSize,
-        folderId: currentFolder === "root" ? null : currentFolder,
-        // 프로젝트 문서함에선 scope 필드가 무의미 — 서버가 ALL 로 고정.
-        scope: inProject ? undefined : docForm.scope,
-        scopeTeam: null,
-        scopeUserIds: !inProject && docForm.scope === "CUSTOM" ? docForm.scopeUserIds : undefined,
-        projectId: activeProjectId ?? undefined,
-      },
-    });
-    setCreating(null);
-    setDocForm({ title: "", description: "", tags: "", fileUrl: "", fileName: "", fileType: "", fileSize: 0, scope: "ALL", scopeTeam: "", scopeUserIds: [] });
-    load();
+    if (docForm.scope === "CUSTOM" && docForm.scopeUserIds.length === 0) {
+      setModalErr("사용자지정 범위에선 최소 한 명 이상을 선택해주세요");
+      return;
+    }
+    setSubmitting(true);
+    setModalErr(null);
+    try {
+      await api("/api/document", {
+        method: "POST",
+        json: {
+          title: docForm.title,
+          description: docForm.description,
+          tags: docForm.tags,
+          fileUrl: docForm.fileUrl,
+          fileName: docForm.fileName,
+          fileType: docForm.fileType,
+          fileSize: docForm.fileSize,
+          folderId: currentFolder === "root" ? null : currentFolder,
+          // 프로젝트 문서함에선 scope 필드가 무의미 — 서버가 ALL 로 고정.
+          scope: inProject ? undefined : docForm.scope,
+          scopeTeam: null,
+          scopeUserIds: !inProject && docForm.scope === "CUSTOM" ? docForm.scopeUserIds : undefined,
+          projectId: activeProjectId ?? undefined,
+        },
+      });
+      setCreating(null);
+      setDocForm({ title: "", description: "", tags: "", fileUrl: "", fileName: "", fileType: "", fileSize: 0, scope: "ALL", scopeTeam: "", scopeUserIds: [] });
+      await load();
+    } catch (e: any) {
+      setModalErr(e?.message ?? "문서 등록에 실패했어요");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function deleteDoc(d: Doc) {
     if (!confirm(`'${d.title}' 을(를) 삭제할까요?`)) return;
-    await api(`/api/document/${d.id}`, { method: "DELETE" });
-    load();
+    if (busyDocId) return;
+    setBusyDocId(d.id);
+    try {
+      await api(`/api/document/${d.id}`, { method: "DELETE" });
+      await load();
+    } catch (e: any) {
+      alert(e?.message ?? "삭제에 실패했어요");
+    } finally {
+      setBusyDocId(null);
+    }
   }
 
   // ===== 다운로드 =====
@@ -311,7 +363,7 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
           right={
             <>
               <button className="btn-ghost" onClick={openFolderModal}>+ 새 폴더</button>
-              <button className="btn-primary" onClick={() => setCreating("doc")}>+ 문서 업로드</button>
+              <button className="btn-primary" onClick={() => { setModalErr(null); setCreating("doc"); }}>+ 문서 업로드</button>
             </>
           }
         />
@@ -355,7 +407,7 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
       {embedded && (
         <div className="flex items-center justify-end gap-2 mb-3">
           <button className="btn-ghost btn-xs" onClick={openFolderModal}>+ 새 폴더</button>
-          <button className="btn-primary btn-xs" onClick={() => setCreating("doc")}>+ 문서 업로드</button>
+          <button className="btn-primary btn-xs" onClick={() => { setModalErr(null); setCreating("doc"); }}>+ 문서 업로드</button>
         </div>
       )}
 
@@ -680,9 +732,14 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
                   </div>
                 )}
               </div>
+              {modalErr && (
+                <div className="text-[12px] text-danger bg-rose-50 border border-rose-200 rounded px-3 py-2">
+                  {modalErr}
+                </div>
+              )}
               <div className="flex justify-end gap-2 pt-1">
-                <button type="button" className="btn-ghost" onClick={() => setCreating(null)}>취소</button>
-                <button className="btn-primary">생성</button>
+                <button type="button" className="btn-ghost" onClick={() => setCreating(null)} disabled={submitting}>취소</button>
+                <button className="btn-primary" disabled={submitting}>{submitting ? "생성 중…" : "생성"}</button>
               </div>
             </form>
           </div>
@@ -779,9 +836,14 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
                   </div>
                 )}
               </div>
+              {modalErr && (
+                <div className="text-[12px] text-danger bg-rose-50 border border-rose-200 rounded px-3 py-2">
+                  {modalErr}
+                </div>
+              )}
               <div className="flex justify-end gap-2 pt-1">
-                <button type="button" className="btn-ghost" onClick={() => setCreating(null)}>취소</button>
-                <button className="btn-primary">등록</button>
+                <button type="button" className="btn-ghost" onClick={() => setCreating(null)} disabled={submitting}>취소</button>
+                <button className="btn-primary" disabled={submitting || uploading}>{submitting ? "등록 중…" : "등록"}</button>
               </div>
             </form>
           </div>
