@@ -33,6 +33,11 @@ router.get("/", async (req, res) => {
   const month = req.query.month ? String(req.query.month) : undefined;
 
   const where: any = all ? {} : { userId: u.id };
+  // MANAGER 는 자기 팀 지출만 볼 수 있어야 함 — 다른 팀 예산 노출 방지.
+  if (all && u.role === "MANAGER") {
+    const me = await prisma.user.findUnique({ where: { id: u.id }, select: { team: true } });
+    where.user = me?.team ? { team: me.team } : { id: "__none__" };
+  }
   if (month && /^\d{4}-\d{2}$/.test(month)) {
     const [y, m] = month.split("-").map(Number);
     where.usedAt = {
@@ -43,6 +48,8 @@ router.get("/", async (req, res) => {
   const list = await prisma.cardExpense.findMany({
     where,
     orderBy: { usedAt: "desc" },
+    // 한 달 경비는 팀당 수백 건 정도 — 그래도 무한 스캔 차단을 위해 상한을 건다.
+    take: 1000,
     include: { user: { select: { name: true, team: true } } },
   });
   const totalAmount = list.reduce((s, x) => s + x.amount, 0);
@@ -79,6 +86,16 @@ router.patch("/:id", async (req, res) => {
   if (body.status && (u.role === "ADMIN" || u.role === "MANAGER")) {
     if (!["PENDING", "APPROVED", "REJECTED"].includes(body.status))
       return res.status(400).json({ error: "invalid status" });
+    // MANAGER 는 같은 팀 지출만 심사 가능.
+    if (u.role === "MANAGER") {
+      const [me, owner] = await Promise.all([
+        prisma.user.findUnique({ where: { id: u.id }, select: { team: true } }),
+        prisma.user.findUnique({ where: { id: exist.userId }, select: { team: true } }),
+      ]);
+      if (!me?.team || owner?.team !== me.team) {
+        return res.status(403).json({ error: "다른 팀의 경비를 심사할 수 없어요" });
+      }
+    }
     const updated = await prisma.cardExpense.update({
       where: { id: exist.id },
       data: { status: body.status, reviewer: u.id },

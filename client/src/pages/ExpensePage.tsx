@@ -47,6 +47,8 @@ export default function ExpensePage() {
     memo: "",
     receiptUrl: "",
   });
+  const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -88,29 +90,55 @@ export default function ExpensePage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    await api("/api/expense", {
-      method: "POST",
-      json: {
-        ...form,
-        usedAt: new Date(form.usedAt).toISOString(),
-        amount: Number(form.amount),
-      },
-    });
-    setOpen(false);
-    setForm({ usedAt: todayDT(), merchant: "", category: "식비", amount: 0, memo: "", receiptUrl: "" });
-    if (fileRef.current) fileRef.current.value = "";
-    load();
+    if (saving) return;
+    if (!form.merchant.trim()) return alert("가맹점 명을 입력해주세요");
+    if (!form.amount || form.amount <= 0) return alert("금액을 입력해주세요");
+    setSaving(true);
+    try {
+      await api("/api/expense", {
+        method: "POST",
+        json: {
+          ...form,
+          usedAt: new Date(form.usedAt).toISOString(),
+          amount: Number(form.amount),
+        },
+      });
+      setOpen(false);
+      setForm({ usedAt: todayDT(), merchant: "", category: "식비", amount: 0, memo: "", receiptUrl: "" });
+      if (fileRef.current) fileRef.current.value = "";
+      await load();
+    } catch (err: any) {
+      alert(err?.message ?? "사용내역 등록에 실패했어요");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function review(id: string, status: string) {
-    await api(`/api/expense/${id}`, { method: "PATCH", json: { status } });
-    load();
+    if (busyId) return;
+    setBusyId(id);
+    try {
+      await api(`/api/expense/${id}`, { method: "PATCH", json: { status } });
+      await load();
+    } catch (err: any) {
+      alert(err?.message ?? "승인·반려에 실패했어요");
+    } finally {
+      setBusyId(null);
+    }
   }
 
   async function remove(id: string) {
+    if (busyId) return;
     if (!confirm("삭제하시겠습니까?")) return;
-    await api(`/api/expense/${id}`, { method: "DELETE" });
-    load();
+    setBusyId(id);
+    try {
+      await api(`/api/expense/${id}`, { method: "DELETE" });
+      await load();
+    } catch (err: any) {
+      alert(err?.message ?? "삭제에 실패했어요");
+    } finally {
+      setBusyId(null);
+    }
   }
 
   const summary = list.reduce<Record<string, number>>((acc, e) => {
@@ -229,17 +257,29 @@ export default function ExpensePage() {
                 <td className="px-4 py-3 text-right">
                   {isReviewer && e.status === "PENDING" && scope === "all" && (
                     <div className="inline-flex gap-1">
-                      <button className="text-xs px-2 py-1 rounded-lg bg-brand-400 text-white" onClick={() => review(e.id, "APPROVED")}>
-                        승인
+                      <button
+                        className="text-xs px-2 py-1 rounded-lg bg-brand-400 text-white disabled:opacity-60"
+                        onClick={() => review(e.id, "APPROVED")}
+                        disabled={busyId === e.id}
+                      >
+                        {busyId === e.id ? "…" : "승인"}
                       </button>
-                      <button className="text-xs px-2 py-1 rounded-lg bg-rose-500 text-white" onClick={() => review(e.id, "REJECTED")}>
+                      <button
+                        className="text-xs px-2 py-1 rounded-lg bg-rose-500 text-white disabled:opacity-60"
+                        onClick={() => review(e.id, "REJECTED")}
+                        disabled={busyId === e.id}
+                      >
                         반려
                       </button>
                     </div>
                   )}
                   {e.userId === user?.id && e.status === "PENDING" && (
-                    <button className="text-xs text-rose-500 ml-2" onClick={() => remove(e.id)}>
-                      삭제
+                    <button
+                      className="text-xs text-rose-500 ml-2 disabled:opacity-60"
+                      onClick={() => remove(e.id)}
+                      disabled={busyId === e.id}
+                    >
+                      {busyId === e.id ? "삭제 중…" : "삭제"}
                     </button>
                   )}
                 </td>
@@ -290,10 +330,10 @@ export default function ExpensePage() {
                 )}
               </div>
               <div className="flex justify-end gap-2 pt-2">
-                <button type="button" className="btn-ghost" onClick={() => setOpen(false)}>
+                <button type="button" className="btn-ghost" onClick={() => setOpen(false)} disabled={saving}>
                   취소
                 </button>
-                <button className="btn-primary">등록</button>
+                <button className="btn-primary" disabled={saving}>{saving ? "등록 중…" : "등록"}</button>
               </div>
             </form>
           </div>

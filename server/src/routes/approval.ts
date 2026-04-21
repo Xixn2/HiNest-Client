@@ -9,13 +9,13 @@ router.use(requireAuth);
 
 const approvalSchema = z.object({
   type: z.enum(["TRIP", "EXPENSE", "PURCHASE", "GENERAL", "OFFSITE", "OTHER"]),
-  title: z.string().min(1),
-  content: z.string().optional(),
+  title: z.string().min(1).max(200),
+  content: z.string().max(5000).optional(),
   data: z.any().optional(),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
-  amount: z.number().int().optional(),
-  reviewerIds: z.array(z.string()).min(1),
+  startDate: z.string().max(40).optional(),
+  endDate: z.string().max(40).optional(),
+  amount: z.number().int().nonnegative().max(1_000_000_000).optional(),
+  reviewerIds: z.array(z.string()).min(1).max(10),
 });
 
 router.get("/", async (req, res) => {
@@ -31,6 +31,7 @@ router.get("/", async (req, res) => {
   const list = await prisma.approval.findMany({
     where,
     orderBy: { createdAt: "desc" },
+    take: 200,
     include: {
       requester: { select: { id: true, name: true, avatarColor: true, avatarUrl: true, position: true, team: true } },
       steps: {

@@ -18,14 +18,15 @@ function canWriteNotice(role: unknown): boolean {
 router.get("/", async (_req, res) => {
   const list = await prisma.notice.findMany({
     orderBy: [{ pinned: "desc" }, { createdAt: "desc" }],
+    take: 300,
     include: { author: { select: { name: true } } },
   });
   res.json({ notices: list });
 });
 
 const schema = z.object({
-  title: z.string().min(1),
-  content: z.string().min(1),
+  title: z.string().min(1).max(200),
+  content: z.string().min(1).max(20_000),
   pinned: z.boolean().optional(),
 });
 
@@ -56,8 +57,8 @@ router.post("/", async (req, res) => {
 // 공지 수정 — 작성 권한과 동일 (ADMIN/MANAGER). 알림 재발송은 하지 않음 (본문 오타 수정 등을
 // 전사 알림으로 울리면 스팸처럼 느껴져서). 중요한 정정이 있으면 새 공지로 올리는 흐름 권장.
 const patchSchema = z.object({
-  title: z.string().min(1).optional(),
-  content: z.string().min(1).optional(),
+  title: z.string().min(1).max(200).optional(),
+  content: z.string().min(1).max(20_000).optional(),
   pinned: z.boolean().optional(),
 });
 

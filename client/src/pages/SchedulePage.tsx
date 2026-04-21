@@ -52,6 +52,8 @@ export default function SchedulePage() {
     color: "#3B5CF0",
   });
   const [dayOpen, setDayOpen] = useState<Date | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   async function load() {
     const from = startOfMonth(cursor).toISOString();
@@ -88,35 +90,53 @@ export default function SchedulePage() {
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
+    if (saving) return;
     if (!form.startAt || !form.endAt) return alert("시작/종료 시각을 선택해주세요");
     if (form.scope === "TARGETED" && form.targetUserIds.length === 0)
       return alert("대상 인원을 1명 이상 선택해주세요");
-    await api("/api/schedule", {
-      method: "POST",
-      json: {
-        ...form,
-        startAt: new Date(form.startAt).toISOString(),
-        endAt: new Date(form.endAt).toISOString(),
-      },
-    });
-    setOpen(false);
-    setForm({
-      title: "",
-      content: "",
-      scope: "COMPANY",
-      category: "MEETING",
-      targetUserIds: [],
-      startAt: "",
-      endAt: "",
-      color: "#3B5CF0",
-    });
-    load();
+    if (new Date(form.endAt).getTime() < new Date(form.startAt).getTime())
+      return alert("종료 시각이 시작 시각보다 빨라요");
+    setSaving(true);
+    try {
+      await api("/api/schedule", {
+        method: "POST",
+        json: {
+          ...form,
+          startAt: new Date(form.startAt).toISOString(),
+          endAt: new Date(form.endAt).toISOString(),
+        },
+      });
+      setOpen(false);
+      setForm({
+        title: "",
+        content: "",
+        scope: "COMPANY",
+        category: "MEETING",
+        targetUserIds: [],
+        startAt: "",
+        endAt: "",
+        color: "#3B5CF0",
+      });
+      await load();
+    } catch (err: any) {
+      alert(err?.message ?? "일정 등록에 실패했어요");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function remove(id: string) {
+    if (removingId) return;
     if (!confirm("삭제하시겠습니까?")) return;
-    await api(`/api/schedule/${id}`, { method: "DELETE" });
-    load();
+    setRemovingId(id);
+    try {
+      await api(`/api/schedule/${id}`, { method: "DELETE" });
+      await load();
+    } catch (err: any) {
+      alert(err?.message ?? "일정 삭제에 실패했어요");
+    } finally {
+      setRemovingId(null);
+    }
   }
 
   const canMakeCompany = user?.role === "ADMIN" || user?.role === "MANAGER";
@@ -247,6 +267,7 @@ export default function SchedulePage() {
           setForm={setForm}
           onSubmit={create}
           canMakeCompany={canMakeCompany}
+          saving={saving}
         />
       )}
 
@@ -255,10 +276,8 @@ export default function SchedulePage() {
           date={dayOpen}
           events={eventsOn(dayOpen)}
           onClose={() => setDayOpen(null)}
-          onRemove={(id) => {
-            if (!confirm("삭제하시겠습니까?")) return;
-            api(`/api/schedule/${id}`, { method: "DELETE" }).then(() => load());
-          }}
+          onRemove={remove}
+          removingId={removingId}
         />
       )}
     </div>
@@ -324,11 +343,13 @@ function DayDetailModal({
   events,
   onClose,
   onRemove,
+  removingId,
 }: {
   date: Date;
   events: Event[];
   onClose: () => void;
   onRemove: (id: string) => void;
+  removingId: string | null;
 }) {
   const holiday = getHoliday(date);
   return (
@@ -418,6 +439,7 @@ function DayDetailModal({
                       type="button"
                       className="btn-icon text-danger"
                       onClick={() => onRemove(e.id)}
+                      disabled={removingId === e.id}
                       title="삭제"
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -542,12 +564,14 @@ function EventModal({
   setForm,
   onSubmit,
   canMakeCompany,
+  saving,
 }: {
   onClose: () => void;
   form: EventForm;
   setForm: (f: EventForm) => void;
   onSubmit: (e: React.FormEvent) => void;
   canMakeCompany: boolean;
+  saving: boolean;
 }) {
   const scopes: EventScope[] = canMakeCompany
     ? ["COMPANY", "TEAM", "PERSONAL", "TARGETED"]
@@ -854,8 +878,8 @@ function EventModal({
 
           {/* 푸터 */}
           <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-ink-150 bg-ink-25">
-            <button type="button" className="btn-ghost" onClick={onClose}>취소</button>
-            <button className="btn-primary">일정 추가</button>
+            <button type="button" className="btn-ghost" onClick={onClose} disabled={saving}>취소</button>
+            <button className="btn-primary" disabled={saving}>{saving ? "추가 중…" : "일정 추가"}</button>
           </div>
         </form>
       </div>
