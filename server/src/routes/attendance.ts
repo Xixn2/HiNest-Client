@@ -16,17 +16,35 @@ router.get("/today", async (req, res) => {
   res.json({ attendance: rec });
 });
 
-// 출근 — 하루에 여러 번 가능. 외근/복귀 등으로 재출근 찍는 경우 대응.
-// checkIn 은 항상 최신 시각으로 덮어쓰고, checkOut 은 초기화 (새 근무 시작으로 간주).
+// 출근 — 하루에 여러 번 가능하지만, 이미 "출근 + 퇴근" 이 찍혀 있으면 한 번 더 확인을 받음.
+// 기존엔 checkOut 을 무조건 null 로 덮어써 퇴근 시각이 소실되는 데이터 손실 버그가 있었음.
+// 이제는:
+//   (a) 기록 없음 → 신규 생성
+//   (b) 출근만 있음 → checkIn 시각만 최신으로 덮어쓰기 (퇴근 기록은 건드리지 않음)
+//   (c) 출근 + 퇴근 둘 다 있음 → 409 Conflict 반환. 클라가 { force: true } 로 재요청 시에만 퇴근 시각 초기화.
 router.post("/check-in", async (req, res) => {
   const u = (req as any).user;
   const date = todayStr();
+  const force = req.body?.force === true;
+  const existing = await prisma.attendance.findUnique({
+    where: { userId_date: { userId: u.id, date } },
+  });
+  if (existing?.checkOut && !force) {
+    return res.status(409).json({
+      code: "ALREADY_CHECKED_OUT",
+      error: "오늘은 이미 퇴근 처리가 되어 있어요. 정말 재출근으로 덮어쓸까요?",
+      attendance: existing,
+    });
+  }
+  const now = new Date();
   const rec = await prisma.attendance.upsert({
     where: { userId_date: { userId: u.id, date } },
-    update: { checkIn: new Date(), checkOut: null },
-    create: { userId: u.id, date, checkIn: new Date() },
+    update: force
+      ? { checkIn: now, checkOut: null } // 명시적 동의 하에만 checkOut 초기화
+      : { checkIn: now },
+    create: { userId: u.id, date, checkIn: now },
   });
-  await writeLog(u.id, "CHECK_IN", date);
+  await writeLog(u.id, "CHECK_IN", date, force ? "force" : undefined);
   res.json({ attendance: rec });
 });
 

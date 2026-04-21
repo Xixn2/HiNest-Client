@@ -39,11 +39,29 @@ export default function DashboardPage() {
   }, []);
 
   async function checkIn() {
-    await api("/api/attendance/check-in", { method: "POST" });
+    try {
+      await api("/api/attendance/check-in", { method: "POST" });
+    } catch (err: any) {
+      // 이미 퇴근 처리된 날 → 서버가 409 ALREADY_CHECKED_OUT 로 재확인 요청.
+      if (err?.code === "ALREADY_CHECKED_OUT") {
+        if (!confirm("오늘은 이미 퇴근 처리되었어요. 재출근으로 덮어쓸까요?\n(기존 퇴근 시각이 초기화됩니다)")) {
+          return;
+        }
+        await api("/api/attendance/check-in", { method: "POST", json: { force: true } });
+      } else {
+        alert(err?.message ?? "출근 처리에 실패했어요");
+        return;
+      }
+    }
     load();
   }
   async function checkOut() {
-    await api("/api/attendance/check-out", { method: "POST" });
+    try {
+      await api("/api/attendance/check-out", { method: "POST" });
+    } catch (err: any) {
+      alert(err?.message ?? "퇴근 처리에 실패했어요");
+      return;
+    }
     load();
   }
 

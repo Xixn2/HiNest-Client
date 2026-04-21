@@ -6,13 +6,24 @@ import { requireAuth, writeLog } from "../lib/auth.js";
 const router = Router();
 router.use(requireAuth);
 
+// receiptUrl 은 클라에서 base64 data URL 또는 /uploads/ 경로로 들어옴.
+// 전역 body limit (2MB, index.ts) 에 걸리면 413 이 나버리고 zod 에 도달조차 못하므로
+// 클라에서 이미지 사이즈를 맞춰 보내야 함 (현재 ≈1.3MB 바이너리 상한).
+// data URL 이외 외부 URL 을 저장하면 리뷰어가 클릭했을 때 피싱/CSRF 위험 → 엄격 매칭.
+const RECEIPT_MAX_LEN = 1_900_000; // 2MB - JSON 오버헤드 buffer
+const receiptUrlSchema = z
+  .string()
+  .max(RECEIPT_MAX_LEN, "영수증 이미지가 너무 큽니다")
+  .regex(/^(data:image\/[a-zA-Z+.-]+;base64,|\/uploads\/[A-Za-z0-9._-]+$)/, "허용되지 않는 영수증 경로")
+  .optional();
+
 const schema = z.object({
   usedAt: z.string(),
-  merchant: z.string().min(1),
-  category: z.string().min(1),
-  amount: z.number().int().nonnegative(),
-  memo: z.string().optional(),
-  receiptUrl: z.string().optional(),
+  merchant: z.string().min(1).max(200),
+  category: z.string().min(1).max(40),
+  amount: z.number().int().nonnegative().max(100_000_000),
+  memo: z.string().max(2000).optional(),
+  receiptUrl: receiptUrlSchema,
 });
 
 // 목록

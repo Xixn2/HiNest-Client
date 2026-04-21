@@ -66,7 +66,18 @@ export default function ExpensePage() {
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
-    if (f.size > 1024 * 1024 * 3) return alert("영수증은 3MB 이하 이미지만 업로드 가능합니다");
+    // base64 로 인코딩하면 원본의 ~33% 오버헤드 → 서버 express.json limit 2MB 에 맞추려면
+    // 원본을 1.3MB 이하로 제한. 초과하면 서버가 413 을 내던지고 사용자는 무엇이 틀렸는지 모름.
+    if (f.size > 1024 * 1024 * 1.3) {
+      alert("영수증은 1.3MB 이하 이미지만 업로드 가능합니다\n(고화질 사진은 미리 크기를 줄여 주세요)");
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
+    if (!f.type.startsWith("image/")) {
+      alert("영수증은 이미지 파일만 업로드 가능합니다");
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       const url = reader.result as string;
@@ -163,8 +174,8 @@ export default function ExpensePage() {
         })}
       </div>
 
-      <div className="card p-0 overflow-hidden overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className="card p-0 overflow-hidden overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+        <table className="w-full text-sm min-w-[720px]">
           <thead className="bg-slate-50 text-slate-500 text-xs">
             <tr>
               <th className="text-left px-4 py-3">사용일시</th>
@@ -272,7 +283,7 @@ export default function ExpensePage() {
                 <textarea className="input" rows={2} value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
               </div>
               <div>
-                <label className="label">영수증 (이미지, 3MB 이하)</label>
+                <label className="label">영수증 (이미지, 1.3MB 이하)</label>
                 <input ref={fileRef} type="file" accept="image/*" onChange={onFile} className="text-sm" />
                 {form.receiptUrl && (
                   <img src={form.receiptUrl} alt="receipt" loading="lazy" decoding="async" className="mt-2 max-h-40 rounded-lg border border-slate-200" />

@@ -212,6 +212,47 @@ router.post("/users/import", async (req, res) => {
     });
   }
 
+  // 성능 개선 (N+1 → 상수 쿼리):
+  // 기존엔 5000 rows × up to 3 (email/employeeNo/hrCode) lookup = 최대 15,000 개의 DB 왕복.
+  // 이제는 가능한 모든 식별자를 한 번에 모아 3회의 findMany 로 해결.
+  // update 는 여전히 row 당 1회 유지 (데이터 일관성 · 오류 추적 목적).
+  const emailsSet = new Set<string>();
+  const empNosSet = new Set<string>();
+  const hrCodesSet = new Set<string>();
+  for (const raw of rows) {
+    if (raw?.email) emailsSet.add(String(raw.email));
+    if (raw?.employeeNo) empNosSet.add(String(raw.employeeNo));
+    if (raw?.hrCode) hrCodesSet.add(String(raw.hrCode));
+  }
+
+  const [byEmail, byEmpNo, byHrCode] = await Promise.all([
+    emailsSet.size
+      ? prisma.user.findMany({
+          where: { email: { in: [...emailsSet] } },
+          select: { id: true, email: true, superAdmin: true },
+        })
+      : Promise.resolve([] as { id: string; email: string; superAdmin: boolean }[]),
+    empNosSet.size
+      ? prisma.user.findMany({
+          where: { employeeNo: { in: [...empNosSet] } },
+          select: { id: true, employeeNo: true, superAdmin: true },
+        })
+      : Promise.resolve([] as { id: string; employeeNo: string | null; superAdmin: boolean }[]),
+    hrCodesSet.size
+      ? prisma.user.findMany({
+          where: { hrCode: { in: [...hrCodesSet] } },
+          select: { id: true, hrCode: true, superAdmin: true },
+        })
+      : Promise.resolve([] as { id: string; hrCode: string | null; superAdmin: boolean }[]),
+  ]);
+  const emailMap = new Map(byEmail.map((x) => [x.email, { id: x.id, superAdmin: x.superAdmin }]));
+  const empNoMap = new Map(
+    byEmpNo.filter((x) => x.employeeNo).map((x) => [x.employeeNo as string, { id: x.id, superAdmin: x.superAdmin }])
+  );
+  const hrCodeMap = new Map(
+    byHrCode.filter((x) => x.hrCode).map((x) => [x.hrCode as string, { id: x.id, superAdmin: x.superAdmin }])
+  );
+
   let updated = 0;
   let skipped = 0;
   const errors: string[] = [];
@@ -225,10 +266,10 @@ router.post("/users/import", async (req, res) => {
     }
     const d = parsed.data;
     // 식별자 순서: email → employeeNo → hrCode
-    let target: { id: string; superAdmin: boolean } | null = null;
-    if (d.email) target = await prisma.user.findUnique({ where: { email: d.email }, select: { id: true, superAdmin: true } });
-    if (!target && d.employeeNo) target = await prisma.user.findFirst({ where: { employeeNo: d.employeeNo }, select: { id: true, superAdmin: true } });
-    if (!target && d.hrCode) target = await prisma.user.findFirst({ where: { hrCode: d.hrCode }, select: { id: true, superAdmin: true } });
+    let target: { id: string; superAdmin: boolean } | undefined;
+    if (d.email) target = emailMap.get(d.email);
+    if (!target && d.employeeNo) target = empNoMap.get(d.employeeNo);
+    if (!target && d.hrCode) target = hrCodeMap.get(d.hrCode);
     if (!target) {
       skipped++;
       errors.push(`행 ${i + 2}: 일치하는 유저 없음 (email/사번/HR번호 중 하나 필요)`);

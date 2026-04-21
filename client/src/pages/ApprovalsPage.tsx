@@ -63,6 +63,8 @@ export default function ApprovalsPage() {
   const [selected, setSelected] = useState<Approval | null>(null);
   const [creating, setCreating] = useState(false);
   const [directory, setDirectory] = useState<DirUser[]>([]);
+  // 승인/반려/취소 버튼 연속 클릭 방지 — 네트워크 끊겨도 같은 요청이 2중 들어가면 결재선이 이상해짐.
+  const [actingId, setActingId] = useState<string | null>(null);
 
   async function load() {
     const res = await api<{ approvals: Approval[] }>(`/api/approval?scope=${scope}`);
@@ -93,15 +95,31 @@ export default function ApprovalsPage() {
   }, [approvals, location.search]);
 
   async function act(id: string, action: "approve" | "reject") {
+    if (actingId) return; // 이미 처리 중이면 무시
     const comment = action === "reject" ? prompt("반려 사유 (선택)") ?? undefined : undefined;
-    await api(`/api/approval/${id}/act`, { method: "POST", json: { action, comment } });
-    load();
+    setActingId(id);
+    try {
+      await api(`/api/approval/${id}/act`, { method: "POST", json: { action, comment } });
+      await load();
+    } catch (err: any) {
+      alert(err?.message ?? "처리에 실패했어요");
+    } finally {
+      setActingId(null);
+    }
   }
 
   async function cancel(id: string) {
+    if (actingId) return;
     if (!confirm("결재를 취소하시겠습니까?")) return;
-    await api(`/api/approval/${id}/cancel`, { method: "POST" });
-    load();
+    setActingId(id);
+    try {
+      await api(`/api/approval/${id}/cancel`, { method: "POST" });
+      await load();
+    } catch (err: any) {
+      alert(err?.message ?? "취소에 실패했어요");
+    } finally {
+      setActingId(null);
+    }
   }
 
   const pendingCount = useMemo(
@@ -178,6 +196,7 @@ export default function ApprovalsPage() {
               meId={user?.id}
               onAct={act}
               onCancel={cancel}
+              busy={actingId === selected.id}
             />
           ) : (
             <div className="grid place-items-center h-[70vh]">
@@ -200,12 +219,13 @@ export default function ApprovalsPage() {
 }
 
 function ApprovalDetail({
-  a, meId, onAct, onCancel,
+  a, meId, onAct, onCancel, busy,
 }: {
   a: Approval;
   meId?: string;
   onAct: (id: string, action: "approve" | "reject") => void;
   onCancel: (id: string) => void;
+  busy?: boolean;
 }) {
   const meta = TYPE_META[a.type];
   const smeta = STATUS_META[a.status];
@@ -270,12 +290,18 @@ function ApprovalDetail({
         <div className="border-t border-ink-150 px-5 py-3 flex items-center gap-2">
           {myTurn && (
             <>
-              <button className="btn-primary flex-1" onClick={() => onAct(a.id, "approve")}>승인</button>
-              <button className="btn-danger flex-1" onClick={() => onAct(a.id, "reject")}>반려</button>
+              <button className="btn-primary flex-1" disabled={busy} onClick={() => onAct(a.id, "approve")}>
+                {busy ? "처리 중…" : "승인"}
+              </button>
+              <button className="btn-danger flex-1" disabled={busy} onClick={() => onAct(a.id, "reject")}>
+                {busy ? "처리 중…" : "반려"}
+              </button>
             </>
           )}
           {isRequester && !myTurn && (
-            <button className="btn-ghost" onClick={() => onCancel(a.id)}>결재 취소</button>
+            <button className="btn-ghost" disabled={busy} onClick={() => onCancel(a.id)}>
+              {busy ? "처리 중…" : "결재 취소"}
+            </button>
           )}
           {!myTurn && !isRequester && (
             <div className="text-[12px] text-ink-500">다른 결재자의 차례입니다.</div>
@@ -313,11 +339,17 @@ function CreateModal({
     destination: "",
     reviewerIds: [],
   });
+  // 상신 버튼 중복 클릭 방지 + 실패 시 모달 안에서 오류를 보여줘 사용자가 내용을 다시 수정할 수 있게.
+  // 기존에는 실패해도 onDone() 으로 바로 닫아버려 입력한 내용을 전부 잃었음.
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title.trim()) return alert("제목을 입력해주세요");
-    if (form.reviewerIds.length === 0) return alert("결재자를 1명 이상 선택해주세요");
+    if (saving) return;
+    setError(null);
+    if (!form.title.trim()) return setError("제목을 입력해주세요");
+    if (form.reviewerIds.length === 0) return setError("결재자를 1명 이상 선택해주세요");
     const payload: any = {
       type: form.type,
       title: form.title,
@@ -330,8 +362,15 @@ function CreateModal({
     if (form.type === "TRIP" || form.type === "OFFSITE") {
       payload.data = { destination: form.destination };
     }
-    await api("/api/approval", { method: "POST", json: payload });
-    onDone();
+    setSaving(true);
+    try {
+      await api("/api/approval", { method: "POST", json: payload });
+      onDone();
+    } catch (err: any) {
+      setError(err?.message ?? "상신에 실패했어요");
+      setSaving(false);
+      // 모달을 닫지 않음 — 사용자가 오류 보고 다시 수정 가능
+    }
   }
 
   const needDates = form.type === "TRIP" || form.type === "OFFSITE";
@@ -434,9 +473,17 @@ function CreateModal({
             </div>
           </div>
 
+          {error && (
+            <div className="text-[12px] text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+              {error}
+            </div>
+          )}
+
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" className="btn-ghost" onClick={onClose}>취소</button>
-            <button className="btn-primary">상신</button>
+            <button type="button" className="btn-ghost" disabled={saving} onClick={onClose}>취소</button>
+            <button className="btn-primary" disabled={saving}>
+              {saving ? "상신 중…" : "상신"}
+            </button>
           </div>
         </form>
       </div>

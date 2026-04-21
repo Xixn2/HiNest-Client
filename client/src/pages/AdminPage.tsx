@@ -825,7 +825,12 @@ function DetailUserTable({
   ];
 
   return (
-    <div className="overflow-auto">
+    // 모바일에서 테이블(min-width 2000px) 이 부모 flex 컨테이너를 밀어내 전체 페이지가
+    // 가로 스크롤되던 문제 해결:
+    //   1) w-full max-w-full 로 wrapper 를 뷰포트 폭에 단단히 고정
+    //   2) overflow-x-auto 로 테이블만 가로 스크롤
+    //   3) -webkit-overflow-scrolling: touch 로 모바일 관성 스크롤
+    <div className="w-full max-w-full overflow-x-auto overflow-y-visible" style={{ WebkitOverflowScrolling: "touch" }}>
       <table className="pro pro-grid" style={{ minWidth: 2000 }}>
         <thead>
           <tr>

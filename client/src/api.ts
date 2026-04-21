@@ -18,11 +18,20 @@ export async function api<T = any>(
   });
   if (!res.ok) {
     let msg = "요청 실패";
+    let code: string | undefined;
+    let data: any = undefined;
     try {
-      const data = await res.json();
+      data = await res.json();
       if (data?.error) msg = data.error;
+      if (data?.code) code = data.code;
     } catch {}
-    throw new Error(msg);
+    // 호출부에서 `e.status` / `e.code` / `e.data` 로 서버 신호를 확인할 수 있게 확장.
+    // (예: 409 ALREADY_CHECKED_OUT → 재확인 모달 표시 후 force 재요청)
+    const err = new Error(msg) as Error & { status?: number; code?: string; data?: any };
+    err.status = res.status;
+    err.code = code;
+    err.data = data;
+    throw err;
   }
   if (res.status === 204) return undefined as T;
   const json = await res.json();

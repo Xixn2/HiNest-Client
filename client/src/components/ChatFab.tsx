@@ -212,7 +212,10 @@ export default function ChatFab() {
         aria-expanded={open}
         className={`fixed z-40 flex items-center justify-center active:scale-[.94]${pulsing ? " siri-pulse" : ""}`}
         style={{
-          right: 28, bottom: 28, width: 60, height: 60,
+          // notch/홈인디케이터 대응 — iPad/iPhone 세이프 에어리어 안쪽으로 당김.
+          right: "max(20px, env(safe-area-inset-right))",
+          bottom: "calc(20px + env(safe-area-inset-bottom, 0px))",
+          width: 60, height: 60,
           borderRadius: 999,
           background: C.blue, color: "#fff",
           border: 0, cursor: "pointer",

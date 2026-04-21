@@ -13,10 +13,13 @@ import {
   type DesktopNotifPermission,
 } from "../lib/desktopNotify";
 
+// 아바타 색상 팔레트.
+// 다크 모드 surface (#17191F 부근) 와 거의 같은 `#17191F` 를 빼고
+// 한 단계 밝은 슬레이트 (#64748B) 로 대체 — 어느 테마에서도 아바타 이니셜이 시인됨.
 const COLORS = [
   "#3B5CF0", "#2962FF", "#6278D0", "#0EA5E9", "#0891B2", "#14B8A6",
   "#16A34A", "#65A30D", "#CA8A04", "#D97706", "#EA580C", "#DC2626",
-  "#DB2777", "#C026D3", "#9333EA", "#7C3AED", "#475569", "#17191F",
+  "#DB2777", "#C026D3", "#9333EA", "#7C3AED", "#475569", "#64748B",
 ];
 
 export default function ProfilePage() {

@@ -109,10 +109,15 @@ router.post("/rooms", async (req, res) => {
   const d = parsed.data;
 
   if (d.type === "DIRECT") {
-    const other = d.memberIds.find((id) => id !== u.id);
-    if (!other || d.memberIds.filter((id) => id !== u.id).length > 1) {
+    // 중복 ID 가 섞여 올 수 있음 (UI 버그 · 재전송 · 악의 요청).
+    // dedupe 후 자기자신 제거 → 정확히 1명이어야 DIRECT 성립.
+    // 예전엔 filter 후 length 만 비교했는데, ['friend','friend'] 같은 입력이 들어왔을 때
+    // "상대 1명" 가드는 통과하면서 반대편에선 이미 DIRECT 방이 두 개 생기는 경합으로 번짐.
+    const others = Array.from(new Set(d.memberIds)).filter((id) => id !== u.id);
+    if (others.length !== 1) {
       return res.status(400).json({ error: "1:1 대화는 상대 1명만 선택할 수 있습니다" });
     }
+    const other = others[0];
     const existing = await prisma.chatRoom.findFirst({
       where: {
         type: "DIRECT",
