@@ -86,6 +86,23 @@ export default function LoginPage() {
           </div>
         </div>
 
+        {/* 데스크톱/모바일 앱 다운로드 안내 — Electron 에서는 숨김 */}
+        {!window.hinest?.isDesktop && (
+          <div className="mt-4 text-center">
+            <Link
+              to="/download"
+              className="inline-flex items-center gap-1.5 text-[12px] text-ink-500 hover:text-ink-900"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              데스크톱 · 모바일 앱 다운로드
+            </Link>
+          </div>
+        )}
+
       </div>
     </div>
   );

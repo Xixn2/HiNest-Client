@@ -152,6 +152,24 @@ function AppLayoutInner() {
           )}
         </nav>
 
+        {/* 앱 다운로드 — 웹 브라우저로 접속한 경우에만. Electron 에서는 숨김. */}
+        {!window.hinest?.isDesktop && (
+          <div className="border-t border-ink-150 px-2 pt-2">
+            <NavLink
+              to="/download"
+              className="flex items-center gap-2.5 h-[32px] px-3 rounded-full text-[12.5px] font-semibold text-ink-500 hover:bg-ink-100 hover:text-ink-900 transition"
+              title="데스크톱 · 모바일 앱 다운로드"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              <span>앱 다운로드</span>
+            </NavLink>
+          </div>
+        )}
+
         <div className="border-t border-ink-150 p-2">
           <div className="flex items-center gap-2.5 px-2 py-2 rounded-md hover:bg-ink-50">
             <NavLink to="/profile" className="flex items-center gap-2.5 flex-1 min-w-0" title="프로필">
