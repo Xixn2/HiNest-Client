@@ -99,10 +99,11 @@ router.get("/rooms", async (req, res) => {
  * 방 생성. GROUP / DIRECT / TEAM 지원. DIRECT 는 dedupe.
  */
 const roomSchema = z.object({
-  name: z.string().optional(),
+  name: z.string().max(120).optional(),
   type: z.enum(["GROUP", "DIRECT", "TEAM"]).default("GROUP"),
-  team: z.string().optional(),
-  memberIds: z.array(z.string()).min(1),
+  team: z.string().max(80).optional(),
+  // 100명 제한 — 그룹 방이 실무적으로 그 이상 가는 경우가 드물고 DoS 페이로드 차단.
+  memberIds: z.array(z.string().max(50)).min(1).max(100),
 });
 
 router.post("/rooms", async (req, res) => {
@@ -360,9 +361,11 @@ const sendSchema = z.object({
   fileUrl: safeFileUrl,
   fileName: z.string().max(256).optional(),
   fileType: z.string().max(128).optional(),
-  fileSize: z.number().int().nonnegative().optional(),
-  scheduledAt: z.string().optional(),
-  mentions: z.array(z.string()).optional(),
+  fileSize: z.number().int().nonnegative().max(10 * 1024 * 1024 * 1024).optional(),
+  // ISO 8601 문자열. 40자면 밀리초 + 타임존 포함해도 넉넉.
+  scheduledAt: z.string().max(40).optional(),
+  // 메시지 당 멘션은 50명 상한. 실무 과잉 방지 + 알림 폭탄 차단.
+  mentions: z.array(z.string().max(50)).max(50).optional(),
 });
 
 router.post("/rooms/:id/messages", async (req, res) => {

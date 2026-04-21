@@ -48,7 +48,8 @@ const createSchema = z.object({
   name: z.string().min(1).max(80),
   description: z.string().max(500).optional(),
   color: z.string().max(16).optional(),
-  memberIds: z.array(z.string()).optional(),
+  // 초기 멤버 최대 200명 — 그 이상은 대시보드 성능이 무너짐.
+  memberIds: z.array(z.string().max(50)).max(200).optional(),
 });
 
 router.post("/", async (req, res) => {
@@ -150,8 +151,9 @@ router.get("/:id/events", async (req, res) => {
 const eventSchemaBase = z.object({
   title: z.string().min(1).max(120),
   description: z.string().max(1000).optional().nullable(),
-  startAt: z.string().min(1),
-  endAt: z.string().min(1),
+  // ISO 8601 확장 포맷도 40자면 충분. 임의로 길게 들어오는 걸 막아 Date 파싱 비용 방어.
+  startAt: z.string().min(1).max(40),
+  endAt: z.string().min(1).max(40),
   allDay: z.boolean().optional(),
   color: z.string().max(16).optional(),
   // 담당자 수 상한 — 한 이벤트에 50명 이상은 현실적으로 없고, 지나치면 assigneeIds
@@ -325,7 +327,7 @@ router.get("/:id/webhook/:channelId/events", async (req, res) => {
 /** 멤버 추가 — OWNER/MANAGER 만. OWNER 승격은 기존 OWNER 또는 ADMIN 만 가능. */
 router.post("/:id/member", async (req, res) => {
   const u = (req as any).user;
-  const body = z.object({ userId: z.string(), role: z.enum(["OWNER", "MANAGER", "MEMBER"]).optional() }).safeParse(req.body);
+  const body = z.object({ userId: z.string().max(50), role: z.enum(["OWNER", "MANAGER", "MEMBER"]).optional() }).safeParse(req.body);
   if (!body.success) return res.status(400).json({ error: "invalid input" });
   const me = await prisma.projectMember.findUnique({
     where: { projectId_userId: { projectId: req.params.id, userId: u.id } },

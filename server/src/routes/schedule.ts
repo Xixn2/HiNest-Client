@@ -94,9 +94,10 @@ const eventSchema = z.object({
   scope: z.enum(["COMPANY", "TEAM", "PERSONAL", "TARGETED"]).default("PERSONAL"),
   team: z.string().max(80).optional().nullable(),
   category: z.enum(CATEGORIES).default("OTHER"),
-  targetUserIds: z.array(z.string()).max(500).optional(),
-  startAt: z.string(),
-  endAt: z.string(),
+  targetUserIds: z.array(z.string().max(50)).max(500).optional(),
+  // ISO 8601 확장 포맷도 40자면 충분.
+  startAt: z.string().min(1).max(40),
+  endAt: z.string().min(1).max(40),
   color: z.string().max(16).optional(),
 }).refine(
   (d) => !d.startAt || !d.endAt || new Date(d.endAt).getTime() >= new Date(d.startAt).getTime(),

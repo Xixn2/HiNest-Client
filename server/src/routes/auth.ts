@@ -20,8 +20,10 @@ const router = Router();
 
 const loginSchema = z.object({
   // 이메일 전용. 과거에는 사내 ID 도 허용했지만 정책 단순화로 이메일로만 로그인.
-  email: z.string().email(),
-  password: z.string().min(1),
+  email: z.string().email().max(200),
+  // bcrypt 는 72바이트 초과를 조용히 자르지만, 과도한 페이로드로 CPU 낭비 시키는
+  // 슬로우 해시 DoS 를 막기 위해 128자 상한.
+  password: z.string().min(1).max(128),
 });
 
 /**
@@ -72,11 +74,12 @@ router.post("/login", async (req, res) => {
 });
 
 const signupSchema = z.object({
-  inviteKey: z.string().min(4),
-  email: z.string().email(),
-  name: z.string().min(1),
+  inviteKey: z.string().min(4).max(100),
+  email: z.string().email().max(200),
+  name: z.string().min(1).max(200),
   // 8자 이상 — 6자는 현대 기준으로 너무 약함. 기존 계정은 그대로 사용 가능하고 다음 변경 시 8자 요구.
-  password: z.string().min(8),
+  // bcrypt 72바이트 한계 가이드 + 슬로우 해시 DoS 방지로 128자 상한.
+  password: z.string().min(8).max(128),
 });
 
 router.post("/signup", async (req, res) => {

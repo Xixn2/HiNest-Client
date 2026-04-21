@@ -15,7 +15,7 @@ const approvalSchema = z.object({
   startDate: z.string().max(40).optional(),
   endDate: z.string().max(40).optional(),
   amount: z.number().int().nonnegative().max(1_000_000_000).optional(),
-  reviewerIds: z.array(z.string()).min(1).max(10),
+  reviewerIds: z.array(z.string().max(50)).min(1).max(10),
 });
 
 router.get("/", async (req, res) => {
