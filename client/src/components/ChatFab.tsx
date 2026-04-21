@@ -43,6 +43,25 @@ export default function ChatFab() {
   const { chatUnread, ready } = useNotifications();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  // 모바일(≤640px) 에서는 사내톡을 풀스크린 페이지처럼 띄움.
+  // 뷰포트 크기 변화(회전/리사이즈) 시 갱신.
+  const [isMobile, setIsMobile] = useState<boolean>(
+    typeof window !== "undefined" ? window.matchMedia("(max-width: 640px)").matches : false
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 640px)");
+    const update = () => setIsMobile(mq.matches);
+    mq.addEventListener?.("change", update);
+    return () => mq.removeEventListener?.("change", update);
+  }, []);
+  // 모바일 풀스크린 상태에서 배경 스크롤 잠금.
+  useEffect(() => {
+    if (!isMobile || !open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [isMobile, open]);
   // 새 채팅 알림이 들어올 때 파란 펄스.
   // - 단순 새로고침/재오픈만으론 발동하지 않음 (localStorage 에 저장된 마지막으로 본 카운트와 비교).
   // - 앱이 꺼진 사이 알림이 쌓였다면 켤 때 1회 발동.
@@ -116,32 +135,57 @@ export default function ChatFab() {
               ? "opacity-100 translate-y-0 scale-100 pointer-events-auto"
               : "opacity-0 translate-y-3 scale-[.98] pointer-events-none"
           }`}
-          style={{
-            // 모바일에선 좌우 여백을 12px 로 줄이고 너비를 뷰포트에 맞춰 축소.
-            // 데스크톱에선 기존처럼 380px 고정.
-            right: "max(12px, env(safe-area-inset-right))",
-            bottom: "calc(96px + env(safe-area-inset-bottom))",
-            width: "min(380px, calc(100vw - 24px))",
-            height: 580,
-            maxHeight: "calc(100vh - 140px - env(safe-area-inset-bottom))",
-            transformOrigin: "bottom right",
-            borderRadius: 20,
-            overflow: "hidden",
-            background: C.surface,
-            fontFamily: FONT,
-            color: C.ink,
-            letterSpacing: "-0.015em",
-            boxShadow:
-              "0 20px 50px rgba(25, 31, 40, .14), 0 4px 12px rgba(25, 31, 40, .06)",
-            transition:
-              "opacity .28s cubic-bezier(.22,.61,.36,1), transform .32s cubic-bezier(.22,.61,.36,1)",
-          }}
+          style={
+            isMobile
+              ? {
+                  // 모바일: 풀스크린 페이지처럼. 하단 네비/홈인디케이터 영역 safe-area 반영.
+                  inset: 0,
+                  width: "100vw",
+                  height: "100dvh",
+                  paddingTop: "env(safe-area-inset-top)",
+                  paddingBottom: "env(safe-area-inset-bottom)",
+                  paddingLeft: "env(safe-area-inset-left)",
+                  paddingRight: "env(safe-area-inset-right)",
+                  transformOrigin: "bottom right",
+                  borderRadius: 0,
+                  overflow: "hidden",
+                  background: C.surface,
+                  fontFamily: FONT,
+                  color: C.ink,
+                  letterSpacing: "-0.015em",
+                  transition:
+                    "opacity .22s cubic-bezier(.22,.61,.36,1), transform .26s cubic-bezier(.22,.61,.36,1)",
+                }
+              : {
+                  // 데스크톱: 기존 우하단 플로팅 팝업.
+                  right: "max(12px, env(safe-area-inset-right))",
+                  bottom: "calc(96px + env(safe-area-inset-bottom))",
+                  width: "min(380px, calc(100vw - 24px))",
+                  height: 580,
+                  maxHeight: "calc(100vh - 140px - env(safe-area-inset-bottom))",
+                  transformOrigin: "bottom right",
+                  borderRadius: 20,
+                  overflow: "hidden",
+                  background: C.surface,
+                  fontFamily: FONT,
+                  color: C.ink,
+                  letterSpacing: "-0.015em",
+                  boxShadow:
+                    "0 20px 50px rgba(25, 31, 40, .14), 0 4px 12px rgba(25, 31, 40, .06)",
+                  transition:
+                    "opacity .28s cubic-bezier(.22,.61,.36,1), transform .32s cubic-bezier(.22,.61,.36,1)",
+                }
+          }
         >
           {/* ===== 헤더 ===== */}
           {activeRoom ? (
             <RoomHeader info={activeRoom} />
           ) : (
-            <ListHeader chatUnread={chatUnread} onCreateGroup={() => setCreateReq((n) => n + 1)} />
+            <ListHeader
+              chatUnread={chatUnread}
+              onCreateGroup={() => setCreateReq((n) => n + 1)}
+              onClose={isMobile ? () => setOpen(false) : undefined}
+            />
           )}
 
           {/* ===== 본문 — 설정 화면에서는 헤더가 얇아지므로 top을 50으로 올림 ===== */}
@@ -158,7 +202,8 @@ export default function ChatFab() {
         </div>
       )}
 
-      {/* ===== FAB ===== */}
+      {/* ===== FAB — 모바일 풀스크린 상태에선 헤더의 X로 닫으므로 숨김 ===== */}
+      {!(isMobile && open) && (
       <button
         type="button"
         onClick={toggle}
@@ -211,12 +256,21 @@ export default function ChatFab() {
           </span>
         )}
       </button>
+      )}
     </>
   );
 }
 
 /* ===== 목록용 헤더 ===== */
-function ListHeader({ chatUnread, onCreateGroup }: { chatUnread: number; onCreateGroup: () => void }) {
+function ListHeader({
+  chatUnread,
+  onCreateGroup,
+  onClose,
+}: {
+  chatUnread: number;
+  onCreateGroup: () => void;
+  onClose?: () => void;
+}) {
   return (
     <div
       style={{
@@ -224,10 +278,11 @@ function ListHeader({ chatUnread, onCreateGroup }: { chatUnread: number; onCreat
         display: "flex",
         alignItems: "flex-start",
         justifyContent: "space-between",
+        gap: 10,
         background: C.surface,
       }}
     >
-      <div>
+      <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 20, fontWeight: 700, color: C.ink, letterSpacing: "-0.02em", lineHeight: 1.2 }}>
           사내톡
         </div>
@@ -236,29 +291,53 @@ function ListHeader({ chatUnread, onCreateGroup }: { chatUnread: number; onCreat
         </div>
       </div>
 
-      <button
-        onClick={onCreateGroup}
-        title="새 그룹 만들기"
-        aria-label="새 그룹 만들기"
-        style={{
-          width: 38, height: 38, borderRadius: 999,
-          background: C.gray100, color: C.ink,
-          border: 0, cursor: "pointer",
-          display: "grid", placeItems: "center",
-          flexShrink: 0,
-          transition: "background .15s ease",
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = C.gray200)}
-        onMouseLeave={(e) => (e.currentTarget.style.background = C.gray100)}
-      >
-        {/* 사람 + 플러스 */}
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-          <circle cx="9" cy="7" r="4" />
-          <line x1="19" y1="8" x2="19" y2="14" />
-          <line x1="22" y1="11" x2="16" y2="11" />
-        </svg>
-      </button>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+        <button
+          onClick={onCreateGroup}
+          title="새 그룹 만들기"
+          aria-label="새 그룹 만들기"
+          style={{
+            width: 38, height: 38, borderRadius: 999,
+            background: C.gray100, color: C.ink,
+            border: 0, cursor: "pointer",
+            display: "grid", placeItems: "center",
+            flexShrink: 0,
+            transition: "background .15s ease",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = C.gray200)}
+          onMouseLeave={(e) => (e.currentTarget.style.background = C.gray100)}
+        >
+          {/* 사람 + 플러스 */}
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <line x1="19" y1="8" x2="19" y2="14" />
+            <line x1="22" y1="11" x2="16" y2="11" />
+          </svg>
+        </button>
+
+        {onClose && (
+          <button
+            onClick={onClose}
+            title="닫기"
+            aria-label="사내톡 닫기"
+            style={{
+              width: 38, height: 38, borderRadius: 999,
+              background: C.gray100, color: C.ink,
+              border: 0, cursor: "pointer",
+              display: "grid", placeItems: "center",
+              flexShrink: 0,
+              transition: "background .15s ease",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = C.gray200)}
+            onMouseLeave={(e) => (e.currentTarget.style.background = C.gray100)}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
