@@ -92,6 +92,43 @@ function createWindow() {
     mainWindow.webContents.openDevTools({ mode: "detach" });
   }
 
+  // 데모/스크린샷 전용 — HINEST_DEMO_UPDATE=1 로 실행하면 창 로드 직후 3초 뒤에
+  // 가짜 updateDownloaded IPC 이벤트를 쏴서 배너 UI 를 강제 표출.
+  // (실제 자동 업데이트 로직과 별개 — 실제 릴리스 확인은 autoUpdater 가 담당)
+  // HINEST_DEMO_UPDATE_HARD=1 까지 붙이면 /api/version 응답을 가로채서
+  // min 버전을 높게 리턴 → 하드 업데이트 모드 ("나중에" 없음, 무조건 재시작).
+  if (process.env.HINEST_DEMO_UPDATE === "1") {
+    if (process.env.HINEST_DEMO_UPDATE_HARD === "1") {
+      const fake = {
+        latest: "0.2.0",
+        min: "0.2.0",
+        releasedAt: new Date().toISOString(),
+        notes: "중요 보안 업데이트 — 즉시 적용이 필요합니다.",
+      };
+      const dataUrl =
+        "data:application/json," + encodeURIComponent(JSON.stringify(fake));
+      mainWindow.webContents.session.webRequest.onBeforeRequest(
+        (details, callback) => {
+          if (/\/api\/version(\?|$)/.test(details.url)) {
+            callback({ redirectURL: dataUrl });
+            return;
+          }
+          callback({});
+        }
+      );
+    }
+    mainWindow.webContents.once("did-finish-load", () => {
+      setTimeout(() => {
+        try {
+          mainWindow?.webContents.send("hinest:updateDownloaded", {
+            version: "0.2.0",
+            notes: "데모용 가짜 업데이트 이벤트 — 실제 새 버전 아님",
+          });
+        } catch {}
+      }, 3000);
+    });
+  }
+
   // 프로덕션에서도 DevTools 토글 허용 (WebAuthn/Touch ID 디버깅용)
   // ⌘⌥I (macOS) / Ctrl+Shift+I (기타)
   mainWindow.webContents.on("before-input-event", (_e, input) => {
