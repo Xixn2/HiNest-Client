@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, apiSWR } from "../api";
 import { useAuth } from "../auth";
 import DateTimePicker from "./DateTimePicker";
+import { confirmAsync, alertAsync } from "./ConfirmHost";
 
 type ProjectEvent = {
   id: string;
@@ -209,10 +210,23 @@ export default function ProjectCalendar({
   }
 
   async function removeEvent(id: string) {
-    if (!confirm("일정을 삭제하시겠습니까?")) return;
-    await api(`/api/project/${projectId}/events/${id}`, { method: "DELETE" });
+    const ok = await confirmAsync({
+      title: "일정 삭제",
+      description: "이 일정을 삭제할까요? 되돌릴 수 없어요.",
+      tone: "danger",
+      confirmLabel: "삭제",
+    });
+    if (!ok) return;
+    // 낙관적 제거.
+    const prev = events;
+    setEvents((xs) => xs.filter((x) => x.id !== id));
     setSelected(null);
-    load();
+    try {
+      await api(`/api/project/${projectId}/events/${id}`, { method: "DELETE" });
+    } catch (e: any) {
+      setEvents(prev);
+      alertAsync({ title: "삭제 실패", description: e?.message ?? "일정 삭제에 실패했어요" });
+    }
   }
 
   /**

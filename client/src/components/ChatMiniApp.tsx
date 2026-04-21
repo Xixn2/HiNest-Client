@@ -3,6 +3,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { useNotifications } from "../notifications";
 import { resolvePresence } from "../lib/presence";
+import { alertAsync } from "./ConfirmHost";
 import {
   C,
   FONT,
@@ -372,7 +373,10 @@ export default function ChatMiniApp({
   async function uploadFile(file: File): Promise<Attachment | null> {
     // 채팅 첨부는 서버에서 100MB 까지만 받음. 미리 걸러 사용자 경험을 개선.
     if (file.size > 100 * 1024 * 1024) {
-      alert("채팅 첨부는 100MB 이하만 가능해요. 더 큰 파일은 문서함으로 공유해주세요.");
+      alertAsync({
+        title: "파일 크기 초과",
+        description: "채팅 첨부는 100MB 이하만 가능해요. 더 큰 파일은 문서함으로 공유해주세요.",
+      });
       return null;
     }
     const form = new FormData();
@@ -384,7 +388,7 @@ export default function ChatMiniApp({
       const j = await r.json();
       return { url: j.url, name: j.name, type: j.type, size: j.size, kind: j.kind };
     } catch {
-      alert("파일 업로드에 실패했어요");
+      alertAsync({ title: "업로드 실패", description: "파일 업로드에 실패했어요" });
       return null;
     } finally {
       setUploading(false);

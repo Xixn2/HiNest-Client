@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, apiSWR } from "../api";
+import { confirmAsync, alertAsync, promptAsync } from "./ConfirmHost";
 
 type Channel = {
   id: string;
@@ -81,14 +82,25 @@ export default function ProjectWebhooks({ projectId }: { projectId: string }) {
   }
 
   async function removeChannel(id: string) {
-    if (!confirm("채널을 삭제하시겠습니까? 기존 URL 은 즉시 무효화됩니다.")) return;
+    const ok = await confirmAsync({
+      title: "웹훅 채널 삭제",
+      description: "이 채널을 삭제할까요? 기존 URL 은 즉시 무효화돼요.",
+      tone: "danger",
+      confirmLabel: "삭제",
+    });
+    if (!ok) return;
     await api(`/api/project/${projectId}/webhook/${id}`, { method: "DELETE" });
     if (selected?.id === id) setSelected(null);
     load();
   }
 
   async function rotateToken(id: string) {
-    if (!confirm("URL 을 재발급하시겠습니까? 기존 URL 은 더 이상 동작하지 않습니다.")) return;
+    const ok = await confirmAsync({
+      title: "URL 재발급",
+      description: "URL 을 재발급할까요? 기존 URL 은 더 이상 동작하지 않아요.",
+      confirmLabel: "재발급",
+    });
+    if (!ok) return;
     const r = await api<{ channel: Channel }>(`/api/project/${projectId}/webhook/${id}/rotate`, { method: "POST" });
     if (selected?.id === id) setSelected(r.channel);
     load();
@@ -100,9 +112,15 @@ export default function ProjectWebhooks({ projectId }: { projectId: string }) {
   async function copyUrl(token: string) {
     try {
       await navigator.clipboard.writeText(webhookUrlFor(token));
-      alert("URL 을 복사했습니다.");
+      alertAsync({ title: "복사 완료", description: "URL 을 클립보드에 복사했어요." });
     } catch {
-      prompt("URL 을 복사해주세요", webhookUrlFor(token));
+      // 클립보드 API 가 막힌 환경(구버전 Safari 등) — 대체로 promptAsync 로 사용자가 직접 복사하도록.
+      await promptAsync({
+        title: "URL 복사",
+        description: "아래 URL 을 복사해주세요.",
+        defaultValue: webhookUrlFor(token),
+        confirmLabel: "닫기",
+      });
     }
   }
 

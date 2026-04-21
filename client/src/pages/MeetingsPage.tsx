@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, apiSWR, invalidateCache } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
+import { alertAsync } from "../components/ConfirmHost";
 
 type MeetingRow = {
   id: string;
@@ -72,7 +73,7 @@ export default function MeetingsPage() {
       invalidateCache("/api/meeting");
       nav(`/meetings/${r.meeting.id}?edit=1`);
     } catch (e: any) {
-      alert(e?.message ?? "회의록 생성 실패");
+      alertAsync({ title: "생성 실패", description: e?.message ?? "회의록 생성 실패" });
     } finally {
       setCreating(false);
     }

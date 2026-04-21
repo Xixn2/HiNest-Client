@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, apiSWR } from "../api";
 import { useAuth } from "../auth";
+import { confirmAsync, alertAsync } from "../components/ConfirmHost";
 // TipTap 에디터는 ~300KB 덩어리 — 회의록 상세 페이지 안에서 다시 한 번 나눠서
 // 제목/메타/공개범위 UI 가 먼저 보이고, 에디터는 뒤따라 로드되도록 함.
 const MeetingEditor = lazy(() => import("../components/MeetingEditor"));
@@ -162,13 +163,19 @@ export default function MeetingDetailPage() {
   const [deleting, setDeleting] = useState(false);
   async function remove() {
     if (!meeting || !canEdit || deleting) return;
-    if (!confirm("이 회의록을 삭제할까요? 되돌릴 수 없습니다.")) return;
+    const ok = await confirmAsync({
+      title: "회의록 삭제",
+      description: "이 회의록을 삭제할까요? 되돌릴 수 없어요.",
+      tone: "danger",
+      confirmLabel: "삭제",
+    });
+    if (!ok) return;
     setDeleting(true);
     try {
       await api(`/api/meeting/${meeting.id}`, { method: "DELETE" });
       nav("/meetings");
     } catch (e: any) {
-      alert(e?.message ?? "삭제 실패");
+      alertAsync({ title: "삭제 실패", description: e?.message ?? "삭제 실패" });
       setDeleting(false);
     }
   }

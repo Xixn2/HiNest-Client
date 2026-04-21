@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
 import InstallAppBanner from "../components/InstallAppBanner";
+import { confirmAsync, alertAsync } from "../components/ConfirmHost";
 
 type Notice = { id: string; title: string; content: string; createdAt: string; author: { name: string }; pinned: boolean };
 type Event = { id: string; title: string; startAt: string; endAt: string; scope: string; color: string };
@@ -45,12 +46,20 @@ export default function DashboardPage() {
     } catch (err: any) {
       // 이미 퇴근 처리된 날 → 서버가 409 ALREADY_CHECKED_OUT 로 재확인 요청.
       if (err?.code === "ALREADY_CHECKED_OUT") {
-        if (!confirm("오늘은 이미 퇴근 처리되었어요. 재출근으로 덮어쓸까요?\n(기존 퇴근 시각이 초기화됩니다)")) {
+        const ok = await confirmAsync({
+          title: "재출근",
+          description: "오늘은 이미 퇴근 처리되었어요. 재출근으로 덮어쓸까요?\n(기존 퇴근 시각이 초기화됩니다)",
+          confirmLabel: "재출근",
+        });
+        if (!ok) return;
+        try {
+          await api("/api/attendance/check-in", { method: "POST", json: { force: true } });
+        } catch (e: any) {
+          alertAsync({ title: "출근 실패", description: e?.message ?? "출근 처리에 실패했어요" });
           return;
         }
-        await api("/api/attendance/check-in", { method: "POST", json: { force: true } });
       } else {
-        alert(err?.message ?? "출근 처리에 실패했어요");
+        alertAsync({ title: "출근 실패", description: err?.message ?? "출근 처리에 실패했어요" });
         return;
       }
     }
@@ -60,7 +69,7 @@ export default function DashboardPage() {
     try {
       await api("/api/attendance/check-out", { method: "POST" });
     } catch (err: any) {
-      alert(err?.message ?? "퇴근 처리에 실패했어요");
+      alertAsync({ title: "퇴근 실패", description: err?.message ?? "퇴근 처리에 실패했어요" });
       return;
     }
     load();

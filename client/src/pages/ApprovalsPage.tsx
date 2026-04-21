@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
 import DateTimePicker from "../components/DateTimePicker";
+import { alertAsync } from "../components/ConfirmHost";
 
 type ApprovalType = "TRIP" | "OFFSITE" | "EXPENSE" | "PURCHASE" | "GENERAL" | "OTHER";
 type Step = {
@@ -114,7 +115,7 @@ export default function ApprovalsPage() {
       await api(`/api/approval/${id}/act`, { method: "POST", json: { action } });
       await load();
     } catch (err: any) {
-      alert(err?.message ?? "처리에 실패했어요");
+      alertAsync({ title: "처리 실패", description: err?.message ?? "처리에 실패했어요" });
     } finally {
       setActingId(null);
     }
@@ -132,7 +133,7 @@ export default function ApprovalsPage() {
       });
       await load();
     } catch (err: any) {
-      alert(err?.message ?? "반려에 실패했어요");
+      alertAsync({ title: "반려 실패", description: err?.message ?? "반려에 실패했어요" });
     } finally {
       setActingId(null);
       setRejectComment("");
@@ -153,7 +154,7 @@ export default function ApprovalsPage() {
       await api(`/api/approval/${id}/cancel`, { method: "POST" });
       await load();
     } catch (err: any) {
-      alert(err?.message ?? "취소에 실패했어요");
+      alertAsync({ title: "취소 실패", description: err?.message ?? "취소에 실패했어요" });
     } finally {
       setActingId(null);
     }

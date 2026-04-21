@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
+import { alertAsync } from "../components/ConfirmHost";
 
 type DirUser = {
   id: string;
@@ -84,7 +85,7 @@ export default function OrgChartPage() {
       window.dispatchEvent(new CustomEvent("chat:open"));
       window.dispatchEvent(new CustomEvent("chat:open-room", { detail: { roomId: res.room.id } }));
     } catch (err: any) {
-      alert(err?.message ?? "대화 시작에 실패했어요");
+      alertAsync({ title: "대화 시작 실패", description: err?.message ?? "대화 시작에 실패했어요" });
     } finally {
       setDmBusyId(null);
     }

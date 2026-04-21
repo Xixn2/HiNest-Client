@@ -150,7 +150,10 @@ export function openPrintable<T>(
 ) {
   const w = window.open("", "_blank", "width=900,height=700");
   if (!w) {
-    alert("팝업이 차단되었습니다. 팝업 허용 후 다시 시도해주세요.");
+    // 동적 import 로 순환 의존성 피함 (ConfirmHost 는 React 컴포넌트).
+    import("../components/ConfirmHost").then(({ alertAsync }) => {
+      alertAsync({ title: "팝업 차단", description: "팝업이 차단되었어요. 팝업 허용 후 다시 시도해주세요." });
+    });
     return;
   }
   const now = meta?.generatedAt ?? new Date();

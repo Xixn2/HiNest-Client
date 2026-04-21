@@ -3,6 +3,7 @@ import { api, apiSWR } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
 import { resolvePresence, type PresenceStatus, type WorkStatus } from "../lib/presence";
+import { alertAsync } from "../components/ConfirmHost";
 
 type DirectoryUser = {
   id: string;
@@ -86,7 +87,7 @@ export default function DirectoryPage() {
       window.dispatchEvent(new CustomEvent("chat:open"));
       window.dispatchEvent(new CustomEvent("chat:open-room", { detail: { roomId: res.room.id } }));
     } catch (err: any) {
-      alert(err?.message ?? "대화 시작에 실패했어요");
+      alertAsync({ title: "대화 시작 실패", description: err?.message ?? "대화 시작에 실패했어요" });
     } finally {
       setDmBusyId(null);
     }

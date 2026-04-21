@@ -4,6 +4,7 @@ import PageHeader from "../components/PageHeader";
 import { useAuth } from "../auth";
 import MonthPicker from "../components/MonthPicker";
 import DateTimePicker from "../components/DateTimePicker";
+import { alertAsync } from "../components/ConfirmHost";
 
 type Attendance = {
   id: string;
@@ -75,9 +76,14 @@ export default function AttendancePage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (saving) return;
-    if (!form.startDate || !form.endDate) return alert("시작/종료일을 선택해주세요");
-    if (new Date(form.endDate) < new Date(form.startDate))
-      return alert("종료일이 시작일보다 빨라요");
+    if (!form.startDate || !form.endDate) {
+      await alertAsync({ title: "입력 확인", description: "시작/종료일을 선택해주세요" });
+      return;
+    }
+    if (new Date(form.endDate) < new Date(form.startDate)) {
+      await alertAsync({ title: "날짜 확인", description: "종료일이 시작일보다 빨라요" });
+      return;
+    }
     setSaving(true);
     try {
       await api("/api/attendance/leave", { method: "POST", json: form });
@@ -85,7 +91,7 @@ export default function AttendancePage() {
       setForm({ type: "ANNUAL", startDate: "", endDate: "", reason: "" });
       await load();
     } catch (err: any) {
-      alert(err?.message ?? "휴가 신청에 실패했어요");
+      alertAsync({ title: "신청 실패", description: err?.message ?? "휴가 신청에 실패했어요" });
     } finally {
       setSaving(false);
     }
@@ -98,7 +104,7 @@ export default function AttendancePage() {
       await api(`/api/attendance/leave/${id}`, { method: "PATCH", json: { status } });
       await load();
     } catch (err: any) {
-      alert(err?.message ?? "승인·반려에 실패했어요");
+      alertAsync({ title: "처리 실패", description: err?.message ?? "승인·반려에 실패했어요" });
     } finally {
       setReviewingId(null);
     }

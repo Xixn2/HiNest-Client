@@ -4,6 +4,7 @@ import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
 import { getHoliday } from "../lib/holidays";
 import DateTimePicker from "../components/DateTimePicker";
+import { confirmAsync, alertAsync } from "../components/ConfirmHost";
 
 export type Category =
   | "MEETING" | "DEADLINE" | "OUT" | "HOLIDAY" | "EVENT"
@@ -55,17 +56,21 @@ export default function SchedulePage() {
   const [saving, setSaving] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
 
-  async function load() {
+  async function load(aliveRef?: { current: boolean }) {
     const from = startOfMonth(cursor).toISOString();
     const to = endOfMonth(cursor).toISOString();
     const res = await api<{ events: Event[] }>(
       `/api/schedule?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
     );
+    if (aliveRef && !aliveRef.current) return;
     setEvents(res.events);
   }
 
+  // cursor 빠르게 넘길 때 이전 달 응답이 나중에 와서 덮는 레이스 방지.
   useEffect(() => {
-    load();
+    const aliveRef = { current: true };
+    load(aliveRef);
+    return () => { aliveRef.current = false; };
   }, [cursor]);
 
   const days = useMemo(() => {
@@ -91,11 +96,18 @@ export default function SchedulePage() {
   async function create(e: React.FormEvent) {
     e.preventDefault();
     if (saving) return;
-    if (!form.startAt || !form.endAt) return alert("시작/종료 시각을 선택해주세요");
-    if (form.scope === "TARGETED" && form.targetUserIds.length === 0)
-      return alert("대상 인원을 1명 이상 선택해주세요");
-    if (new Date(form.endAt).getTime() < new Date(form.startAt).getTime())
-      return alert("종료 시각이 시작 시각보다 빨라요");
+    if (!form.startAt || !form.endAt) {
+      await alertAsync({ title: "입력 확인", description: "시작/종료 시각을 선택해주세요" });
+      return;
+    }
+    if (form.scope === "TARGETED" && form.targetUserIds.length === 0) {
+      await alertAsync({ title: "대상 확인", description: "대상 인원을 1명 이상 선택해주세요" });
+      return;
+    }
+    if (new Date(form.endAt).getTime() < new Date(form.startAt).getTime()) {
+      await alertAsync({ title: "시간 확인", description: "종료 시각이 시작 시각보다 빨라요" });
+      return;
+    }
     setSaving(true);
     try {
       await api("/api/schedule", {
@@ -119,7 +131,7 @@ export default function SchedulePage() {
       });
       await load();
     } catch (err: any) {
-      alert(err?.message ?? "일정 등록에 실패했어요");
+      alertAsync({ title: "등록 실패", description: err?.message ?? "일정 등록에 실패했어요" });
     } finally {
       setSaving(false);
     }
@@ -127,13 +139,22 @@ export default function SchedulePage() {
 
   async function remove(id: string) {
     if (removingId) return;
-    if (!confirm("삭제하시겠습니까?")) return;
+    const ok = await confirmAsync({
+      title: "일정 삭제",
+      description: "이 일정을 삭제할까요? 되돌릴 수 없어요.",
+      tone: "danger",
+      confirmLabel: "삭제",
+    });
+    if (!ok) return;
     setRemovingId(id);
+    // 낙관적 제거.
+    const prev = events;
+    setEvents((xs) => xs.filter((x) => x.id !== id));
     try {
       await api(`/api/schedule/${id}`, { method: "DELETE" });
-      await load();
     } catch (err: any) {
-      alert(err?.message ?? "일정 삭제에 실패했어요");
+      setEvents(prev);
+      alertAsync({ title: "삭제 실패", description: err?.message ?? "일정 삭제에 실패했어요" });
     } finally {
       setRemovingId(null);
     }
