@@ -367,6 +367,11 @@ export default function ChatMiniApp({
   }, [creatingGroup]);
 
   async function uploadFile(file: File): Promise<Attachment | null> {
+    // 채팅 첨부는 서버에서 100MB 까지만 받음. 미리 걸러 사용자 경험을 개선.
+    if (file.size > 100 * 1024 * 1024) {
+      alert("채팅 첨부는 100MB 이하만 가능해요. 더 큰 파일은 문서함으로 공유해주세요.");
+      return null;
+    }
     const form = new FormData();
     form.append("file", file);
     setUploading(true);

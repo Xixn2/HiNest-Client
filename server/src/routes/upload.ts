@@ -47,36 +47,40 @@ function safeExt(name: string) {
   return path.extname(base).toLowerCase();
 }
 
-// 메모리 스토리지 — 50MB 제한이라 RAM 부담 적음. 디스크 미경유 정책과 맞물림.
+// 메모리 스토리지 — 용도별로 한도가 다름.
+//  - 채팅/범용(`/api/upload`)       : 100MB
+//  - 문서함  (`/api/upload/document`) : 500MB (큰 파일이 자주 오가는 문서함 전용)
+// 참고: memoryStorage 는 전체 파일을 RAM 에 올려두므로, 500MB 동시 업로드가 겹치면
+//       Fargate 태스크 RAM(현재 설정 확인 필요) 을 초과할 위험이 있음. 더 키우고 싶다면
+//       S3 multipart presigned URL 로 브라우저 → S3 직업로드 경로로 바꾸는 게 정석.
 const storage = multer.memoryStorage();
 
-const upload = multer({
-  storage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
-  fileFilter: (_req: any, file: any, cb: any) => {
-    const ext = safeExt(fixName(file.originalname || ""));
-    if (BLOCKED_EXTS.has(ext)) {
-      return cb(new Error(`허용되지 않는 파일 형식입니다 (${ext})`));
-    }
-    const mime = String(file.mimetype || "").toLowerCase();
-    if (BLOCKED_MIME_PREFIXES.some((p) => mime.startsWith(p))) {
-      return cb(new Error(`허용되지 않는 MIME 형식입니다 (${mime})`));
-    }
-    cb(null, true);
-  },
-});
+function buildUploader(maxBytes: number) {
+  return multer({
+    storage,
+    limits: { fileSize: maxBytes },
+    fileFilter: (_req: any, file: any, cb: any) => {
+      const ext = safeExt(fixName(file.originalname || ""));
+      if (BLOCKED_EXTS.has(ext)) {
+        return cb(new Error(`허용되지 않는 파일 형식입니다 (${ext})`));
+      }
+      const mime = String(file.mimetype || "").toLowerCase();
+      if (BLOCKED_MIME_PREFIXES.some((p) => mime.startsWith(p))) {
+        return cb(new Error(`허용되지 않는 MIME 형식입니다 (${mime})`));
+      }
+      cb(null, true);
+    },
+  });
+}
+
+const uploadChat     = buildUploader(100 * 1024 * 1024); // 100MB
+const uploadDocument = buildUploader(500 * 1024 * 1024); // 500MB
 
 const router = Router();
 router.use(requireAuth);
 
-router.post("/", (req, res, next) => {
-  upload.single("file")(req, res, (err: any) => {
-    if (err) {
-      return res.status(400).json({ error: err.message ?? "업로드 실패" });
-    }
-    next();
-  });
-}, async (req, res) => {
+// 업로드 후 스토리지에 저장하고 JSON 으로 URL/메타데이터를 내려주는 공용 핸들러.
+async function storeAndRespond(req: any, res: any) {
   const f = (req as any).file as {
     buffer: Buffer;
     originalname: string;
@@ -114,7 +118,25 @@ router.post("/", (req, res, next) => {
     size: f.size,
     kind,
   });
-});
+}
+
+// multer 미들웨어에서 발생한 에러(파일 크기 초과 등)를 400 JSON 으로 돌려준다.
+function runUploader(uploader: ReturnType<typeof buildUploader>) {
+  return (req: any, res: any, next: any) => {
+    uploader.single("file")(req, res, (err: any) => {
+      if (err) {
+        return res.status(400).json({ error: err.message ?? "업로드 실패" });
+      }
+      next();
+    });
+  };
+}
+
+// 문서함 전용(500MB) — 반드시 범용 라우트보다 먼저 선언해야 `/` 매치보다 앞섬.
+router.post("/document", runUploader(uploadDocument), storeAndRespond);
+
+// 채팅/범용(100MB) — 기존 `/api/upload` 를 그대로 유지해 채팅 클라 변경 불필요.
+router.post("/", runUploader(uploadChat), storeAndRespond);
 
 export default router;
 export { UPLOAD_DIR };
