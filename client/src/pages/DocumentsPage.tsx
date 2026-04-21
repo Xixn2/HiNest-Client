@@ -514,7 +514,7 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
         </div>
       ) : (
         <div className="panel p-0 overflow-hidden overflow-x-auto">
-          <table className="pro">
+          <table className="pro min-w-[760px]">
             <thead>
               <tr>
                 <th>제목</th>

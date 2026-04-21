@@ -93,7 +93,7 @@ export default function JournalPage() {
         <div className="lg:col-span-2 card">
           {editing ? (
             <form onSubmit={create} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="label">날짜</label>
                   <DateTimePicker mode="date" value={form.date} onChange={(v) => setForm({ ...form, date: v })} />
