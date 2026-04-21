@@ -159,6 +159,10 @@ html.dark .panel {
 }
 .card { @apply panel; padding: 20px; }
 .card-tight { @apply panel; padding: 14px; }
+@media (max-width: 640px) {
+  .card { padding: 14px; }
+  .card-tight { padding: 10px; }
+}
 
 .section-head {
   display: flex;
@@ -166,6 +170,10 @@ html.dark .panel {
   justify-content: space-between;
   padding: 14px 20px;
   border-bottom: 1px solid var(--c-border);
+  gap: 8px;
+}
+@media (max-width: 640px) {
+  .section-head { padding: 12px 14px; }
 }
 .section-head .title {
   font-size: 14px; font-weight: 700;

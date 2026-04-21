@@ -102,7 +102,7 @@ export default function MonthPicker({ value, onChange, min, max, className }: Pr
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-2 panel shadow-pop p-3 w-[280px]">
+        <div className="absolute right-0 sm:right-auto sm:left-0 z-50 mt-2 panel shadow-pop p-3 w-[280px] max-w-[calc(100vw-16px)]">
           <div className="flex items-center justify-between mb-2">
             <button
               type="button"

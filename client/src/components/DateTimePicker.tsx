@@ -96,9 +96,13 @@ export default function DateTimePicker({
       const el = triggerRef.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
-      const PW = mode === "datetime" ? 560 : 320; // 팝오버 폭
-      const PH = 400; // 대략 높이
       const margin = 8;
+      // 모바일(좁은 뷰포트)에서는 팝오버를 화면 폭에 맞춰 축소하고
+      // datetime 모드에서도 시간 영역을 캘린더 아래로 쌓는다.
+      const maxW = window.innerWidth - margin * 2;
+      const idealW = mode === "datetime" ? 560 : 320;
+      const PW = Math.min(idealW, maxW);
+      const PH = 400; // 대략 높이
       let left = r.left;
       let top = r.bottom + 6;
       if (left + PW > window.innerWidth - margin) {
@@ -211,7 +215,7 @@ export default function DateTimePicker({
           className="fixed z-[70] panel shadow-pop p-3"
           style={{ top: popoverPos.top, left: popoverPos.left, width: popoverPos.width }}
         >
-          <div className="flex gap-4">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
             {/* 캘린더 영역 */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between mb-2">
@@ -302,7 +306,7 @@ export default function DateTimePicker({
 
             {/* 시간 영역 (datetime 전용) */}
             {mode === "datetime" && (
-              <div className="w-[180px] border-l border-ink-100 pl-3">
+              <div className="w-full sm:w-[180px] sm:border-l border-t sm:border-t-0 border-ink-100 sm:pl-3 pt-3 sm:pt-0">
                 <div className="text-[12px] font-bold text-ink-800 mb-2">시간</div>
 
                 {/* 시 + 분 큰 숫자 */}

@@ -113,7 +113,7 @@ export default function ExpensePage() {
         title="법인카드 사용내역"
         description="법인카드 사용건을 등록하고 영수증을 첨부합니다."
         right={
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-wrap">
             <MonthPicker value={month} onChange={setMonth} />
             {isReviewer && (
               <select className="input" value={scope} onChange={(e) => setScope(e.target.value as any)}>
@@ -121,7 +121,7 @@ export default function ExpensePage() {
                 <option value="all">전체</option>
               </select>
             )}
-            <button className="btn-primary btn-lg" onClick={() => setOpen(true)}>
+            <button className="btn-primary" onClick={() => setOpen(true)}>
               + 사용내역 등록
             </button>
           </div>
@@ -243,7 +243,7 @@ export default function ExpensePage() {
           <div className="card w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4">법인카드 사용내역 등록</h3>
             <form onSubmit={submit} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="label">사용일시</label>
                   <DateTimePicker value={form.usedAt} onChange={(v) => setForm({ ...form, usedAt: v })} />
@@ -253,7 +253,7 @@ export default function ExpensePage() {
                   <input type="number" className="input" value={form.amount} onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })} required min={0} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="label">사용처</label>
                   <input className="input" value={form.merchant} onChange={(e) => setForm({ ...form, merchant: e.target.value })} required />
