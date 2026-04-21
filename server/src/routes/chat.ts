@@ -16,17 +16,39 @@ import { publishMany } from "../lib/sse.js";
  *  - chat:room        — 방 생성/멤버 변화 등 방 목록 재조회가 필요할 때
  *
  * 수신 대상: 해당 방의 RoomMember 전부 (본인 포함 — 다른 탭/데스크톱 동기화).
+ *
+ * ⚡ 성능 메모:
+ *  1) 호출자는 await 하지 않는다 — DB 조회/SSE write 가 요청 응답을 막지 않도록
+ *     fire-and-forget 으로 처리. 실패해도 클라의 증분 폴링이 안전망.
+ *  2) 방 멤버는 5초 메모리 캐시로 재사용 (메시지 연속 전송 시 findMany N회 → 1회).
+ *     멤버 변경 시 invalidateRoomMembers(roomId) 로 즉시 무효화.
  */
-async function broadcastToRoom(roomId: string, event: "chat:message" | "chat:update" | "chat:room", data: unknown) {
-  try {
-    const members = await prisma.roomMember.findMany({
-      where: { roomId },
-      select: { userId: true },
-    });
-    publishMany(members.map((m) => m.userId), event, data);
-  } catch {
-    // SSE 실패해도 요청 흐름은 막지 않는다 — 클라 증분 폴링이 안전망.
-  }
+const MEMBER_CACHE_TTL_MS = 5_000;
+const memberCache = new Map<string, { at: number; ids: string[] }>();
+
+export function invalidateRoomMembers(roomId: string) {
+  memberCache.delete(roomId);
+}
+
+async function getRoomMemberIds(roomId: string): Promise<string[]> {
+  const hit = memberCache.get(roomId);
+  if (hit && Date.now() - hit.at < MEMBER_CACHE_TTL_MS) return hit.ids;
+  const members = await prisma.roomMember.findMany({
+    where: { roomId },
+    select: { userId: true },
+  });
+  const ids = members.map((m) => m.userId);
+  memberCache.set(roomId, { at: Date.now(), ids });
+  return ids;
+}
+
+function broadcastToRoom(roomId: string, event: "chat:message" | "chat:update" | "chat:room", data: unknown) {
+  // 응답 플러시를 절대 막지 않도록 마이크로태스크로 분리.
+  queueMicrotask(() => {
+    getRoomMemberIds(roomId)
+      .then((ids) => publishMany(ids, event, data))
+      .catch(() => {});
+  });
 }
 
 const router = Router();
@@ -126,7 +148,7 @@ router.post("/rooms", async (req, res) => {
     });
     await writeLog(u.id, "DM_CREATE", room.id, `with:${other}`);
     // 방 생성 직후 — 상대방 클라이언트가 rooms 목록을 다시 받을 수 있도록 신호.
-    await broadcastToRoom(room.id, "chat:room", { kind: "create", roomId: room.id });
+    broadcastToRoom(room.id, "chat:room", { kind: "create", roomId: room.id });
     return res.json({ room });
   }
 
@@ -144,7 +166,7 @@ router.post("/rooms", async (req, res) => {
     },
   });
   await writeLog(u.id, "ROOM_CREATE", room.id, `${d.type}:${d.name}`);
-  await broadcastToRoom(room.id, "chat:room", { kind: "create", roomId: room.id });
+  broadcastToRoom(room.id, "chat:room", { kind: "create", roomId: room.id });
   res.json({ room });
 });
 
@@ -384,7 +406,7 @@ router.post("/rooms/:id/messages", async (req, res) => {
 
   // SSE 즉시 푸시 — 예약 메시지는 실제 발송 시점까지 숨김.
   if (!scheduledAt) {
-    await broadcastToRoom(req.params.id, "chat:message", { message: msg });
+    broadcastToRoom(req.params.id, "chat:message", { message: msg });
   }
 
   // 알림 정책
@@ -452,7 +474,7 @@ router.post("/messages/:id/reactions", async (req, res) => {
     where: { messageId: msg.id },
     select: { userId: true, emoji: true, user: { select: { name: true } } },
   });
-  await broadcastToRoom(msg.roomId, "chat:update", {
+  broadcastToRoom(msg.roomId, "chat:update", {
     kind: "reactions",
     messageId: msg.id,
     reactions: list,
@@ -484,7 +506,7 @@ router.patch("/messages/:id", async (req, res) => {
     data,
     include: { sender: { select: { id: true, name: true, avatarColor: true } } },
   });
-  await broadcastToRoom(msg.roomId, "chat:update", { kind: "edit", message: updated });
+  broadcastToRoom(msg.roomId, "chat:update", { kind: "edit", message: updated });
   res.json({ message: updated });
 });
 
@@ -509,7 +531,7 @@ router.post("/messages/:id/pin", async (req, res) => {
     },
     include: { sender: { select: { id: true, name: true, avatarColor: true } } },
   });
-  await broadcastToRoom(msg.roomId, "chat:update", { kind: "pin", message: updated });
+  broadcastToRoom(msg.roomId, "chat:update", { kind: "pin", message: updated });
   res.json({ message: updated });
 });
 
@@ -526,7 +548,7 @@ router.delete("/messages/:id", async (req, res) => {
     where: { id: msg.id },
     data: { deletedAt: new Date() },
   });
-  await broadcastToRoom(msg.roomId, "chat:update", { kind: "delete", messageId: msg.id });
+  broadcastToRoom(msg.roomId, "chat:update", { kind: "delete", messageId: msg.id });
   res.json({ ok: true, message: updated });
 });
 

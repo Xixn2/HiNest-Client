@@ -205,10 +205,9 @@ export default function ChatMiniApp({
   }, [openRoomRequest?.id]);
   useEffect(() => {
     if (!isPanelOpen) return;
-    // 방 목록은 대화방을 열어두고 있을 땐 10초, 리스트 화면일 땐 5초.
-    // 대화방 안에서는 rooms 가 단순 사이드메타라 덜 자주 폴링해도 체감 무관.
-    const interval = activeId ? 10_000 : 5_000;
-    const t = setInterval(loadRooms, interval);
+    // SSE (chat:sse-message / chat:sse-room) 가 primary path — 방 목록은
+    // 상태 확인용 안전망으로 60초만 돈다 (기존 5~10s 는 SSE 와 충돌해 느림의 원인).
+    const t = setInterval(loadRooms, 60_000);
     return () => clearInterval(t);
   }, [isPanelOpen, activeId]);
   useEffect(() => {
@@ -221,17 +220,16 @@ export default function ChatMiniApp({
       markRead(activeId);
       markRoomRead(activeId);
     }
-    // SSE 가 정상이면 실시간 푸시로 새 메시지/수정이 들어온다. 폴링은 안전망:
-    // - 새 메시지 증분 조회 주기 10초 (SSE 끊김 시 최대 10초 지연으로 복구)
-    // - 30초마다 full 동기화로 편집/삭제/리액션 누락도 회수
-    // - 포커스 복귀 / visibility 변화 시 즉시 full 재조회
+    // SSE 가 primary path — 폴링은 SSE 끊김·누락 대비 안전망으로만 돈다.
+    // 기존 10s 폴링은 SSE 푸시와 경쟁해 체감 지연의 원인이었다 (같은 데이터 2번 왕복).
+    // 지금은 30s 간격으로 증분 조회, 90s 마다 한 번 full 동기화 + read 마킹.
     let tick = 0;
     const t = setInterval(() => {
       tick++;
-      const full = tick % 3 === 0; // 30초마다 full
+      const full = tick % 3 === 0; // 90초마다 full
       loadMessages(activeId, { full });
       if (isChatVisible()) markRead(activeId);
-    }, 10_000);
+    }, 30_000);
     return () => clearInterval(t);
   }, [activeId, isPanelOpen]);
 
@@ -247,8 +245,22 @@ export default function ChatMiniApp({
         setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
         if (isChatVisible()) markRead(msg.roomId);
       }
-      // rooms 리스트의 마지막 메시지/정렬 갱신
-      loadRooms();
+      // rooms 리스트 — 이전엔 loadRooms() 로 매 메시지마다 서버 왕복했는데,
+      // 이게 수신자 체감 지연의 핵심 원인이었다. 이제는 들어온 메시지를 해당 방의
+      // 마지막 메시지 프리뷰로 로컬에서 즉시 덮어쓰고, 방을 목록 최상단으로 올린다.
+      setRooms((prev) => {
+        const idx = prev.findIndex((r) => r.id === msg.roomId);
+        if (idx < 0) return prev; // 내가 멤버가 아닌 방이면 무시
+        const room = prev[idx];
+        const updated: Room = { ...room, messages: [msg as any] };
+        // 활성 방이 아니면 최상단으로 끌어올려 정렬 (최근 대화 우선)
+        if (msg.roomId === activeId) {
+          const next = prev.slice();
+          next[idx] = updated;
+          return next;
+        }
+        return [updated, ...prev.slice(0, idx), ...prev.slice(idx + 1)];
+      });
     };
     const onUpdate = (e: Event) => {
       const detail = (e as CustomEvent).detail as
@@ -396,8 +408,9 @@ export default function ChatMiniApp({
         method: "POST",
         json: { emoji },
       });
-      if (activeId) loadMessages(activeId, { full: true });
+      // SSE 가 chat:update(kind:"reactions") 를 푸시해 동기화 — 성공 시 추가 조회 불필요.
     } catch {
+      // 실패 시엔 낙관적 상태를 되돌리기 위해 full 재조회
       if (activeId) loadMessages(activeId, { full: true });
     }
   }
@@ -411,7 +424,7 @@ export default function ChatMiniApp({
     ));
     try {
       await api(`/api/chat/messages/${messageId}/pin`, { method: "POST" });
-      if (activeId) loadMessages(activeId, { full: true });
+      // SSE chat:update(kind:"pin") 로 동기화.
     } catch {
       if (activeId) loadMessages(activeId, { full: true });
     }
@@ -427,11 +440,15 @@ export default function ChatMiniApp({
     setAttachments([]);
     setSending(true);
     try {
+      // 전송 응답에 서버가 만든 메시지가 그대로 담겨온다. SSE 도 같은 메시지를
+      // 로컬로 다시 푸시하므로 즉시 낙관적 append — dedup 은 message.id 기준.
+      const appendLocal = (m: Message) => {
+        setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+      };
       if (prevAttachments.length > 0) {
-        // 첫 첨부에 텍스트를 같이 실어 보내고, 나머지는 첨부만 순차 전송.
         for (let i = 0; i < prevAttachments.length; i++) {
           const a = prevAttachments[i];
-          await api(`/api/chat/rooms/${activeId}/messages`, {
+          const r = await api<{ message: Message }>(`/api/chat/rooms/${activeId}/messages`, {
             method: "POST",
             json: {
               content: i === 0 ? content : "",
@@ -442,14 +459,16 @@ export default function ChatMiniApp({
               fileSize: a.size,
             },
           });
+          if (r?.message) appendLocal(r.message);
         }
       } else {
-        await api(`/api/chat/rooms/${activeId}/messages`, {
+        const r = await api<{ message: Message }>(`/api/chat/rooms/${activeId}/messages`, {
           method: "POST",
           json: { content, kind: "TEXT" },
         });
+        if (r?.message) appendLocal(r.message);
       }
-      await loadMessages(activeId);
+      // ← 전체 loadMessages 재조회 제거. SSE + 낙관적 append 로 이미 최신 상태.
     } catch {
       setInput(prevInput);
       setAttachments(prevAttachments);
