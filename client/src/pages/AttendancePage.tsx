@@ -97,7 +97,7 @@ export default function AttendancePage() {
         title="근태 · 월차"
         description="월별 출퇴근 기록과 휴가 신청을 관리합니다."
         right={
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <MonthPicker value={month} onChange={setMonth} />
             <button className="btn-primary" onClick={() => setOpen(true)}>
               + 휴가 신청
@@ -110,7 +110,7 @@ export default function AttendancePage() {
         <div className="lg:col-span-2 card">
           <h2 className="text-lg font-bold mb-4">{month} 출퇴근 기록</h2>
           <div className="overflow-hidden rounded-xl border border-slate-100 overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[480px]">
               <thead className="bg-slate-50 text-slate-500 text-xs">
                 <tr>
                   <th className="text-left px-4 py-3">일자</th>
@@ -168,7 +168,7 @@ export default function AttendancePage() {
         <div className="card mt-6">
           <h2 className="text-lg font-bold mb-4">전체 휴가 승인 대기</h2>
           <div className="overflow-hidden rounded-xl border border-slate-100 overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[720px]">
               <thead className="bg-slate-50 text-slate-500 text-xs">
                 <tr>
                   <th className="text-left px-4 py-3">이름</th>
@@ -226,7 +226,7 @@ export default function AttendancePage() {
                   <option value="OTHER">기타</option>
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="label">시작일</label>
                   <DateTimePicker mode="date" value={form.startDate} onChange={(v) => setForm({ ...form, startDate: v })} />

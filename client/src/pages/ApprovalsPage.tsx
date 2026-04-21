@@ -117,7 +117,7 @@ export default function ApprovalsPage() {
         description="출장·외근·지출·구매 등 사내 결재를 한 곳에서 관리합니다."
         right={
           <>
-            <div className="tabs">
+            <div className="tabs flex-shrink-0">
               <button className={`tab ${scope === "mine" ? "tab-active" : ""}`} onClick={() => setScope("mine")}>
                 내 신청 <span className="ml-1 tabular text-ink-500">{scope === "mine" ? pendingCount : ""}</span>
               </button>
@@ -227,7 +227,7 @@ function ApprovalDetail({
       </div>
 
       <div className="flex-1 overflow-auto p-5 space-y-5">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <InfoField label="신청자" value={`${a.requester.name}${a.requester.position ? " · " + a.requester.position : ""}${a.requester.team ? " · " + a.requester.team : ""}`} />
           <InfoField label="신청일" value={new Date(a.createdAt).toLocaleString("ko-KR")} tabular />
           {a.startDate && <InfoField label="시작" value={new Date(a.startDate).toLocaleDateString("ko-KR")} tabular />}
@@ -381,7 +381,7 @@ function CreateModal({
           </div>
 
           {needDates && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="field-label">시작일</label>
                 <DateTimePicker mode="date" value={form.startDate} onChange={(v) => setForm({ ...form, startDate: v })} />

@@ -268,23 +268,25 @@ export default function AdminPage() {
       </div>
 
       {/* 탭 */}
-      <div className="flex items-center gap-1 mb-5 border-b border-ink-150">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`group relative inline-flex items-center gap-2 px-4 h-[40px] text-[13px] font-bold transition ${
-              tab === t.key ? "text-ink-900" : "text-ink-500 hover:text-ink-800"
-            }`}
-          >
-            <span className={tab === t.key ? "text-brand-500" : "text-ink-400 group-hover:text-ink-600"}>{t.icon}</span>
-            {t.label}
-            <span className="ml-0.5 text-[11px] text-ink-400 tabular font-semibold">{t.count}</span>
-            {tab === t.key && (
-              <span className="absolute -bottom-px left-2 right-2 h-[2px] bg-brand-500 rounded-full" />
-            )}
-          </button>
-        ))}
+      <div className="mb-5 border-b border-ink-150 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+        <div className="flex items-center gap-1 min-w-max">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`group relative inline-flex items-center gap-2 px-4 h-[40px] text-[13px] font-bold transition whitespace-nowrap ${
+                tab === t.key ? "text-ink-900" : "text-ink-500 hover:text-ink-800"
+              }`}
+            >
+              <span className={tab === t.key ? "text-brand-500" : "text-ink-400 group-hover:text-ink-600"}>{t.icon}</span>
+              {t.label}
+              <span className="ml-0.5 text-[11px] text-ink-400 tabular font-semibold">{t.count}</span>
+              {tab === t.key && (
+                <span className="absolute -bottom-px left-2 right-2 h-[2px] bg-brand-500 rounded-full" />
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
       {tab === "users" && <UsersTab users={users} teams={teams} positions={positions} reload={loadCommon} />}

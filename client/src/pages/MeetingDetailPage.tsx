@@ -166,11 +166,11 @@ export default function MeetingDetailPage() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-3">
-        <Link to="/meetings" className="text-[13px] text-slate-500 hover:text-brand-600">
+      <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+        <Link to="/meetings" className="text-[13px] text-slate-500 hover:text-brand-600 flex-shrink-0">
           ← 회의록 목록
         </Link>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           {canEdit && !edit && (
             <button className="btn-ghost" onClick={() => { setEdit(true); setSearchParams({ edit: "1" }); }}>
               편집
@@ -195,14 +195,14 @@ export default function MeetingDetailPage() {
       {/* 제목 */}
       {edit ? (
         <input
-          className="w-full text-[32px] font-extrabold bg-transparent border-none outline-none mb-2 placeholder-slate-300"
+          className="w-full text-[24px] sm:text-[32px] font-extrabold bg-transparent border-none outline-none mb-2 placeholder-slate-300"
           placeholder="회의록 제목"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           maxLength={200}
         />
       ) : (
-        <h1 className="text-[32px] font-extrabold mb-2">{meeting.title}</h1>
+        <h1 className="text-[24px] sm:text-[32px] font-extrabold mb-2 break-words">{meeting.title}</h1>
       )}
 
       {/* 메타 정보 */}

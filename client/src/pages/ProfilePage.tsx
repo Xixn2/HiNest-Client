@@ -231,7 +231,7 @@ export default function ProfilePage() {
                   ))}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="field-label">이메일</label>
                   <input className="input" value={user.email} disabled />
@@ -262,7 +262,7 @@ export default function ProfilePage() {
                 <label className="field-label">현재 비밀번호</label>
                 <input className="input" type="password" value={pwForm.current} onChange={(e) => setPwForm({ ...pwForm, current: e.target.value })} required />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="field-label">새 비밀번호 (6자 이상)</label>
                   <input className="input" type="password" value={pwForm.next} onChange={(e) => setPwForm({ ...pwForm, next: e.target.value })} required minLength={6} />
