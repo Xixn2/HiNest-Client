@@ -2,7 +2,7 @@
  * Supabase Storage → AWS S3 일회성 마이그레이션.
  *
  * 언제 돌리나:
- *   1) server/.env 에 SUPABASE_* 와 AWS_*/S3_BUCKET 이 모두 세팅된 상태에서
+ *   1) server/.env 에 SUPABASE_* 와 AWS_* + S3_BUCKET 이 모두 세팅된 상태에서
  *   2) storage.ts 가 S3 를 primary 로 쓰도록 배포된 상태에서
  *   3) 이 스크립트 1회 실행 → 과거 Supabase 에 올라간 모든 파일을 동일 key 로 S3 에 복제.
  *
