@@ -112,7 +112,10 @@ router.post("/", async (req, res) => {
 router.post("/:id/act", async (req, res) => {
   const u = (req as any).user;
   const action = String(req.body?.action ?? ""); // approve | reject
-  const comment = req.body?.comment ? String(req.body.comment) : undefined;
+  // 반려 사유는 zod 가 아니라 raw body 에서 꺼내는데, 길이 제한이 없으면
+  // 메가바이트 페이로드로 DB write 가 부풀 수 있음. 500 자로 컷.
+  const rawComment = req.body?.comment ? String(req.body.comment) : undefined;
+  const comment = rawComment && rawComment.length > 500 ? rawComment.slice(0, 500) : rawComment;
   if (!["approve", "reject"].includes(action))
     return res.status(400).json({ error: "invalid action" });
 
