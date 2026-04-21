@@ -11,15 +11,20 @@ import ChatMiniApp from "./ChatMiniApp";
  *  2) 대화방 화면: ← 뒤로 + 아바타 + 방 이름 + 서브텍스트
  */
 
+// 라이트/다크 자동 전환 — CSS 변수 매핑. 하드코딩 hex 를 유지하면 다크 모드에서
+// 사내톡 팝업 헤더/컨테이너가 흰색으로 튀는 문제가 발생하므로 전체 리팩.
 const C = {
-  blue: "#3182F6",
-  blueHover: "#1B64DA",
-  ink: "#191F28",
-  gray700: "#4E5968",
-  gray600: "#6B7684",
-  gray500: "#8B95A1",
-  gray100: "#F2F4F6",
-  red: "#F04452",
+  blue: "var(--c-brand)",
+  blueHover: "var(--c-brand-hover)",
+  ink: "var(--c-text)",
+  gray700: "var(--c-text-2)",
+  gray600: "var(--c-text-3)",
+  gray500: "var(--c-text-muted)",
+  gray200: "var(--c-border)",
+  gray100: "var(--c-surface-3)",
+  red: "var(--c-danger)",
+  surface: "var(--c-surface)",
+  bg: "var(--c-bg)",
 };
 const FONT =
   "Pretendard, 'Pretendard Variable', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', system-ui, sans-serif";
@@ -120,7 +125,7 @@ export default function ChatFab() {
             transformOrigin: "bottom right",
             borderRadius: 20,
             overflow: "hidden",
-            background: "#fff",
+            background: C.surface,
             fontFamily: FONT,
             color: C.ink,
             letterSpacing: "-0.015em",
@@ -143,7 +148,7 @@ export default function ChatFab() {
               position: "absolute",
               top: activeRoom?.isSettings ? 50 : 86,
               bottom: 0, left: 0, right: 0,
-              background: "#fff",
+              background: C.surface,
             }}
           >
             <ChatMiniApp active={open} onActiveRoomChange={setActiveRoom} createGroupRequestId={createReq} openRoomRequest={openRoomReq} />
@@ -194,7 +199,7 @@ export default function ChatFab() {
               background: C.red, color: "#fff",
               fontSize: 11, fontWeight: 700,
               display: "grid", placeItems: "center",
-              boxShadow: "0 0 0 2px #fff",
+              boxShadow: `0 0 0 2px ${C.bg}`,
               fontFamily: FONT,
               letterSpacing: "-0.01em",
               fontVariantNumeric: "tabular-nums",
@@ -217,7 +222,7 @@ function ListHeader({ chatUnread, onCreateGroup }: { chatUnread: number; onCreat
         display: "flex",
         alignItems: "flex-start",
         justifyContent: "space-between",
-        background: "#fff",
+        background: C.surface,
       }}
     >
       <div>
@@ -241,7 +246,7 @@ function ListHeader({ chatUnread, onCreateGroup }: { chatUnread: number; onCreat
           flexShrink: 0,
           transition: "background .15s ease",
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "#E8EBEE")}
+        onMouseEnter={(e) => (e.currentTarget.style.background = C.gray200)}
         onMouseLeave={(e) => (e.currentTarget.style.background = C.gray100)}
       >
         {/* 사람 + 플러스 */}
@@ -265,7 +270,7 @@ function RoomHeader({ info }: { info: ActiveRoomInfo }) {
         style={{
           padding: "12px 14px 4px",
           display: "flex", alignItems: "center",
-          background: "#fff",
+          background: C.surface,
         }}
       >
         <button
@@ -278,7 +283,7 @@ function RoomHeader({ info }: { info: ActiveRoomInfo }) {
             display: "grid", placeItems: "center",
             transition: "background .12s ease",
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "#E8EBEE")}
+          onMouseEnter={(e) => (e.currentTarget.style.background = C.gray200)}
           onMouseLeave={(e) => (e.currentTarget.style.background = C.gray100)}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
@@ -296,7 +301,7 @@ function RoomHeader({ info }: { info: ActiveRoomInfo }) {
         display: "flex",
         alignItems: "center",
         gap: 10,
-        background: "#fff",
+        background: C.surface,
       }}
     >
       <button
@@ -310,7 +315,7 @@ function RoomHeader({ info }: { info: ActiveRoomInfo }) {
           flexShrink: 0,
           transition: "background .12s ease",
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "#E8EBEE")}
+        onMouseEnter={(e) => (e.currentTarget.style.background = C.gray200)}
         onMouseLeave={(e) => (e.currentTarget.style.background = C.gray100)}
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
