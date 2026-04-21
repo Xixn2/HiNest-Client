@@ -25,6 +25,8 @@ export default function DirectoryPage() {
   const [q, setQ] = useState("");
   const [teamFilter, setTeamFilter] = useState("");
   const [view, setView] = useState<ViewMode>("grid");
+  // DM 버튼 연타 방지 — OrgChartPage 와 동일한 이유.
+  const [dmBusyId, setDmBusyId] = useState<string | null>(null);
 
   async function load() {
     const res = await api<{ users: DirectoryUser[] }>("/api/users");
@@ -72,14 +74,22 @@ export default function DirectoryPage() {
 
   async function startDM(target: DirectoryUser) {
     if (target.id === user?.id) return;
-    // /chat 페이지를 없앴기 때문에 DM 시작은 우하단 사내톡 팝업을 띄우고
-    // 해당 방으로 이동시킨다. ChatFab 이 chat:open-room 이벤트를 구독 중.
-    const res = await api<{ room: { id: string } }>("/api/chat/rooms", {
-      method: "POST",
-      json: { type: "DIRECT", memberIds: [target.id] },
-    });
-    window.dispatchEvent(new CustomEvent("chat:open"));
-    window.dispatchEvent(new CustomEvent("chat:open-room", { detail: { roomId: res.room.id } }));
+    if (dmBusyId) return;
+    setDmBusyId(target.id);
+    try {
+      // /chat 페이지를 없앴기 때문에 DM 시작은 우하단 사내톡 팝업을 띄우고
+      // 해당 방으로 이동시킨다. ChatFab 이 chat:open-room 이벤트를 구독 중.
+      const res = await api<{ room: { id: string } }>("/api/chat/rooms", {
+        method: "POST",
+        json: { type: "DIRECT", memberIds: [target.id] },
+      });
+      window.dispatchEvent(new CustomEvent("chat:open"));
+      window.dispatchEvent(new CustomEvent("chat:open-room", { detail: { roomId: res.room.id } }));
+    } catch (err: any) {
+      alert(err?.message ?? "대화 시작에 실패했어요");
+    } finally {
+      setDmBusyId(null);
+    }
   }
 
   const me = useMemo(() => users.find((u) => u.id === user?.id), [users, user?.id]);
@@ -166,12 +176,14 @@ export default function DirectoryPage() {
               </div>
               {view === "grid" ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                  {members.map((u) => <GridCard key={u.id} u={u} onDM={() => startDM(u)} />)}
+                  {members.map((u) => (
+                    <GridCard key={u.id} u={u} onDM={() => startDM(u)} dmBusy={dmBusyId === u.id} />
+                  ))}
                 </div>
               ) : (
                 <div className="panel p-0 overflow-hidden">
                   {members.map((u, i) => (
-                    <ListRow key={u.id} u={u} onDM={() => startDM(u)} divider={i < members.length - 1} />
+                    <ListRow key={u.id} u={u} onDM={() => startDM(u)} divider={i < members.length - 1} dmBusy={dmBusyId === u.id} />
                   ))}
                 </div>
               )}
@@ -244,7 +256,7 @@ function MyProfileHero({
 }
 
 /* =============== Grid Card =============== */
-function GridCard({ u, onDM }: { u: DirectoryUser; onDM: () => void }) {
+function GridCard({ u, onDM, dmBusy }: { u: DirectoryUser; onDM: () => void; dmBusy?: boolean }) {
   return (
     <div className="group panel p-0 overflow-hidden relative hover:border-ink-200 transition">
       {/* color band */}
@@ -275,11 +287,16 @@ function GridCard({ u, onDM }: { u: DirectoryUser; onDM: () => void }) {
         <PresenceLine u={u} />
 
         <div className="mt-3 flex items-center gap-1.5">
-          <button onClick={onDM} className="btn-primary btn-xs flex-1 justify-center" title={`${u.name}님과 1:1 대화`}>
+          <button
+            onClick={onDM}
+            disabled={dmBusy}
+            className="btn-primary btn-xs flex-1 justify-center disabled:opacity-60"
+            title={`${u.name}님과 1:1 대화`}
+          >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M4 5h16v11H9l-4 4z" />
             </svg>
-            메시지
+            {dmBusy ? "…" : "메시지"}
           </button>
           <a
             href={`mailto:${u.email}`}
@@ -308,7 +325,7 @@ function GridCard({ u, onDM }: { u: DirectoryUser; onDM: () => void }) {
 }
 
 /* =============== List Row =============== */
-function ListRow({ u, onDM, divider }: { u: DirectoryUser; onDM: () => void; divider: boolean }) {
+function ListRow({ u, onDM, divider, dmBusy }: { u: DirectoryUser; onDM: () => void; divider: boolean; dmBusy?: boolean }) {
   return (
     <div
       className={`group flex items-center gap-4 px-5 py-3 hover:bg-ink-25 ${
@@ -343,11 +360,16 @@ function ListRow({ u, onDM, divider }: { u: DirectoryUser; onDM: () => void; div
           </svg>
         </a>
       </div>
-      <button onClick={onDM} className="btn-primary btn-xs" title={`${u.name}님과 1:1 대화`}>
+      <button
+        onClick={onDM}
+        disabled={dmBusy}
+        className="btn-primary btn-xs disabled:opacity-60"
+        title={`${u.name}님과 1:1 대화`}
+      >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M4 5h16v11H9l-4 4z" />
         </svg>
-        메시지
+        {dmBusy ? "…" : "메시지"}
       </button>
     </div>
   );

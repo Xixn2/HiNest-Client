@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, apiSWR } from "../api";
+import { api, apiSWR, invalidateCache } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
 
@@ -67,6 +67,9 @@ export default function MeetingsPage() {
           visibility: "ALL",
         },
       });
+      // 목록 캐시를 비워 — 새 회의록을 저장 후 뒤로 돌아왔을 때 stale cache 로 인해
+      // 방금 만든 항목이 안 보이는 flash 를 방지.
+      invalidateCache("/api/meeting");
       nav(`/meetings/${r.meeting.id}?edit=1`);
     } catch (e: any) {
       alert(e?.message ?? "회의록 생성 실패");

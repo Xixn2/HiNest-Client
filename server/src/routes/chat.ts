@@ -475,9 +475,11 @@ router.post("/messages/:id/reactions", async (req, res) => {
       data: { messageId: msg.id, userId: u.id, emoji },
     });
   }
+  // take: 500 — 한 메시지당 최대 리액션 수 상한 (이모지별 중복 허용해도 충분히 넉넉).
   const list = await prisma.messageReaction.findMany({
     where: { messageId: msg.id },
     select: { userId: true, emoji: true, user: { select: { name: true } } },
+    take: 500,
   });
   broadcastToRoom(msg.roomId, "chat:update", {
     kind: "reactions",
@@ -562,10 +564,12 @@ router.delete("/messages/:id", async (req, res) => {
  */
 router.get("/scheduled", async (req, res) => {
   const u = (req as any).user;
+  // 예약 메시지는 실무상 많지 않지만, 장기 미체크 시 수천 건 누적 가능 — take 상한.
   const list = await prisma.chatMessage.findMany({
     where: { senderId: u.id, scheduledAt: { gt: new Date() }, deletedAt: null },
     orderBy: { scheduledAt: "asc" },
     include: { room: { select: { id: true, name: true, type: true } } },
+    take: 500,
   });
   res.json({ scheduled: list });
 });

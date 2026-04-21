@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
@@ -227,7 +228,12 @@ export default function DashboardPage() {
                 <div className="py-10 text-center t-caption">공지가 없습니다.</div>
               )}
               {notices.map((n) => (
-                <div key={n.id} className="px-5 py-3 hover:bg-ink-25">
+                // 카드 전체를 링크로 감싸 — 모바일에서 제목 텍스트만 작은 탭 타깃이 되던 문제 해결.
+                <Link
+                  key={n.id}
+                  to={`/notice?id=${n.id}`}
+                  className="block px-5 py-3 hover:bg-ink-25 transition-colors"
+                >
                   <div className="flex items-center gap-2">
                     {n.pinned && <span className="chip-red">PIN</span>}
                     <div className="text-[13px] font-semibold text-ink-900 truncate">{n.title}</div>
@@ -237,7 +243,7 @@ export default function DashboardPage() {
                     <span className="text-ink-300">·</span>
                     <span className="tabular">{new Date(n.createdAt).toLocaleDateString("ko-KR")}</span>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           </div>
