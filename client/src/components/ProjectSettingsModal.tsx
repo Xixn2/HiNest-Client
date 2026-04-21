@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../api";
+import { api, invalidateCache } from "../api";
 
 type Role = "OWNER" | "MANAGER" | "MEMBER";
 
@@ -166,6 +166,7 @@ function InfoTab({
   async function save(e: React.FormEvent) {
     e.preventDefault();
     if (!canEdit) return;
+    if (busy) return; // 연속 클릭 방지
     setBusy(true);
     setErr(null);
     setSaved(false);
@@ -190,6 +191,7 @@ function InfoTab({
 
   async function doDelete() {
     if (!canDelete) return;
+    if (busy) return;
     if (!confirm(`"${project.name}" 프로젝트를 삭제할까요?\n모든 관련 데이터가 함께 삭제되며 되돌릴 수 없습니다.`)) return;
     setBusy(true);
     setErr(null);
@@ -305,9 +307,12 @@ function MembersTab({
 
   useEffect(() => {
     if (!canManage) return;
-    api<{ users: UserLite[] }>("/api/user")
-      .then((r) => setUsers(r.users))
+    // /api/users (복수). 이전에 /api/user 로 404 나며 후보 목록이 안 떠서 멤버 추가 불가.
+    let alive = true;
+    api<{ users: UserLite[] }>("/api/users")
+      .then((r) => { if (alive) setUsers(r.users); })
       .catch(() => {});
+    return () => { alive = false; };
   }, [canManage]);
 
   async function refresh() {
@@ -319,6 +324,7 @@ function MembersTab({
   }
 
   async function addMember(userId: string, role: Role = "MEMBER") {
+    if (busy) return;
     setBusy(true);
     setErr(null);
     try {
@@ -326,6 +332,9 @@ function MembersTab({
         method: "POST",
         json: { userId, role },
       });
+      // 사이드바·리스트 등 다른 화면의 project 캐시도 stale — 다음 방문 시 갱신되도록 invalidate.
+      invalidateCache(`/api/project/${project.id}`);
+      invalidateCache("/api/project");
       await refresh();
     } catch (e: any) {
       setErr(e?.message ?? "멤버 추가에 실패했습니다.");
@@ -335,6 +344,7 @@ function MembersTab({
   }
 
   async function removeMember(userId: string) {
+    if (busy) return;
     if (!confirm("이 멤버를 프로젝트에서 제거할까요?")) return;
     setBusy(true);
     setErr(null);
@@ -342,6 +352,8 @@ function MembersTab({
       await api(`/api/project/${project.id}/member/${userId}`, {
         method: "DELETE",
       });
+      invalidateCache(`/api/project/${project.id}`);
+      invalidateCache("/api/project");
       await refresh();
     } catch (e: any) {
       setErr(e?.message ?? "멤버 제거에 실패했습니다.");
@@ -351,6 +363,7 @@ function MembersTab({
   }
 
   async function changeRole(userId: string, role: Role) {
+    if (busy) return;
     setBusy(true);
     setErr(null);
     try {
@@ -358,6 +371,8 @@ function MembersTab({
         method: "POST",
         json: { userId, role },
       });
+      invalidateCache(`/api/project/${project.id}`);
+      invalidateCache("/api/project");
       await refresh();
     } catch (e: any) {
       setErr(e?.message ?? "역할 변경에 실패했습니다.");

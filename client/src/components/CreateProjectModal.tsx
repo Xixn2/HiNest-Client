@@ -49,9 +49,13 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
     setMemberIds([]);
     setQ("");
     setErr(null);
-    api<{ users: UserLite[] }>("/api/user")
-      .then((r) => setUsers(r.users))
+    // /api/users (복수) — 이전에 /api/user 로 되어 있어 404 나며 멤버 후보 목록이
+    // 비어 있던 버그. 서버 라우터 마운트는 app.use("/api/users", ...).
+    let alive = true;
+    api<{ users: UserLite[] }>("/api/users")
+      .then((r) => { if (alive) setUsers(r.users); })
       .catch(() => {});
+    return () => { alive = false; };
   }, [open]);
 
   if (!open) return null;

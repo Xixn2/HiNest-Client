@@ -135,15 +135,15 @@ export default function ProjectCalendar({
     return { from: startOfDay(cursor), to: endOfDay(cursor) };
   }, [mode, view, cursor]);
 
-  async function load() {
+  async function load(aliveRef?: { current: boolean }) {
     const q = `from=${encodeURIComponent(range.from.toISOString())}&to=${encodeURIComponent(range.to.toISOString())}`;
     // 같은 달을 이전에 열어봤다면 캐시된 이벤트로 즉시 그려주고, 백그라운드에서 갱신.
     // 콜드스타트 구간에 빈 달력 대신 직전 상태가 보이는 편이 체감상 훨씬 낫다.
     await apiSWR<{ events: ProjectEvent[] }>(
       `/api/project/${projectId}/events?${q}`,
       {
-        onCached: (res) => setEvents(res.events),
-        onFresh: (res) => setEvents(res.events),
+        onCached: (res) => { if (!aliveRef || aliveRef.current) setEvents(res.events); },
+        onFresh: (res) => { if (!aliveRef || aliveRef.current) setEvents(res.events); },
       }
     );
   }
@@ -162,7 +162,11 @@ export default function ProjectCalendar({
     return events.filter((ev) => parseAssignees(ev.assigneeIds).includes(filter));
   }, [events, filter, user?.id]);
   useEffect(() => {
-    load();
+    // projectId·view 등이 빠르게 바뀔 때 이전 요청의 setEvents 가 새 요청 뒤에 도착하면
+    // 화면이 stale 해짐. 언마운트/의존성 변경 타이밍에 aliveRef 로 방어.
+    const aliveRef = { current: true };
+    load(aliveRef);
+    return () => { aliveRef.current = false; };
     // eslint-disable-next-line
   }, [projectId, mode, view, cursor]);
 

@@ -95,12 +95,15 @@ router.get("/folders", async (req, res) => {
 });
 
 const folderCreateSchema = z.object({
-  name: z.string().min(1),
-  parentId: z.string().nullable().optional(),
+  // name 은 폴더 트리 표시 길이 한도에 맞춰 100자로 제한.
+  name: z.string().min(1).max(100),
+  parentId: z.string().max(64).nullable().optional(),
   scope: z.enum(["ALL", "TEAM", "PRIVATE", "CUSTOM"]).optional(),
-  scopeTeam: z.string().nullable().optional(),
-  scopeUserIds: z.array(z.string()).optional(),
-  projectId: z.string().nullable().optional(),
+  scopeTeam: z.string().max(80).nullable().optional(),
+  // scopeUserIds 는 콤마 문자열로 저장되므로 인원수가 커지면 컬럼 비대 + LIKE 쿼리 저하.
+  // 50명까지 허용 — 그 이상은 TEAM/ALL 공개 범위로 쓰는 걸 권장.
+  scopeUserIds: z.array(z.string().max(64)).max(50).optional(),
+  projectId: z.string().max(64).nullable().optional(),
 });
 
 router.post("/folders", async (req, res) => {
@@ -196,18 +199,21 @@ router.delete("/folders/:id", async (req, res) => {
 
 /* ===== 문서 ===== */
 const docSchema = z.object({
-  title: z.string().min(1),
-  description: z.string().optional(),
-  folderId: z.string().optional().nullable(),
-  fileUrl: z.string().optional(),
-  fileName: z.string().optional(),
-  fileType: z.string().optional(),
-  fileSize: z.number().int().optional(),
-  tags: z.string().optional(),
+  title: z.string().min(1).max(200),
+  description: z.string().max(2000).optional(),
+  folderId: z.string().max(64).optional().nullable(),
+  fileUrl: z.string().max(2000).optional(),
+  fileName: z.string().max(255).optional(),
+  fileType: z.string().max(80).optional(),
+  // 업로드 크기는 upload 라우트에서 파일 용량 체크로 방어하고, 여기서는 int 한도만.
+  fileSize: z.number().int().nonnegative().max(500_000_000).optional(),
+  // 태그는 콤마로 구분된 문자열. UI에서 20개 이상 넣을 일 없음.
+  tags: z.string().max(500).optional(),
   scope: z.enum(["ALL", "TEAM", "PRIVATE", "CUSTOM"]).optional(),
-  scopeTeam: z.string().nullable().optional(),
-  scopeUserIds: z.array(z.string()).optional(),
-  projectId: z.string().nullable().optional(),
+  scopeTeam: z.string().max(80).nullable().optional(),
+  // scopeUserIds — folderCreateSchema 와 동일 기준 50명 상한.
+  scopeUserIds: z.array(z.string().max(64)).max(50).optional(),
+  projectId: z.string().max(64).nullable().optional(),
 });
 
 function visibilityWhere(u: { id: string; team: string | null; role: string }) {
