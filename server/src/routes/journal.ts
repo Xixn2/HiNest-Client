@@ -7,9 +7,16 @@ const router = Router();
 router.use(requireAuth);
 
 const schema = z.object({
-  date: z.string(),
-  title: z.string().min(1),
-  content: z.string().min(1),
+  date: z.string().max(40),
+  title: z.string().min(1).max(200),
+  content: z.string().min(1).max(20_000),
+});
+
+// partial 이지만 빈 문자열 overwrite 는 막아야 함 — .partial() 만 쓰면 ""로 title 덮기 가능.
+const patchSchema = z.object({
+  date: z.string().max(40).optional(),
+  title: z.string().min(1).max(200).optional(),
+  content: z.string().min(1).max(20_000).optional(),
 });
 
 router.get("/", async (req, res) => {
@@ -20,6 +27,7 @@ router.get("/", async (req, res) => {
   const list = await prisma.journal.findMany({
     where: { userId },
     orderBy: { date: "desc" },
+    take: 500,
     include: { user: { select: { name: true } } },
   });
   res.json({ journals: list });
@@ -38,7 +46,7 @@ router.post("/", async (req, res) => {
 });
 
 router.patch("/:id", async (req, res) => {
-  const parsed = schema.partial().safeParse(req.body);
+  const parsed = patchSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid input" });
   const u = (req as any).user;
   const j = await prisma.journal.findUnique({ where: { id: req.params.id } });

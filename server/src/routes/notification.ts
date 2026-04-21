@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import { prisma } from "../lib/db.js";
 import { requireAuth } from "../lib/auth.js";
 import { addClient, removeClient } from "../lib/sse.js";
@@ -50,10 +51,17 @@ router.get("/", async (req, res) => {
   res.json({ notifications: items, unread });
 });
 
+const readSchema = z.object({
+  // 한 번에 500 건까지만 읽음 처리 — IN() 폭주 방지.
+  ids: z.array(z.string().max(64)).max(500).optional(),
+  all: z.boolean().optional(),
+});
+
 router.post("/read", async (req, res) => {
   const u = (req as any).user;
-  const ids: string[] | undefined = req.body?.ids;
-  const all: boolean = !!req.body?.all;
+  const parsed = readSchema.safeParse(req.body ?? {});
+  if (!parsed.success) return res.status(400).json({ error: "invalid input" });
+  const { ids, all } = parsed.data;
   if (all) {
     await prisma.notification.updateMany({
       where: { userId: u.id, readAt: null },

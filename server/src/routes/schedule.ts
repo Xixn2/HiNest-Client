@@ -89,16 +89,19 @@ router.get("/", async (req, res) => {
 });
 
 const eventSchema = z.object({
-  title: z.string().min(1),
-  content: z.string().optional(),
+  title: z.string().min(1).max(200),
+  content: z.string().max(5000).optional(),
   scope: z.enum(["COMPANY", "TEAM", "PERSONAL", "TARGETED"]).default("PERSONAL"),
-  team: z.string().optional().nullable(),
+  team: z.string().max(80).optional().nullable(),
   category: z.enum(CATEGORIES).default("OTHER"),
-  targetUserIds: z.array(z.string()).optional(),
+  targetUserIds: z.array(z.string()).max(500).optional(),
   startAt: z.string(),
   endAt: z.string(),
-  color: z.string().optional(),
-});
+  color: z.string().max(16).optional(),
+}).refine(
+  (d) => !d.startAt || !d.endAt || new Date(d.endAt).getTime() >= new Date(d.startAt).getTime(),
+  { message: "종료일은 시작일과 같거나 뒤여야 해요", path: ["endAt"] },
+);
 
 router.post("/", async (req, res) => {
   const parsed = eventSchema.safeParse(req.body);

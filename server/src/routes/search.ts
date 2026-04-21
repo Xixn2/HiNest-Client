@@ -19,6 +19,42 @@ router.get("/", async (req, res) => {
   if (q.length < 1) return res.json({ q, results: {} });
 
   const meUser = await prisma.user.findUnique({ where: { id: u.id } });
+  const isAdmin = u.role === "ADMIN";
+
+  // 일정(TEAM) — 빈 team 을 "매칭" 으로 만들지 않도록 team 이 있을 때만 clause 추가.
+  const eventOr: any[] = [
+    { scope: "COMPANY" },
+    { scope: "PERSONAL", createdBy: u.id },
+    { scope: "TARGETED", createdBy: u.id },
+    { scope: "TARGETED", targetUserIds: { contains: u.id } },
+  ];
+  if (meUser?.team) eventOr.push({ scope: "TEAM", team: meUser.team });
+
+  // 문서 검색 — 내가 실제로 볼 수 있는 것만 돌려줘야 함.
+  // scope 는 ALL/TEAM/PRIVATE/CUSTOM + 프로젝트 문서(projectId != null 이면 프로젝트 멤버) 체크.
+  // ADMIN 은 전체 조회.
+  let myProjectIds: string[] = [];
+  if (!isAdmin) {
+    const mems = await prisma.projectMember.findMany({
+      where: { userId: u.id },
+      select: { projectId: true },
+    });
+    myProjectIds = mems.map((m) => m.projectId);
+  }
+  const docScopeOr: any[] = isAdmin
+    ? [{}]
+    : [
+        // 내가 만든 건 무조건 보임
+        { authorId: u.id },
+        // 프로젝트 멤버인 프로젝트의 문서
+        { projectId: { in: myProjectIds.length ? myProjectIds : ["__none__"] } },
+        // 전체 공개
+        { scope: "ALL", projectId: null },
+        // 팀 공개 — 내 팀과 일치할 때만
+        ...(meUser?.team ? [{ scope: "TEAM", scopeTeam: meUser.team, projectId: null }] : []),
+        // 사용자지정 — scopeUserIds 에 내가 포함
+        { scope: "CUSTOM", scopeUserIds: { contains: u.id }, projectId: null },
+      ];
 
   const [people, notices, events, documents, messages] = await Promise.all([
     prisma.user.findMany({
@@ -50,16 +86,8 @@ router.get("/", async (req, res) => {
     prisma.event.findMany({
       where: {
         AND: [
-          {
-            OR: [
-              { scope: "COMPANY" },
-              { scope: "TEAM", team: meUser?.team ?? "" },
-              { scope: "PERSONAL", createdBy: u.id },
-            ],
-          },
-          {
-            OR: [{ title: { contains: q } }, { content: { contains: q } }],
-          },
+          { OR: eventOr },
+          { OR: [{ title: { contains: q } }, { content: { contains: q } }] },
         ],
       },
       take: 8,
@@ -67,7 +95,10 @@ router.get("/", async (req, res) => {
     }),
     prisma.document.findMany({
       where: {
-        OR: [{ title: { contains: q } }, { description: { contains: q } }, { tags: { contains: q } }],
+        AND: [
+          { OR: [{ title: { contains: q } }, { description: { contains: q } }, { tags: { contains: q } }] },
+          { OR: docScopeOr },
+        ],
       },
       take: 8,
       orderBy: { updatedAt: "desc" },

@@ -36,6 +36,8 @@ export default function AttendancePage() {
   const [allLeaves, setAllLeaves] = useState<Leave[]>([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ type: "ANNUAL", startDate: "", endDate: "", reason: "" });
+  const [saving, setSaving] = useState(false);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
 
   async function load() {
     const [m, l] = await Promise.all([
@@ -72,15 +74,34 @@ export default function AttendancePage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    await api("/api/attendance/leave", { method: "POST", json: form });
-    setOpen(false);
-    setForm({ type: "ANNUAL", startDate: "", endDate: "", reason: "" });
-    load();
+    if (saving) return;
+    if (!form.startDate || !form.endDate) return alert("시작/종료일을 선택해주세요");
+    if (new Date(form.endDate) < new Date(form.startDate))
+      return alert("종료일이 시작일보다 빨라요");
+    setSaving(true);
+    try {
+      await api("/api/attendance/leave", { method: "POST", json: form });
+      setOpen(false);
+      setForm({ type: "ANNUAL", startDate: "", endDate: "", reason: "" });
+      await load();
+    } catch (err: any) {
+      alert(err?.message ?? "휴가 신청에 실패했어요");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function review(id: string, status: string) {
-    await api(`/api/attendance/leave/${id}`, { method: "PATCH", json: { status } });
-    load();
+    if (reviewingId) return;
+    setReviewingId(id);
+    try {
+      await api(`/api/attendance/leave/${id}`, { method: "PATCH", json: { status } });
+      await load();
+    } catch (err: any) {
+      alert(err?.message ?? "승인·반려에 실패했어요");
+    } finally {
+      setReviewingId(null);
+    }
   }
 
   function duration(c?: string, o?: string) {
@@ -194,10 +215,18 @@ export default function AttendancePage() {
                     <td className="px-4 py-3 text-right">
                       {l.status === "PENDING" && (
                         <div className="inline-flex gap-1">
-                          <button className="text-xs px-3 py-1 rounded-lg bg-brand-400 text-white" onClick={() => review(l.id, "APPROVED")}>
-                            승인
+                          <button
+                            className="text-xs px-3 py-1 rounded-lg bg-brand-400 text-white disabled:opacity-60"
+                            onClick={() => review(l.id, "APPROVED")}
+                            disabled={reviewingId === l.id}
+                          >
+                            {reviewingId === l.id ? "처리 중…" : "승인"}
                           </button>
-                          <button className="text-xs px-3 py-1 rounded-lg bg-rose-500 text-white" onClick={() => review(l.id, "REJECTED")}>
+                          <button
+                            className="text-xs px-3 py-1 rounded-lg bg-rose-500 text-white disabled:opacity-60"
+                            onClick={() => review(l.id, "REJECTED")}
+                            disabled={reviewingId === l.id}
+                          >
                             반려
                           </button>
                         </div>
@@ -241,10 +270,10 @@ export default function AttendancePage() {
                 <textarea className="input" rows={3} value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
               </div>
               <div className="flex justify-end gap-2 pt-2">
-                <button type="button" className="btn-ghost" onClick={() => setOpen(false)}>
+                <button type="button" className="btn-ghost" onClick={() => setOpen(false)} disabled={saving}>
                   취소
                 </button>
-                <button className="btn-primary">신청</button>
+                <button className="btn-primary" disabled={saving}>{saving ? "신청 중…" : "신청"}</button>
               </div>
             </form>
           </div>

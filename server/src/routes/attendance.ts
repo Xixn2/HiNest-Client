@@ -80,12 +80,17 @@ router.get("/month", async (req, res) => {
 
 // 휴가 신청
 // TRIP = 외근 (출장/외부 미팅 등 — 사무실 밖에서 업무).
-const leaveSchema = z.object({
-  type: z.enum(["ANNUAL", "HALF", "SICK", "TRIP", "OTHER"]),
-  startDate: z.string(),
-  endDate: z.string(),
-  reason: z.string().optional(),
-});
+const leaveSchema = z
+  .object({
+    type: z.enum(["ANNUAL", "HALF", "SICK", "TRIP", "OTHER"]),
+    startDate: z.string().max(40),
+    endDate: z.string().max(40),
+    reason: z.string().max(1000).optional(),
+  })
+  .refine(
+    (d) => new Date(d.endDate).getTime() >= new Date(d.startDate).getTime(),
+    { message: "종료일이 시작일보다 빠릅니다", path: ["endDate"] },
+  );
 
 router.post("/leave", async (req, res) => {
   const parsed = leaveSchema.safeParse(req.body);
@@ -108,9 +113,16 @@ router.post("/leave", async (req, res) => {
 router.get("/leave", async (req, res) => {
   const u = (req as any).user;
   const all = req.query.all === "1" && (u.role === "ADMIN" || u.role === "MANAGER");
+  const where: any = all ? {} : { userId: u.id };
+  // MANAGER 는 본인 팀 휴가만 조회 가능.
+  if (all && u.role === "MANAGER") {
+    const me = await prisma.user.findUnique({ where: { id: u.id }, select: { team: true } });
+    where.user = me?.team ? { team: me.team } : { id: "__none__" };
+  }
   const leaves = await prisma.leave.findMany({
-    where: all ? {} : { userId: u.id },
+    where,
     orderBy: { createdAt: "desc" },
+    take: 500,
     include: { user: { select: { name: true, team: true } } },
   });
   res.json({ leaves });
@@ -123,8 +135,20 @@ router.patch("/leave/:id", async (req, res) => {
   const status = req.body?.status;
   if (!["APPROVED", "REJECTED", "PENDING"].includes(status))
     return res.status(400).json({ error: "invalid status" });
-  const leave = await prisma.leave.update({
+  const existing = await prisma.leave.findUnique({
     where: { id: req.params.id },
+    include: { user: { select: { team: true } } },
+  });
+  if (!existing) return res.status(404).json({ error: "not found" });
+  // MANAGER 는 자기 팀 휴가만 심사 가능.
+  if (u.role === "MANAGER") {
+    const me = await prisma.user.findUnique({ where: { id: u.id }, select: { team: true } });
+    if (!me?.team || existing.user?.team !== me.team) {
+      return res.status(403).json({ error: "다른 팀의 휴가를 심사할 수 없어요" });
+    }
+  }
+  const leave = await prisma.leave.update({
+    where: { id: existing.id },
     data: { status, reviewer: u.id },
   });
   await writeLog(u.id, "LEAVE_REVIEW", leave.id, status);
