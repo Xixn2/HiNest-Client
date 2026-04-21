@@ -32,7 +32,7 @@
       "package.json"
     ],
     "directories": {
-      "output": "release"
+      "output": "/tmp/hinest-release"
     },
     "mac": {
       "category": "public.app-category.business",
@@ -66,7 +66,6 @@
           ]
         }
       ],
-      "// icon note": "assets/icon.ico 가 있으면 우선 사용, 없으면 electron-builder 가 icon.png(512+) 로부터 자동 생성.",
       "icon": "assets/icon.png"
     },
     "nsis": {
