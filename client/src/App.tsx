@@ -18,6 +18,8 @@ import {
   ProfilePage,
   ExpensePage,
   ProjectPage,
+  MeetingsPage,
+  MeetingDetailPage,
   AdminPage,
   SuperAdminPage,
 } from "./routes";
@@ -83,6 +85,8 @@ export default function App() {
           <Route path="profile" element={<ProfilePage />} />
           <Route path="expense" element={<ExpensePage />} />
           <Route path="projects/:id" element={<ProjectPage />} />
+          <Route path="meetings" element={<MeetingsPage />} />
+          <Route path="meetings/:id" element={<MeetingDetailPage />} />
           <Route
             path="admin"
             element={
