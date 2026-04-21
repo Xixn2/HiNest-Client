@@ -15,7 +15,7 @@ import noticeRouter from "./routes/notice.js";
 import chatRouter from "./routes/chat.js";
 import expenseRouter from "./routes/expense.js";
 import uploadRouter, { UPLOAD_DIR } from "./routes/upload.js";
-import { isStorageEnabled, downloadFile } from "./lib/storage.js";
+import { isStorageEnabled, downloadFile, storageBackend, storageBucket } from "./lib/storage.js";
 import fs from "node:fs";
 import notificationRouter from "./routes/notification.js";
 import searchRouter from "./routes/search.js";
@@ -108,7 +108,12 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get("/api/health", (_req, res) => res.json({ ok: true }));
+app.get("/api/health", (_req, res) =>
+  res.json({
+    ok: true,
+    storage: { backend: storageBackend(), bucket: storageBucket() },
+  })
+);
 
 // 전역 API 레이트 리밋 — 라우트별 특수 limiter 는 그 뒤에 추가로 씌운다.
 // (login/upload 는 더 엄격한 limiter 가 먼저 적용됨)
