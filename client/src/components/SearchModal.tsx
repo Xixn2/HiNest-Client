@@ -65,15 +65,22 @@ export default function SearchModal({ open, onClose }: { open: boolean; onClose:
     if (!open) { setQ(""); setResults({}); }
   }, [open]);
 
+  // 빠르게 타이핑할 때 이전 요청이 나중에 도착해서 결과를 덮는 현상 방지.
+  // monotonic token 으로 "가장 최근 요청" 만 UI 에 반영.
+  const searchTokenRef = useRef(0);
   useEffect(() => {
     if (!open) return;
     if (!q.trim()) { setResults({}); return; }
     setLoading(true);
     const t = setTimeout(async () => {
+      const my = ++searchTokenRef.current;
       try {
         const res = await api<{ results: Results }>(`/api/search?q=${encodeURIComponent(q.trim())}`);
+        if (my !== searchTokenRef.current) return;
         setResults(res.results);
-      } catch {} finally { setLoading(false); }
+      } catch {} finally {
+        if (my === searchTokenRef.current) setLoading(false);
+      }
     }, 180);
     return () => clearTimeout(t);
   }, [q, open]);
@@ -155,6 +162,7 @@ export default function SearchModal({ open, onClose }: { open: boolean; onClose:
             placeholder="사람·공지·일정·문서·메시지 검색…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
+            maxLength={80}
           />
           <span className="kbd">ESC</span>
         </div>

@@ -15,7 +15,11 @@ router.use(requireAuth);
  */
 router.get("/", async (req, res) => {
   const u = (req as any).user;
-  const q = String(req.query.q ?? "").trim();
+  const raw = String(req.query.q ?? "").trim();
+  // 검색어는 실무상 20자 내외. 과도한 길이는 여러 테이블에 LIKE '%...%' 로 들어가
+  // DB 를 쥐어짜는 DoS 벡터가 되므로 128자로 자름.
+  // (UI 도 maxLength=80 이라서 일반 경로는 영향 없음.)
+  const q = raw.length > 128 ? raw.slice(0, 128) : raw;
   if (q.length < 1) return res.json({ q, results: {} });
 
   const meUser = await prisma.user.findUnique({ where: { id: u.id } });

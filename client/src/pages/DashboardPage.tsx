@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
@@ -22,7 +22,19 @@ export default function DashboardPage() {
     return () => clearInterval(t);
   }, []);
 
+  // checkIn/checkOut 직후 load() 가 또 돌 때 유저가 빠르게 페이지 이탈하면
+  // setState 가 언마운트된 컴포넌트에 박힘. 출/퇴근을 연속 눌러도 마지막 응답만 반영하도록 토큰 사용.
+  const aliveRef = useRef(true);
+  const loadTokenRef = useRef(0);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
+
   async function load() {
+    const myToken = ++loadTokenRef.current;
     const today = new Date();
     const from = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
     const to = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7).toISOString();
@@ -31,6 +43,7 @@ export default function DashboardPage() {
       api<{ events: Event[] }>(`/api/schedule?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
       api<{ attendance: Attendance }>("/api/attendance/today"),
     ]);
+    if (!aliveRef.current || myToken !== loadTokenRef.current) return;
     setNotices(n.notices.slice(0, 5));
     setEvents(s.events.slice(0, 6));
     setAtt(a.attendance);

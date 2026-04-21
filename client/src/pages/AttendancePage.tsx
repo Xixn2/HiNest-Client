@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, apiSWR } from "../api";
 import PageHeader from "../components/PageHeader";
 import { useAuth } from "../auth";
@@ -40,16 +40,31 @@ export default function AttendancePage() {
   const [saving, setSaving] = useState(false);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
 
+  // 제출/승인 직후 load() 가 다시 돌 때, 사용자가 빠르게 탭 이탈하면
+  // setState 가 언마운트된 컴포넌트에 박혀 경고+누수. 승인/반려/제출이 연달아 쏟아져도
+  // 마지막 응답만 반영하도록 monotonic token 도 같이 사용.
+  const aliveRef = useRef(true);
+  const loadTokenRef = useRef(0);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
+
   async function load() {
+    const myToken = ++loadTokenRef.current;
     const [m, l] = await Promise.all([
       api<{ attendances: Attendance[] }>(`/api/attendance/month?month=${month}`),
       api<{ leaves: Leave[] }>("/api/attendance/leave"),
     ]);
+    if (!aliveRef.current || myToken !== loadTokenRef.current) return;
     setRecords(m.attendances);
     setLeaves(l.leaves);
 
     if (user?.role === "ADMIN" || user?.role === "MANAGER") {
       const all = await api<{ leaves: Leave[] }>("/api/attendance/leave?all=1");
+      if (!aliveRef.current || myToken !== loadTokenRef.current) return;
       setAllLeaves(all.leaves);
     }
   }
@@ -273,7 +288,13 @@ export default function AttendancePage() {
               </div>
               <div>
                 <label className="label">사유</label>
-                <textarea className="input" rows={3} value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
+                <textarea
+                  className="input"
+                  rows={3}
+                  maxLength={1000}
+                  value={form.reason}
+                  onChange={(e) => setForm({ ...form, reason: e.target.value })}
+                />
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" className="btn-ghost" onClick={() => setOpen(false)} disabled={saving}>
