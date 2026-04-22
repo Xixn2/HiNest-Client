@@ -505,18 +505,24 @@ export default function ChatMiniApp({
   // 메시지 본문 검색 — 검색어 입력 시 debounce 후 서버 조회
   const [messageHits, setMessageHits] = useState<MessageHit[]>([]);
   const [searching, setSearching] = useState(false);
+  // 요청 in-flight 중에 q 가 다시 바뀌면 clearTimeout 은 되지만 이미 발사된 fetch 는
+  // 취소 불가 → 느린 응답이 나중에 도착해 최신 결과를 덮는 race. token 으로 가장 최근 요청만 UI 반영.
+  const searchTokenRef = useRef(0);
   useEffect(() => {
     const k = q.trim();
-    if (!k) { setMessageHits([]); return; }
+    if (!k) { setMessageHits([]); setSearching(false); return; }
     setSearching(true);
     const t = setTimeout(async () => {
+      const my = ++searchTokenRef.current;
       try {
         const res = await api<{ hits: MessageHit[] }>(`/api/chat/search?q=${encodeURIComponent(k)}`);
+        if (my !== searchTokenRef.current) return;
         setMessageHits(res.hits);
       } catch {
+        if (my !== searchTokenRef.current) return;
         setMessageHits([]);
       } finally {
-        setSearching(false);
+        if (my === searchTokenRef.current) setSearching(false);
       }
     }, 200);
     return () => clearTimeout(t);
