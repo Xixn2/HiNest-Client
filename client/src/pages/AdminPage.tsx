@@ -4,6 +4,7 @@ import { api } from "../api";
 import PageHeader from "../components/PageHeader";
 import { downloadCSV, downloadXLSX, openPrintable, parseSheet, type TableColumn } from "../lib/exportTable";
 import DatePicker from "../components/DatePicker";
+import TimePicker from "../components/TimePicker";
 import { confirmAsync, alertAsync, promptAsync } from "../components/ConfirmHost";
 
 type UserRow = {
@@ -14,6 +15,8 @@ type UserRow = {
   team?: string | null;
   position?: string | null;
   active: boolean;
+  // 퇴사일 — 설정되어 있으면 퇴사자. 로그인은 active=false 로 이미 차단됨.
+  resignedAt?: string | null;
   avatarColor?: string;
   avatarUrl?: string | null;
   createdAt: string;
@@ -334,9 +337,11 @@ function UsersTab({
 }: { users: UserRow[]; teams: Team[]; positions: Position[]; reload: () => void }) {
   const [q, setQ] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
-  const [activeFilter, setActiveFilter] = useState<"all" | "active" | "inactive">("all");
+  // "resigned" 는 퇴사자(resignedAt != null) 만 — 재직 중 inactive 와 구분.
+  const [activeFilter, setActiveFilter] = useState<"all" | "active" | "inactive" | "resigned">("active");
   const [attendanceTarget, setAttendanceTarget] = useState<UserRow | null>(null);
   const [editTarget, setEditTarget] = useState<UserRow | null>(null);
+  const [resignTarget, setResignTarget] = useState<UserRow | null>(null);
   // 기본 뷰(컴팩트) ↔ 상세 뷰(엑셀 포맷 전 컬럼)
   const [view, setView] = useState<"basic" | "detail">("basic");
 
@@ -385,8 +390,14 @@ function UsersTab({
   const filtered = useMemo(() => {
     let arr = users;
     if (roleFilter) arr = arr.filter((u) => u.role === roleFilter);
-    if (activeFilter === "active") arr = arr.filter((u) => u.active);
-    if (activeFilter === "inactive") arr = arr.filter((u) => !u.active);
+    // 재직/비활성/퇴사 구분:
+    //  - active: 재직 중(resignedAt 없고 active=true)
+    //  - inactive: 임시 비활성(active=false 지만 resignedAt 없는 경우)
+    //  - resigned: 퇴사자(resignedAt 있음) — 'all' 에서는 기본 노출에서 제외해 어드민이 일부러 봐야 보이게.
+    if (activeFilter === "active") arr = arr.filter((u) => u.active && !u.resignedAt);
+    else if (activeFilter === "inactive") arr = arr.filter((u) => !u.active && !u.resignedAt);
+    else if (activeFilter === "resigned") arr = arr.filter((u) => !!u.resignedAt);
+    else arr = arr.filter((u) => !u.resignedAt); // 'all' 은 재직 중(활성+비활성) 전원
     const k = q.trim().toLowerCase();
     if (k) arr = arr.filter((u) =>
       u.name.toLowerCase().includes(k) ||
@@ -470,7 +481,7 @@ function UsersTab({
             className="btn-ghost !h-[32px] !px-3 text-[12px] inline-flex items-center gap-1.5"
             onClick={() => {
               openPrintable("HiNest · 구성원 목록", filtered, HR_EXPORT_COLUMNS, {
-                subtitle: `${roleFilter || "전체 권한"} · ${activeFilter === "all" ? "전체" : activeFilter === "active" ? "활성" : "비활성"}${q ? ` · 검색: "${q}"` : ""}`,
+                subtitle: `${roleFilter || "전체 권한"} · ${activeFilter === "active" ? "재직" : activeFilter === "inactive" ? "비활성" : activeFilter === "resigned" ? "퇴사" : "전체"}${q ? ` · 검색: "${q}"` : ""}`,
               });
             }}
             title="인쇄 창을 열어 PDF 로 저장"
@@ -487,9 +498,9 @@ function UsersTab({
             <option value="MEMBER">MEMBER</option>
           </select>
           <div className="tabs">
-            {(["all", "active", "inactive"] as const).map((v) => (
+            {(["active", "inactive", "resigned"] as const).map((v) => (
               <button key={v} onClick={() => setActiveFilter(v)} className={`tab ${activeFilter === v ? "tab-active" : ""}`}>
-                {v === "all" ? "전체" : v === "active" ? "활성" : "비활성"}
+                {v === "active" ? "재직" : v === "inactive" ? "비활성" : `퇴사 ${users.filter((u) => u.resignedAt).length}`}
               </button>
             ))}
           </div>
@@ -573,10 +584,17 @@ function UsersTab({
                   </select>
                 </td>
                 <td>
-                  <button onClick={() => update(u.id, { active: !u.active })} className={u.active ? "chip-green" : "chip-gray"}>
-                    <span className="badge-dot" style={{ background: u.active ? "#16A34A" : "#8E959E" }} />
-                    {u.active ? "Active" : "Inactive"}
-                  </button>
+                  {u.resignedAt ? (
+                    <span className="chip-gray" title={`퇴사일 ${new Date(u.resignedAt).toLocaleDateString("ko-KR")}`}>
+                      <span className="badge-dot" style={{ background: "#F97316" }} />
+                      퇴사 · {new Date(u.resignedAt).toLocaleDateString("ko-KR", { year: "2-digit", month: "numeric", day: "numeric" })}
+                    </span>
+                  ) : (
+                    <button onClick={() => update(u.id, { active: !u.active })} className={u.active ? "chip-green" : "chip-gray"}>
+                      <span className="badge-dot" style={{ background: u.active ? "#16A34A" : "#8E959E" }} />
+                      {u.active ? "Active" : "Inactive"}
+                    </button>
+                  )}
                 </td>
                 <td style={{ textAlign: "right" }}>
                   <button className="btn-icon" title="상세 정보 편집" onClick={() => setEditTarget(u)}>
@@ -590,6 +608,25 @@ function UsersTab({
                       <circle cx="12" cy="12" r="9" />
                       <path d="M12 7v5l3 2" />
                     </svg>
+                  </button>
+                  <button
+                    className="btn-icon"
+                    title={u.resignedAt ? "퇴사 취소(복직)" : "퇴사 처리"}
+                    onClick={() => setResignTarget(u)}
+                    style={u.resignedAt ? { color: "#3D54C4" } : { color: "#F97316" }}
+                  >
+                    {u.resignedAt ? (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 12a9 9 0 1 0 3-6.7" />
+                        <path d="M3 4v5h5" />
+                      </svg>
+                    ) : (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M16 17l5-5-5-5" />
+                        <path d="M21 12H9" />
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                      </svg>
+                    )}
                   </button>
                   <button className="btn-icon" title="삭제" onClick={() => remove(u.id)}>
                     <TrashIcon />
@@ -625,6 +662,118 @@ function UsersTab({
           onSaved={() => { setEditTarget(null); reload(); }}
         />
       )}
+      {resignTarget && (
+        <ResignModal
+          user={resignTarget}
+          onClose={() => setResignTarget(null)}
+          onDone={() => { setResignTarget(null); reload(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ===== 퇴사 처리 / 복직 모달 =====
+ * - 퇴사: 캘린더로 퇴사일 선택 + 본인 비밀번호 재확인 → 서버에서 active=false + resignedAt 세팅.
+ * - 복직: 비밀번호만 재확인 → resignedAt=null + active=true.
+ * - 캘린더는 앱 전반에서 쓰는 DatePicker 를 그대로 재사용 (일정 페이지와 동일).
+ */
+function ResignModal({
+  user, onClose, onDone,
+}: { user: UserRow; onClose: () => void; onDone: () => void }) {
+  const isResigned = !!user.resignedAt;
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const [date, setDate] = useState<string>(
+    isResigned && user.resignedAt ? (user.resignedAt.slice(0, 10)) : todayStr
+  );
+  const [password, setPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function submit() {
+    setErr(null);
+    if (!password) { setErr("비밀번호를 입력해주세요."); return; }
+    if (!isResigned && !date) { setErr("퇴사일을 선택해주세요."); return; }
+    setSaving(true);
+    try {
+      if (isResigned) {
+        await api(`/api/admin/users/${user.id}/unresign`, { method: "POST", json: { password } });
+      } else {
+        await api(`/api/admin/users/${user.id}/resign`, { method: "POST", json: { password, resignedAt: date } });
+      }
+      onDone();
+    } catch (e: any) {
+      const code = e?.body?.error;
+      if (code === "BAD_PASSWORD") setErr("비밀번호가 일치하지 않습니다.");
+      else if (code === "SELF_RESIGN") setErr("본인 계정은 퇴사 처리할 수 없습니다.");
+      else if (code === "SUPER_ADMIN_TARGET") setErr("이 계정은 퇴사 처리할 수 없습니다.");
+      else setErr(e?.message || "처리 중 오류가 발생했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 grid place-items-center z-50 p-4" onClick={onClose}>
+      <div className="card w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-lg font-bold">{isResigned ? "퇴사 취소(복직)" : "퇴사 처리"}</h3>
+          <button onClick={onClose} className="btn-ghost btn-xs">닫기</button>
+        </div>
+        <div className="text-[12px] text-ink-600 mb-4">
+          {user.name} · {user.email}
+        </div>
+
+        {isResigned ? (
+          <div className="mb-4 p-3 rounded-md bg-slate-50 border border-ink-100 text-[12px] text-ink-700">
+            현재 퇴사일: <b>{user.resignedAt ? new Date(user.resignedAt).toLocaleDateString("ko-KR") : "-"}</b>
+            <div className="text-ink-500 mt-1">복직 처리하면 해당 계정의 로그인이 다시 허용되고 퇴사 기록이 삭제됩니다.</div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div>
+              <label className="field-label">퇴사일</label>
+              <DatePicker value={date} onChange={(v) => setDate(v)} />
+            </div>
+            <div className="p-2.5 rounded-md bg-amber-50 border border-amber-200 text-[11.5px] text-amber-800">
+              퇴사 처리 시 해당 계정의 로그인이 즉시 차단됩니다. HR 기록은 보존됩니다.
+            </div>
+          </div>
+        )}
+
+        <div className="mt-4">
+          <label className="field-label">본인 계정 비밀번호 재확인</label>
+          <input
+            type="password"
+            className="input"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="비밀번호를 입력해주세요"
+            autoComplete="current-password"
+            onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+            disabled={saving}
+          />
+        </div>
+
+        {err && (
+          <div className="mt-3 text-[12px] text-rose-600">
+            {err}
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 mt-5">
+          <button className="btn-ghost btn-xs" onClick={onClose} disabled={saving}>취소</button>
+          <button
+            className={isResigned ? "btn-primary btn-xs" : "btn-primary btn-xs"}
+            style={isResigned ? undefined : { background: "#F97316", borderColor: "#F97316" }}
+            onClick={submit}
+            disabled={saving}
+          >
+            {saving ? "처리 중..." : isResigned ? "복직 처리" : "퇴사 처리"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -739,22 +888,20 @@ function UserDetailEditModal({
 
           <Section title="고용 정보">
             <Field label="고용형태">
-              <select className="input" value={form.employmentType} onChange={(e) => set("employmentType", e.target.value)}>
-                <option value="">(없음)</option>
-                <option>정규직</option>
-                <option>계약직</option>
-                <option>파견직</option>
-                <option>인턴</option>
-              </select>
+              <SelectOrEtc options={EMPLOYMENT_TYPES} value={form.employmentType} onChange={(v) => set("employmentType", v)} placeholder="(선택)" />
             </Field>
-            <Field label="고용유형"><input className="input" value={form.employmentCategory} onChange={(e) => set("employmentCategory", e.target.value)} placeholder="유기계약" maxLength={500} /></Field>
-            <Field label="계약형태"><input className="input" value={form.contractType} onChange={(e) => set("contractType", e.target.value)} placeholder="기간제" maxLength={500} /></Field>
-            <Field label="입사일"><DatePicker value={form.hireDate} onChange={(v) => set("hireDate", v)} /></Field>
+            <Field label="고용유형">
+              <SelectOrEtc options={EMPLOYMENT_CATEGORIES} value={form.employmentCategory} onChange={(v) => set("employmentCategory", v)} placeholder="(선택)" />
+            </Field>
+            <Field label="계약형태">
+              <SelectOrEtc options={CONTRACT_TYPES} value={form.contractType} onChange={(v) => set("contractType", v)} placeholder="(선택)" />
+            </Field>
+            <Field label="입사일"><DatePicker variant="input" value={form.hireDate} onChange={(v) => set("hireDate", v)} /></Field>
           </Section>
 
           <Section title="개인 정보">
             <Field label="이름"><input className="input" value={form.name} onChange={(e) => set("name", e.target.value)} maxLength={200} /></Field>
-            <Field label="생년월일"><DatePicker value={form.birthDate} onChange={(v) => set("birthDate", v)} /></Field>
+            <Field label="생년월일"><DatePicker variant="input" value={form.birthDate} onChange={(v) => set("birthDate", v)} /></Field>
             <Field label="성별">
               <select className="input" value={form.gender} onChange={(e) => set("gender", e.target.value)}>
                 <option value="">(없음)</option>
@@ -812,6 +959,65 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div>
       <div className="label text-[11px] text-ink-500 mb-1">{label}</div>
       {children}
+    </div>
+  );
+}
+
+/* ===== 상세 폼 전용: 프리셋 + 기타(직접 입력) 콤보 =====
+ * value 가 options 에 있으면 select 에서 해당 옵션 표시.
+ * options 에 없는 값(비어있지 않은 경우)이면 "기타" 로 간주해 아래 text input 노출.
+ * - 사용자가 드롭다운에서 "기타" 선택 → 빈 문자열로 전환하고 입력란 활성화.
+ * - 사용자가 "(선택)" 으로 비우려면 첫 옵션 선택.
+ */
+function SelectOrEtc({
+  options, value, onChange, placeholder,
+}: {
+  options: string[];
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  const inList = !value || options.includes(value);
+  // 기타 모드: 값이 있는데 옵션에 없거나, 사용자가 방금 기타를 고른 경우
+  const [etc, setEtc] = useState<boolean>(!inList);
+  // value 가 외부에서 바뀌면 inList 재판단
+  useEffect(() => {
+    if (value && !options.includes(value)) setEtc(true);
+    else if (!value) setEtc(false);
+  }, [value, options]);
+
+  return (
+    <div className="space-y-1.5">
+      <select
+        className="input"
+        value={etc ? "__etc__" : (value || "")}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === "__etc__") {
+            setEtc(true);
+            onChange("");
+          } else {
+            setEtc(false);
+            onChange(v);
+          }
+        }}
+      >
+        <option value="">{placeholder ?? "(선택)"}</option>
+        {options.map((o) => (
+          <option key={o} value={o}>{o}</option>
+        ))}
+        <option value="__etc__">기타 (직접 입력)</option>
+      </select>
+      {etc && (
+        <input
+          className="input"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="직접 입력"
+          maxLength={500}
+          autoFocus
+        />
+      )}
     </div>
   );
 }
@@ -1231,11 +1437,11 @@ function AttendanceEditModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="field-label">출근 시각</label>
-              <input type="time" className="input" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} disabled={loading} />
+              <TimePicker value={checkIn} onChange={setCheckIn} disabled={loading} />
             </div>
             <div>
               <label className="field-label">퇴근 시각</label>
-              <input type="time" className="input" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} disabled={loading} />
+              <TimePicker value={checkOut} onChange={setCheckOut} disabled={loading} />
             </div>
           </div>
           <div className="text-[11px] text-ink-500">
