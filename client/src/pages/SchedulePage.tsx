@@ -327,11 +327,11 @@ function EventChip({ e, onOpenDay }: { e: Event; onOpenDay: () => void }) {
         ev.stopPropagation();
         onOpenDay();
       }}
-      className="group/ev block w-full text-left rounded-md overflow-hidden hover:opacity-80 transition-opacity"
+      className="group/ev block w-full text-left hover:opacity-80 transition-opacity"
       title={`${e.title} · 상세 보기`}
     >
       <div
-        className="flex items-center gap-1 px-1.5 py-1 border"
+        className="flex items-center gap-1 px-1.5 py-1 border rounded-md"
         style={{
           background: e.color + "14",
           borderColor: e.color + "33",
