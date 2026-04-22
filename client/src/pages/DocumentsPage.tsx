@@ -382,8 +382,40 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
   }
 
   // 폴더 전체 — 서버에서 ZIP 스트림으로 내려옴. 큰 폴더는 시간이 꽤 걸릴 수 있음.
-  function downloadFolder(f: Folder) {
-    triggerDownload(`/api/document/folders/${f.id}/download`);
+  // 기존엔 <a target="_blank"> 로 새 탭 열어 attachment 헤더로 다운로드 유도했는데
+  // 서버가 404/500 을 내면 새 탭에 JSON/빈페이지가 뜨고 사용자는 왜 안되는지 알 수 없었음.
+  // fetch 로 받아 Blob 으로 내려받으면: 에러 시 JSON 본문을 파싱해 alertAsync 로 안내 가능.
+  async function downloadFolder(f: Folder) {
+    try {
+      const res = await fetch(`/api/document/folders/${f.id}/download`, { credentials: "include" });
+      if (!res.ok) {
+        let msg = `다운로드 실패 (HTTP ${res.status})`;
+        try {
+          const j = await res.json();
+          if (j?.error) msg = j.error;
+        } catch {}
+        await alertAsync({ title: "폴더 다운로드 실패", description: msg });
+        return;
+      }
+      const blob = await res.blob();
+      if (blob.size === 0) {
+        await alertAsync({ title: "폴더 다운로드 실패", description: "서버가 빈 파일을 반환했어요." });
+        return;
+      }
+      const cd = res.headers.get("Content-Disposition") || "";
+      const mName = /filename\*=UTF-8''([^;]+)/i.exec(cd) || /filename="?([^";]+)"?/i.exec(cd);
+      const fname = mName ? decodeURIComponent(mName[1]) : `${f.name}.zip`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fname;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err: any) {
+      await alertAsync({ title: "폴더 다운로드 실패", description: err?.message ?? String(err) });
+    }
   }
 
   // 새 탭에서 열되 Content-Disposition: attachment 헤더 때문에 바로 다운로드로 떨어진다.

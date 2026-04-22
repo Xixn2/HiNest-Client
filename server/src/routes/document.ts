@@ -439,21 +439,38 @@ router.get("/folders/:id/download", async (req, res) => {
     if (!ok) return res.status(403).json({ error: "forbidden" });
   }
 
-  // 폴더 내 파일이 달린 문서만 수집. 가시성은 위에서 폴더 단위로 걸었으니 여기선 pass.
-  const docs = await prisma.document.findMany({
-    where: {
-      folderId: folder.id,
-      fileUrl: { not: null },
-    },
-    select: { fileUrl: true, fileName: true, title: true },
-  });
-  if (docs.length === 0) {
+  // 재귀적으로 하위 폴더까지 순회해 파일 수집. 기존엔 최상위 folderId 만 훑어서
+  // 서브폴더만 있고 루트엔 파일이 없는 폴더를 받으면 404 로 떨어졌음.
+  type Collected = { fileUrl: string; fileName: string | null; title: string; relPath: string };
+  const collected: Collected[] = [];
+  async function walk(folderId: string, prefix: string) {
+    const docs = await prisma.document.findMany({
+      where: { folderId, fileUrl: { not: null } },
+      select: { fileUrl: true, fileName: true, title: true },
+    });
+    for (const d of docs) {
+      if (d.fileUrl) collected.push({ fileUrl: d.fileUrl, fileName: d.fileName, title: d.title, relPath: prefix });
+    }
+    const subs = await prisma.folder.findMany({
+      where: { parentId: folderId },
+      select: { id: true, name: true },
+    });
+    for (const s of subs) {
+      const safe = s.name.replace(/[\\/:*?"<>|]/g, "_");
+      await walk(s.id, prefix ? `${prefix}/${safe}` : safe);
+    }
+  }
+  await walk(folder.id, "");
+
+  if (collected.length === 0) {
     return res.status(404).json({ error: "폴더에 다운로드할 파일이 없어요" });
   }
 
-  // 파일명 중복 시 "(1)" "(2)" 같은 꼬리 번호를 붙여 덮어쓰기 방지.
-  const used = new Set<string>();
-  function uniqueName(base: string): string {
+  // 파일명 중복 시 "(1)" "(2)" 같은 꼬리 번호를 붙여 덮어쓰기 방지 (경로별로 별도 카운터).
+  const usedByPath = new Map<string, Set<string>>();
+  function uniqueName(dir: string, base: string): string {
+    let used = usedByPath.get(dir);
+    if (!used) { used = new Set(); usedByPath.set(dir, used); }
     if (!used.has(base)) { used.add(base); return base; }
     const ext = path.extname(base);
     const stem = base.slice(0, base.length - ext.length);
@@ -479,25 +496,43 @@ router.get("/folders/:id/download", async (req, res) => {
   const archive = archiver("zip", { zlib: { level: 5 } });
   archive.on("error", (err) => {
     console.error("[doc:zip] archiver error", err);
-    // 헤더가 이미 전송된 상태라 end 로만 마감.
     if (!res.headersSent) res.status(500).json({ error: "zip failure" });
     else res.end();
   });
   archive.pipe(res);
 
-  for (const d of docs) {
-    if (!d.fileUrl) continue;
-    const m = /^\/uploads\/([A-Za-z0-9._-]+)$/.exec(d.fileUrl);
-    if (!m) continue;
-    const key = m[1];
-    const buf = await fetchFileBuffer(key);
-    if (!buf) continue;
-    const display = uniqueName(d.fileName || d.title || key);
-    archive.append(buf, { name: display });
+  let added = 0;
+  try {
+    for (const d of collected) {
+      // 업로드 경로 파싱 — 기존 regex 가 너무 빡빡해 파일명에 허용되지 않는 글자가 하나라도
+      // 들어있으면 통째로 스킵됐음. key 추출은 마지막 슬래시 이후의 원시 문자열로.
+      if (!d.fileUrl.startsWith("/uploads/")) continue;
+      const key = d.fileUrl.slice("/uploads/".length);
+      if (!key) continue;
+      let buf: Buffer | null = null;
+      try {
+        buf = await fetchFileBuffer(key);
+      } catch (err) {
+        console.error("[doc:zip] fetch failed", key, err);
+      }
+      if (!buf) continue;
+      const display = uniqueName(d.relPath, d.fileName || d.title || key);
+      const entryName = d.relPath ? `${d.relPath}/${display}` : display;
+      archive.append(buf, { name: entryName });
+      added++;
+    }
+  } catch (err) {
+    console.error("[doc:zip] collect loop failed", err);
+  }
+
+  if (added === 0) {
+    // 헤더 이미 보냈으므로 JSON 에러로 바꿀 수 없음 — 빈 zip 을 마감해서
+    // 최소한 클라이언트 다운로드가 '무한 로딩' 으로 멈추는 것만 피함.
+    console.warn("[doc:zip] no readable files", folder.id);
   }
 
   await archive.finalize();
-  await writeLog(u.id, "FOLDER_DOWNLOAD", folder.id, folder.name);
+  await writeLog(u.id, "FOLDER_DOWNLOAD", folder.id, `${folder.name} (${added} files)`);
 });
 
 export default router;
