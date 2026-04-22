@@ -295,28 +295,23 @@ function GridCard({
 }) {
   return (
     <div className="group panel p-0 overflow-hidden relative hover:border-ink-200 transition">
-      {/* color band */}
-      <div
-        className="h-14 relative"
-        style={{ background: `linear-gradient(135deg, ${u.avatarColor ?? "#3D54C4"}22, ${u.avatarColor ?? "#3D54C4"}0a)` }}
-      >
-        <div className="absolute bottom-0 left-4 translate-y-1/2 w-12 h-12 shadow-pop">
-          <div className="absolute inset-0 rounded-full overflow-hidden" style={{ background: u.avatarUrl ? "transparent" : (u.avatarColor ?? "#3D54C4") }}>
-            {u.avatarUrl ? (
-              <img src={u.avatarUrl} alt={u.name} className="absolute inset-0 w-full h-full object-cover" />
-            ) : (
-              <div className="absolute inset-0 grid place-items-center text-white text-[16px] font-extrabold" style={{ letterSpacing: "-0.02em" }}>
-                {u.name[0]}
-              </div>
-            )}
+      {/* 상단 color band 제거 — 아바타 뒤로 사각형 배경이 비쳐보이는 문제.
+          아바타는 이제 카드 본문 안에 깔끔히 원형만 노출. */}
+      <div className="px-4 pt-4 pb-4">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="relative w-12 h-12 flex-shrink-0">
+            <div className="absolute inset-0 rounded-full overflow-hidden" style={{ background: u.avatarUrl ? "transparent" : (u.avatarColor ?? "#3D54C4") }}>
+              {u.avatarUrl ? (
+                <img src={u.avatarUrl} alt={u.name} className="absolute inset-0 w-full h-full object-cover" />
+              ) : (
+                <div className="absolute inset-0 grid place-items-center text-white text-[16px] font-extrabold" style={{ letterSpacing: "-0.02em" }}>
+                  {u.name[0]}
+                </div>
+              )}
+            </div>
+            <PresenceDot u={u} size={12} ring={2} />
           </div>
-          <PresenceDot u={u} size={14} ring={2} />
-        </div>
-      </div>
-
-      <div className="px-4 pt-8 pb-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="text-[15px] font-extrabold text-ink-900 tracking-tight truncate">{u.name}</div>
             <div className="text-[12px] text-ink-600 truncate mt-0.5">
               {u.position ?? "—"}
@@ -324,7 +319,7 @@ function GridCard({
           </div>
           {u.team && <span className="chip-blue flex-shrink-0">{u.team}</span>}
         </div>
-        <div className="text-[11px] text-ink-500 tabular truncate mt-1">{u.email}</div>
+        <div className="text-[11px] text-ink-500 tabular truncate">{u.email}</div>
         <PresenceLine u={u} />
 
         <div className="mt-3 flex items-center gap-1.5">
