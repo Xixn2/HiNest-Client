@@ -12,8 +12,15 @@ const approvalSchema = z.object({
   title: z.string().min(1).max(200),
   content: z.string().max(5000).optional(),
   data: z.any().optional(),
-  startDate: z.string().max(40).optional(),
-  endDate: z.string().max(40).optional(),
+  // Invalid Date 가 Prisma 쓰기까지 흘러가 500 이 나지 않도록 파싱 가능한 문자열만 허용.
+  startDate: z.string().max(40).refine(
+    (s) => !s || !Number.isNaN(new Date(s).getTime()),
+    { message: "시작일 형식이 올바르지 않습니다" },
+  ).optional(),
+  endDate: z.string().max(40).refine(
+    (s) => !s || !Number.isNaN(new Date(s).getTime()),
+    { message: "종료일 형식이 올바르지 않습니다" },
+  ).optional(),
   amount: z.number().int().nonnegative().max(1_000_000_000).optional(),
   reviewerIds: z.array(z.string().max(50)).min(1).max(10),
 });
