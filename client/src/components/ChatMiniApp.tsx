@@ -821,10 +821,22 @@ function ListRow({
               </svg>
             )}
           </div>
-          {rightTop && (
-            <div style={{ fontSize: 12, fontWeight: 500, color: C.gray500, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
-              {rightTop}
-            </div>
+          {/* 상단 우측: 안 읽은 메시지 수 배지. 시간은 아래 줄로 내려서 시각적 우선순위를
+              "대화 미리보기(아래) ← 시간" vs "제목(위) ← 배지" 로 분리. */}
+          {unread > 0 && (
+            <span
+              style={{
+                minWidth: 20, height: 20, padding: "0 6px",
+                borderRadius: 999,
+                background: C.blue, color: "#fff",
+                fontSize: 11, fontWeight: 700,
+                display: "grid", placeItems: "center",
+                flexShrink: 0,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {unread > 99 ? "99+" : unread}
+            </span>
           )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 3 }}>
@@ -841,20 +853,10 @@ function ListRow({
             {subtitlePrefix && <span style={{ color: C.gray500 }}>{subtitlePrefix}</span>}
             {highlight(subtitle, subtitleHighlight)}
           </div>
-          {unread > 0 && (
-            <span
-              style={{
-                minWidth: 20, height: 20, padding: "0 6px",
-                borderRadius: 999,
-                background: C.blue, color: "#fff",
-                fontSize: 11, fontWeight: 700,
-                display: "grid", placeItems: "center",
-                flexShrink: 0,
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {unread > 99 ? "99+" : unread}
-            </span>
+          {rightTop && (
+            <div style={{ fontSize: 12, fontWeight: 500, color: C.gray500, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
+              {rightTop}
+            </div>
           )}
         </div>
       </div>

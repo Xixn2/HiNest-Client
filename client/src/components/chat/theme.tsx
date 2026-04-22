@@ -184,39 +184,50 @@ export function Avatar({
   const dot = Math.max(8, Math.round(size * 0.28));
   const ring = Math.max(1, Math.round(size * 0.06));
   return (
+    // 바깥 래퍼는 clip 하지 않음. 안쪽 circle 에서만 이미지를 clip 하고,
+    // presence dot 은 바깥 래퍼에 얹어서 원 경계 바깥까지 자연스럽게 튀어나오게 한다.
+    // 예전엔 바깥에 overflow:hidden 이 걸려 있어서 presence 점 우하단이 반달
+    // 모양으로 잘려 보이던 버그가 있었음.
     <div
       style={{
         position: "relative",
         width: size,
         height: size,
-        borderRadius: "50%",
-        background: imageUrl ? "transparent" : color,
-        color: "#fff",
-        display: "grid",
-        placeItems: "center",
-        fontSize: size * 0.42,
-        fontWeight: 700,
         flexShrink: 0,
-        letterSpacing: "-0.02em",
-        overflow: "hidden",
       }}
     >
-      {imageUrl ? (
-        <img
-          src={imageUrl}
-          alt={name}
-          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-        />
-      ) : (
-        name?.[0] ?? "?"
-      )}
+      <div
+        style={{
+          width: size,
+          height: size,
+          borderRadius: "50%",
+          background: imageUrl ? "transparent" : color,
+          color: "#fff",
+          display: "grid",
+          placeItems: "center",
+          fontSize: size * 0.42,
+          fontWeight: 700,
+          letterSpacing: "-0.02em",
+          overflow: "hidden",
+        }}
+      >
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={name}
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          />
+        ) : (
+          name?.[0] ?? "?"
+        )}
+      </div>
       {presenceColor && (
         <span
           title={presenceTitle}
           style={{
             position: "absolute",
-            bottom: -1,
-            right: -1,
+            bottom: 0,
+            right: 0,
             width: dot,
             height: dot,
             borderRadius: "50%",
