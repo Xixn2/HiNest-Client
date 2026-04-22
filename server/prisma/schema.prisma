@@ -93,6 +93,8 @@ model Project {
   documents   Document[]
   folders     Folder[]
   qaItems     ProjectQaItem[]
+  // 전사 캘린더(Event) 중 이 프로젝트 범위로 공유된 일정
+  scheduleEvents Event[]
 }
 
 /// 프로젝트별 QA(테스트) 체크리스트 — "무엇을 검증했고 결과가 어땠는지" 남기는 용도.
@@ -278,8 +280,12 @@ model Event {
   id            String   @id @default(cuid())
   title         String
   content       String?
-  scope         String   @default("COMPANY") // COMPANY | TEAM | PERSONAL | TARGETED
+  scope         String   @default("COMPANY") // COMPANY | TEAM | PROJECT | PERSONAL | TARGETED
   team          String?
+  /// scope=PROJECT 인 경우 연결된 프로젝트. 해당 프로젝트 멤버만 열람/수정.
+  /// 프로젝트 삭제 시 일정도 함께 제거.
+  projectId     String?
+  project       Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
   category      String   @default("OTHER") // MEETING | DEADLINE | OUT | HOLIDAY | EVENT | BIRTHDAY | TASK | OTHER
   targetUserIds String?  // comma separated userIds (scope=TARGETED or mention targets)
   startAt       DateTime
@@ -291,6 +297,7 @@ model Event {
 
   // 월별 캘린더 조회 — 대부분의 read 경로.
   @@index([startAt, endAt])
+  @@index([projectId, startAt])
 }
 
 model Leave {

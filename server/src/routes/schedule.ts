@@ -70,6 +70,13 @@ router.get("/", async (req, res) => {
   // TEAM 스코프는 "내가 팀에 소속된 경우에만" 추가.
   // 기존 `team: meUser?.team ?? ""` 는 팀 없는 유저가 `team=""` 인 이벤트(가능: 관리자 실수 · 팀 삭제 후 잔존)를
   // 전부 열람하는 권한 누수였음. 팀이 없으면 TEAM 절 자체를 제거해 필터에서 배제.
+  // 내가 멤버인 프로젝트 id 목록 — PROJECT 스코프 일정 필터에 사용.
+  const myProjects = await prisma.projectMember.findMany({
+    where: { userId: u.id },
+    select: { projectId: true },
+  });
+  const myProjectIds = myProjects.map((m) => m.projectId);
+
   const orClauses: any[] = [
     { scope: "COMPANY" },
     { scope: "PERSONAL", createdBy: u.id },
@@ -78,6 +85,9 @@ router.get("/", async (req, res) => {
   ];
   if (meUser?.team) {
     orClauses.push({ scope: "TEAM", team: meUser.team });
+  }
+  if (myProjectIds.length) {
+    orClauses.push({ scope: "PROJECT", projectId: { in: myProjectIds } });
   }
   const where: any = { OR: orClauses };
   if (from || to) {
@@ -89,7 +99,10 @@ router.get("/", async (req, res) => {
   const events = await prisma.event.findMany({
     where,
     orderBy: { startAt: "asc" },
-    include: { author: { select: { name: true, avatarColor: true, avatarUrl: true } } },
+    include: {
+      author: { select: { name: true, avatarColor: true, avatarUrl: true } },
+      project: { select: { id: true, name: true, color: true } },
+    },
   });
   res.json({ events });
 });
@@ -97,8 +110,10 @@ router.get("/", async (req, res) => {
 const eventSchema = z.object({
   title: z.string().min(1).max(200),
   content: z.string().max(5000).optional(),
-  scope: z.enum(["COMPANY", "TEAM", "PERSONAL", "TARGETED"]).default("PERSONAL"),
+  scope: z.enum(["COMPANY", "TEAM", "PROJECT", "PERSONAL", "TARGETED"]).default("PERSONAL"),
   team: z.string().max(80).optional().nullable(),
+  /// scope=PROJECT 인 경우 필수 — 현재 사용자가 멤버여야 함.
+  projectId: z.string().max(50).optional().nullable(),
   category: z.enum(CATEGORIES).default("OTHER"),
   targetUserIds: z.array(z.string().max(50)).max(500).optional(),
   // ISO 8601 확장 포맷도 40자면 충분. 개별 포맷 오류는 순서 refine 메시지에 묻히지 않도록 먼저 검증.
@@ -128,6 +143,15 @@ router.post("/", async (req, res) => {
   if (ADMIN_ONLY_CATEGORIES.has(d.category) && u.role === "MEMBER")
     return res.status(403).json({ error: "해당 카테고리는 관리자/매니저만 등록 가능" });
 
+  // PROJECT 스코프는 해당 프로젝트 멤버만 등록 가능. projectId 필수.
+  if (d.scope === "PROJECT") {
+    if (!d.projectId) return res.status(400).json({ error: "프로젝트를 선택해주세요" });
+    const membership = await prisma.projectMember.findUnique({
+      where: { projectId_userId: { projectId: d.projectId, userId: u.id } },
+    });
+    if (!membership) return res.status(403).json({ error: "프로젝트 멤버만 일정을 등록할 수 있어요" });
+  }
+
   const me = await prisma.user.findUnique({ where: { id: u.id } });
 
   const targets = (d.targetUserIds ?? []).filter((id) => id && id !== u.id);
@@ -138,6 +162,7 @@ router.post("/", async (req, res) => {
       content: d.content,
       scope: d.scope,
       team: d.scope === "TEAM" ? (d.team ?? me?.team ?? null) : (d.team ?? null),
+      projectId: d.scope === "PROJECT" ? d.projectId ?? null : null,
       category: d.category,
       targetUserIds: targets.length ? targets.join(",") : null,
       startAt: new Date(d.startAt),
@@ -169,6 +194,12 @@ router.post("/", async (req, res) => {
       });
       recipientIds = users.map((x) => x.id);
     }
+  } else if (d.scope === "PROJECT" && d.projectId) {
+    const members = await prisma.projectMember.findMany({
+      where: { projectId: d.projectId, userId: { not: u.id } },
+      select: { userId: true },
+    });
+    recipientIds = members.map((m) => m.userId);
   } else if (d.scope === "TARGETED") {
     recipientIds = targets;
   }
@@ -180,11 +211,17 @@ router.post("/", async (req, res) => {
       hour: "2-digit",
       minute: "2-digit",
     });
+    const projName =
+      d.scope === "PROJECT" && d.projectId
+        ? (await prisma.project.findUnique({ where: { id: d.projectId }, select: { name: true } }))?.name ?? "프로젝트"
+        : "";
     const scopeLabel =
       d.scope === "COMPANY"
         ? "전사 일정"
         : d.scope === "TEAM"
         ? `${d.team ?? me?.team ?? "팀"} 팀 일정`
+        : d.scope === "PROJECT"
+        ? `${projName} 프로젝트 일정`
         : "새 일정 태그";
     const categoryLabel = CATEGORY_LABEL[d.category];
 

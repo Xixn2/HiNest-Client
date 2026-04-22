@@ -13,7 +13,7 @@ export type Category =
   | "COMPANY_HOLIDAY" | "COMPANY_LEAVE"
   | "OTHER";
 
-export type EventScope = "COMPANY" | "TEAM" | "PERSONAL" | "TARGETED";
+export type EventScope = "COMPANY" | "TEAM" | "PROJECT" | "PERSONAL" | "TARGETED";
 
 type Event = {
   id: string;
@@ -21,6 +21,8 @@ type Event = {
   content?: string;
   scope: EventScope;
   team?: string | null;
+  projectId?: string | null;
+  project?: { id: string; name: string; color: string } | null;
   category?: Category;
   targetUserIds?: string | null;
   startAt: string;
@@ -29,6 +31,8 @@ type Event = {
   author: { name: string };
   createdBy: string;
 };
+
+type ProjectChip = { id: string; name: string; color: string };
 
 function startOfMonth(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -48,10 +52,12 @@ export default function SchedulePage() {
     scope: "COMPANY" as EventScope,
     category: "MEETING" as Category,
     targetUserIds: [] as string[],
+    projectId: "" as string,
     startAt: "",
     endAt: "",
     color: "#3B5CF0",
   });
+  const [myProjects, setMyProjects] = useState<ProjectChip[]>([]);
   const [dayOpen, setDayOpen] = useState<Date | null>(null);
   const [saving, setSaving] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -72,6 +78,15 @@ export default function SchedulePage() {
     load(aliveRef);
     return () => { aliveRef.current = false; };
   }, [cursor]);
+
+  // 모달에서 PROJECT 스코프를 선택했을 때 보여줄 프로젝트 목록. 한 번만 로드.
+  useEffect(() => {
+    let alive = true;
+    api<{ projects: ProjectChip[] }>("/api/project")
+      .then((r) => { if (alive) setMyProjects(r.projects ?? []); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   const days = useMemo(() => {
     const first = startOfMonth(cursor);
@@ -104,6 +119,10 @@ export default function SchedulePage() {
       await alertAsync({ title: "대상 확인", description: "대상 인원을 1명 이상 선택해주세요" });
       return;
     }
+    if (form.scope === "PROJECT" && !form.projectId) {
+      await alertAsync({ title: "프로젝트 확인", description: "공유할 프로젝트를 선택해주세요" });
+      return;
+    }
     if (new Date(form.endAt).getTime() < new Date(form.startAt).getTime()) {
       await alertAsync({ title: "시간 확인", description: "종료 시각이 시작 시각보다 빨라요" });
       return;
@@ -125,6 +144,7 @@ export default function SchedulePage() {
         scope: "COMPANY",
         category: "MEETING",
         targetUserIds: [],
+        projectId: "",
         startAt: "",
         endAt: "",
         color: "#3B5CF0",
@@ -288,6 +308,7 @@ export default function SchedulePage() {
           setForm={setForm}
           onSubmit={create}
           canMakeCompany={canMakeCompany}
+          myProjects={myProjects}
           saving={saving}
         />
       )}
@@ -502,6 +523,15 @@ const EVENT_COLORS = [
 ];
 
 const SCOPE_META: Record<EventScope, { label: string; desc: string; icon: JSX.Element }> = {
+  PROJECT: {
+    label: "프로젝트",
+    desc: "선택한 프로젝트 멤버에게만 공유",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      </svg>
+    ),
+  },
   PERSONAL: {
     label: "개인",
     desc: "나만 볼 수 있어요",
@@ -572,6 +602,7 @@ type EventForm = {
   scope: EventScope;
   category: Category;
   targetUserIds: string[];
+  projectId: string;
   startAt: string;
   endAt: string;
   color: string;
@@ -585,6 +616,7 @@ function EventModal({
   setForm,
   onSubmit,
   canMakeCompany,
+  myProjects,
   saving,
 }: {
   onClose: () => void;
@@ -592,11 +624,12 @@ function EventModal({
   setForm: (f: EventForm) => void;
   onSubmit: (e: React.FormEvent) => void;
   canMakeCompany: boolean;
+  myProjects: ProjectChip[];
   saving: boolean;
 }) {
   const scopes: EventScope[] = canMakeCompany
-    ? ["COMPANY", "TEAM", "PERSONAL", "TARGETED"]
-    : ["TEAM", "PERSONAL", "TARGETED"];
+    ? ["COMPANY", "TEAM", "PROJECT", "PERSONAL", "TARGETED"]
+    : ["TEAM", "PROJECT", "PERSONAL", "TARGETED"];
 
   const [directory, setDirectory] = useState<DirUser[]>([]);
   const [userSearch, setUserSearch] = useState("");
@@ -755,6 +788,41 @@ function EventModal({
                 })}
               </div>
             </div>
+
+            {/* 프로젝트 선택 (PROJECT 일 때) — 내가 멤버인 프로젝트만 노출. */}
+            {form.scope === "PROJECT" && (
+              <div>
+                <label className="field-label">프로젝트</label>
+                {myProjects.length === 0 ? (
+                  <div className="text-[12px] text-ink-500 p-3 rounded-lg border border-ink-150 bg-[color:var(--c-surface-2)]">
+                    참여 중인 프로젝트가 없어요. 프로젝트에 먼저 참여한 뒤 다시 시도해주세요.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {myProjects.map((p) => {
+                      const active = form.projectId === p.id;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => setForm({ ...form, projectId: p.id, color: p.color })}
+                          className={`flex items-center gap-2 h-10 px-3 rounded-lg border transition text-left ${
+                            active
+                              ? "border-brand-500 bg-brand-50"
+                              : "border-ink-150 hover:border-ink-300 bg-[color:var(--c-surface)]"
+                          }`}
+                        >
+                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: p.color }} />
+                          <span className={`text-[13px] font-bold truncate ${active ? "text-brand-700" : "text-ink-800"}`}>
+                            {p.name}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* 대상 인원 (TARGETED 일 때) */}
             {form.scope === "TARGETED" && (
