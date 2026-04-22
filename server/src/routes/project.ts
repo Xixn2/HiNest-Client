@@ -338,7 +338,8 @@ router.get("/:id/webhook/:channelId/events", async (req, res) => {
 
 /* ---------------- QA 체크리스트 ---------------- */
 
-const QA_STATUS = ["OPEN", "PASSED", "FAILED", "SKIPPED"] as const;
+// BUG=오류(신규 리포트), IN_PROGRESS=수정 중, DONE=완료, ON_HOLD=보류.
+const QA_STATUS = ["BUG", "IN_PROGRESS", "DONE", "ON_HOLD"] as const;
 const QA_PRIORITY = ["LOW", "NORMAL", "HIGH"] as const;
 const QA_PLATFORM = ["WEB", "IOS", "ANDROID", "MAC_APP", "WINDOWS_APP", "OTHER"] as const;
 const QA_ATTACHMENT_KIND = ["IMAGE", "VIDEO", "FILE"] as const;
@@ -439,9 +440,11 @@ router.post("/:id/qa", async (req, res) => {
     select: { sortOrder: true },
   });
   const nextOrder = (last?.sortOrder ?? 0) + 1;
-  const status = d.status ?? "OPEN";
+  // 기본 상태는 BUG(오류) — 리포트 시점에는 아직 손 대기 전.
+  // BUG 가 아닌 상태로 바로 생성되면 "누가/언제 그 상태로 옮겼는지" 이력을 남긴다.
+  const status = d.status ?? "BUG";
   const resolvedPatch =
-    status !== "OPEN"
+    status !== "BUG"
       ? { resolvedById: u.id, resolvedAt: new Date() }
       : {};
   const item = await prisma.projectQaItem.create({
@@ -514,14 +517,14 @@ router.patch("/:id/qa/:itemId", async (req, res) => {
   }
 
   // 상태 전환 시 resolved 이력 스탬프 자동 관리.
-  //  - OPEN → PASSED/FAILED/SKIPPED : 현재 유저/시각 기록
-  //  - * → OPEN                      : 기록 초기화
-  //  - 같은 non-OPEN 상태로 재지정     : 이력 유지 (이미 누가 한 번 처리한 기록을 지우지 않음)
+  //  - BUG → IN_PROGRESS/DONE/ON_HOLD : 누가 언제 손댔는지 기록
+  //  - * → BUG                         : 리오픈 — 기록 초기화
+  //  - non-BUG 끼리 이동                : 이력 유지 (이미 누가 한 번 손댄 기록을 지우지 않음)
   const statusPatch =
     "status" in d
-      ? d.status === "OPEN"
-        ? { status: "OPEN", resolvedById: null, resolvedAt: null }
-        : existing.status === "OPEN"
+      ? d.status === "BUG"
+        ? { status: "BUG", resolvedById: null, resolvedAt: null }
+        : existing.status === "BUG"
         ? { status: d.status!, resolvedById: u.id, resolvedAt: new Date() }
         : { status: d.status! }
       : {};
