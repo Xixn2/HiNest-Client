@@ -80,11 +80,17 @@ router.get("/month", async (req, res) => {
 
 // 휴가 신청
 // TRIP = 외근 (출장/외부 미팅 등 — 사무실 밖에서 업무).
+// 개별 날짜가 먼저 Invalid Date 인지 검증 — 그래야 순서 refine 메시지("종료일이 시작일보다 빠릅니다")가
+// 잘못된 포맷 입력에 오해석되지 않는다.
+const isoDateStr = z.string().max(40).refine(
+  (s) => !Number.isNaN(new Date(s).getTime()),
+  { message: "날짜 형식이 올바르지 않습니다" },
+);
 const leaveSchema = z
   .object({
     type: z.enum(["ANNUAL", "HALF", "SICK", "TRIP", "OTHER"]),
-    startDate: z.string().max(40),
-    endDate: z.string().max(40),
+    startDate: isoDateStr,
+    endDate: isoDateStr,
     reason: z.string().max(1000).optional(),
   })
   .refine(
