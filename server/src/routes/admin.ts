@@ -319,8 +319,15 @@ router.get("/teams", async (_req, res) => {
   res.json({ teams });
 });
 
+// 팀/직급 이름은 UI 상 80자면 넉넉. zod schema (user.team/position) 와 동일한 상한으로 맞춤.
+// 상한 없이는 수 MB name 으로 DB 를 부풀리거나 user.team 전수 업데이트가 극단적으로 느려질 수 있음.
+function capName(raw: unknown, limit = 80): string {
+  const s = String(raw ?? "").trim();
+  return s.length > limit ? s.slice(0, limit) : s;
+}
+
 router.post("/teams", async (req, res) => {
-  const name = String(req.body?.name ?? "").trim();
+  const name = capName(req.body?.name);
   if (!name) return res.status(400).json({ error: "이름을 입력해주세요" });
   const u = (req as any).user;
   try {
@@ -334,7 +341,7 @@ router.post("/teams", async (req, res) => {
 });
 
 router.patch("/teams/:id", async (req, res) => {
-  const name = String(req.body?.name ?? "").trim();
+  const name = capName(req.body?.name);
   if (!name) return res.status(400).json({ error: "이름을 입력해주세요" });
   const u = (req as any).user;
   const prev = await prisma.team.findUnique({ where: { id: req.params.id } });
@@ -369,7 +376,7 @@ router.get("/positions", async (_req, res) => {
 });
 
 router.post("/positions", async (req, res) => {
-  const name = String(req.body?.name ?? "").trim();
+  const name = capName(req.body?.name);
   const rank = Number(req.body?.rank ?? 0);
   if (!name) return res.status(400).json({ error: "이름을 입력해주세요" });
   const u = (req as any).user;
@@ -384,7 +391,7 @@ router.post("/positions", async (req, res) => {
 });
 
 router.patch("/positions/:id", async (req, res) => {
-  const name = req.body?.name !== undefined ? String(req.body.name).trim() : undefined;
+  const name = req.body?.name !== undefined ? capName(req.body.name) : undefined;
   const rank = req.body?.rank !== undefined ? Number(req.body.rank) : undefined;
   const u = (req as any).user;
   const prev = await prisma.position.findUnique({ where: { id: req.params.id } });
