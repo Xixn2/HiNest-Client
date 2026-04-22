@@ -131,8 +131,14 @@ router.get("/:id/events", async (req, res) => {
   const u = (req as any).user;
   const ok = await assertProjectMember(req.params.id, u.id, u.role);
   if (!ok) return res.status(403).json({ error: "forbidden" });
-  const from = req.query.from ? new Date(String(req.query.from)) : null;
-  const to = req.query.to ? new Date(String(req.query.to)) : null;
+  // Invalid Date 는 Prisma 500 을 유발 — 파싱 실패 시 해당 경계만 무시.
+  const parseOrNull = (s: unknown) => {
+    if (!s) return null;
+    const d = new Date(String(s));
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+  const from = parseOrNull(req.query.from);
+  const to = parseOrNull(req.query.to);
   const where: any = { projectId: req.params.id };
   if (from && to) {
     // 구간 겹침: startAt <= to AND endAt >= from

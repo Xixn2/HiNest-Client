@@ -58,8 +58,14 @@ const ADMIN_ONLY_CATEGORIES = new Set(["COMPANY_HOLIDAY", "COMPANY_LEAVE"]);
 router.get("/", async (req, res) => {
   const u = (req as any).user;
   const meUser = await prisma.user.findUnique({ where: { id: u.id } });
-  const from = req.query.from ? new Date(String(req.query.from)) : undefined;
-  const to = req.query.to ? new Date(String(req.query.to)) : undefined;
+  // Invalid Date 를 그대로 Prisma 에 넣으면 500 — 파싱 실패 시 필터 자체를 생략.
+  const parseOrNull = (s: unknown) => {
+    if (!s) return undefined;
+    const d = new Date(String(s));
+    return Number.isNaN(d.getTime()) ? undefined : d;
+  };
+  const from = parseOrNull(req.query.from);
+  const to = parseOrNull(req.query.to);
 
   // TEAM 스코프는 "내가 팀에 소속된 경우에만" 추가.
   // 기존 `team: meUser?.team ?? ""` 는 팀 없는 유저가 `team=""` 인 이벤트(가능: 관리자 실수 · 팀 삭제 후 잔존)를
