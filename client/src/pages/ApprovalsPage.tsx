@@ -13,7 +13,7 @@ type Step = {
   status: "PENDING" | "APPROVED" | "REJECTED" | "SKIPPED";
   comment?: string | null;
   actedAt?: string | null;
-  reviewer: { id: string; name: string; avatarColor: string; position?: string | null };
+  reviewer: { id: string; name: string; avatarColor: string; avatarUrl?: string | null; position?: string | null };
 };
 type Approval = {
   id: string;
@@ -26,12 +26,12 @@ type Approval = {
   endDate?: string;
   amount?: number;
   createdAt: string;
-  requester: { id: string; name: string; avatarColor: string; position?: string; team?: string };
+  requester: { id: string; name: string; avatarColor: string; avatarUrl?: string | null; position?: string; team?: string };
   steps: Step[];
   currentReviewerId?: string;
 };
 
-type DirUser = { id: string; name: string; email: string; team?: string; position?: string; avatarColor?: string };
+type DirUser = { id: string; name: string; email: string; team?: string; position?: string; avatarColor?: string; avatarUrl?: string | null };
 
 const TYPE_META: Record<ApprovalType, { label: string; color: string; icon: JSX.Element }> = {
   TRIP:     { label: "출장 신청",   color: "#0EA5E9", icon: <IconSvg><><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" /></></IconSvg> },
@@ -407,8 +407,12 @@ function ApprovalDetail({
                 <div className="w-6 h-6 rounded-full grid place-items-center text-white text-[11px] font-bold tabular flex-shrink-0" style={{ background: stepColor(s.status) }}>
                   {idx + 1}
                 </div>
-                <div className="w-8 h-8 rounded-full grid place-items-center text-white text-[11px] font-bold flex-shrink-0" style={{ background: s.reviewer.avatarColor }}>
-                  {s.reviewer.name[0]}
+                <div className="w-8 h-8 rounded-full grid place-items-center text-white text-[11px] font-bold flex-shrink-0 overflow-hidden" style={{ background: s.reviewer.avatarUrl ? "transparent" : s.reviewer.avatarColor }}>
+                  {s.reviewer.avatarUrl ? (
+                    <img src={s.reviewer.avatarUrl} alt={s.reviewer.name} className="w-full h-full object-cover" />
+                  ) : (
+                    s.reviewer.name[0]
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-[13px] font-bold text-ink-900">{s.reviewer.name}{s.reviewer.position ? ` · ${s.reviewer.position}` : ""}</div>
@@ -616,7 +620,13 @@ function CreateModal({
                       }
                     />
                     {checked && <span className="w-5 h-5 rounded bg-brand-500 text-white text-[10px] font-bold grid place-items-center tabular">{idx + 1}</span>}
-                    <div className="w-7 h-7 rounded-full grid place-items-center text-white text-[11px] font-bold" style={{ background: d.avatarColor ?? "#3D54C4" }}>{d.name[0]}</div>
+                    <div className="w-7 h-7 rounded-full grid place-items-center text-white text-[11px] font-bold overflow-hidden" style={{ background: d.avatarUrl ? "transparent" : (d.avatarColor ?? "#3D54C4") }}>
+                      {d.avatarUrl ? (
+                        <img src={d.avatarUrl} alt={d.name} className="w-full h-full object-cover" />
+                      ) : (
+                        d.name[0]
+                      )}
+                    </div>
                     <div className="min-w-0 flex-1">
                       <div className="text-[13px] font-bold text-ink-900">{d.name}</div>
                       <div className="text-[11px] text-ink-500 truncate">{d.position ?? "—"}{d.team ? ` · ${d.team}` : ""}</div>

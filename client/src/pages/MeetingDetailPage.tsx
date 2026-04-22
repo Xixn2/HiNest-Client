@@ -12,7 +12,7 @@ type Visibility = "ALL" | "PROJECT" | "SPECIFIC";
 type Viewer = {
   id: string;
   userId: string;
-  user: { id: string; name: string; team: string | null; position: string | null; avatarColor: string };
+  user: { id: string; name: string; team: string | null; position: string | null; avatarColor: string; avatarUrl?: string | null };
 };
 
 type Meeting = {
@@ -24,13 +24,13 @@ type Meeting = {
   authorId: string;
   createdAt: string;
   updatedAt: string;
-  author: { id: string; name: string; avatarColor: string };
+  author: { id: string; name: string; avatarColor: string; avatarUrl?: string | null };
   project: { id: string; name: string; color: string } | null;
   viewers: Viewer[];
 };
 
 type ProjectLite = { id: string; name: string; color: string };
-type UserLite = { id: string; name: string; email: string; team: string | null; position: string | null; avatarColor: string };
+type UserLite = { id: string; name: string; email: string; team: string | null; position: string | null; avatarColor: string; avatarUrl?: string | null };
 
 export default function MeetingDetailPage() {
   const { id } = useParams();
@@ -239,8 +239,12 @@ export default function MeetingDetailPage() {
       {/* 메타 정보 */}
       <div className="flex items-center gap-2 mb-5 text-[12px] text-slate-500 flex-wrap">
         <span className="inline-flex items-center gap-1.5">
-          <span className="avatar avatar-xs" style={{ background: meeting.author.avatarColor }}>
-            {meeting.author.name[0]}
+          <span className="avatar avatar-xs overflow-hidden" style={{ background: meeting.author.avatarUrl ? "transparent" : meeting.author.avatarColor }}>
+            {meeting.author.avatarUrl ? (
+              <img src={meeting.author.avatarUrl} alt={meeting.author.name} className="w-full h-full object-cover" />
+            ) : (
+              meeting.author.name[0]
+            )}
           </span>
           {meeting.author.name}
         </span>
@@ -379,10 +383,14 @@ function ViewerPicker({
               className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border text-xs ${on ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 hover:bg-slate-50 text-slate-600"}`}
             >
               <span
-                className="w-5 h-5 rounded-full grid place-items-center text-white text-[10px] font-bold"
-                style={{ background: u.avatarColor }}
+                className="w-5 h-5 rounded-full grid place-items-center text-white text-[10px] font-bold overflow-hidden"
+                style={{ background: u.avatarUrl ? "transparent" : u.avatarColor }}
               >
-                {u.name[0]}
+                {u.avatarUrl ? (
+                  <img src={u.avatarUrl} alt={u.name} className="w-full h-full object-cover" />
+                ) : (
+                  u.name[0]
+                )}
               </span>
               <span>{u.name}</span>
               <span className="text-[10px] text-slate-400">{u.team ?? ""}</span>

@@ -210,10 +210,14 @@ export default function DashboardPage() {
           <div className="panel p-5">
             <div className="flex items-center gap-3">
               <div
-                className="w-10 h-10 rounded-full grid place-items-center text-white text-[14px] font-bold"
-                style={{ background: user?.avatarColor ?? "#3D54C4" }}
+                className="w-10 h-10 rounded-full grid place-items-center text-white text-[14px] font-bold overflow-hidden"
+                style={{ background: user?.avatarUrl ? "transparent" : (user?.avatarColor ?? "#3D54C4") }}
               >
-                {user?.name?.[0]}
+                {user?.avatarUrl ? (
+                  <img src={user.avatarUrl} alt={user.name ?? ""} className="w-full h-full object-cover" />
+                ) : (
+                  user?.name?.[0]
+                )}
               </div>
               <div className="min-w-0">
                 <div className="text-[14px] font-bold text-ink-900">{user?.name}</div>
