@@ -1566,38 +1566,52 @@ function RoomView({
                       maxWidth: "100%",
                     }}
                   >
-                    {/* 버블 옆 시각 — 같은 발신자 연속 묶음의 마지막에만 표시 */}
-                    {m.showTime && !m.deletedAt && (
-                      <span
+                    {/* 버블 옆 메타 — 안읽음 카운트(위) + 시각(아래) 을 세로로 스택.
+                        예전에는 [시각 | 안읽음 | 버블] 이 한 줄로 늘어서 있어 "오후 6:03 1"
+                        처럼 읽혀 어떤 값이 안읽음인지 즉시 구분되지 않던 문제가 있었음.
+                        같은 발신자 연속 묶음의 마지막에만 시각을 노출(m.showTime). */}
+                    {(m.showTime && !m.deletedAt) || m.unread > 0 ? (
+                      <div
                         style={{
-                          fontSize: 10.5,
-                          fontWeight: 500,
-                          color: C.gray500,
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: mine ? "flex-end" : "flex-start",
+                          gap: 1,
                           marginBottom: 2,
-                          fontVariantNumeric: "tabular-nums",
                           whiteSpace: "nowrap",
+                          flexShrink: 0,
                         }}
                       >
-                        {formatClock(new Date(m.createdAt))}
-                      </span>
-                    )}
-                    {/* 안읽음 숫자 — 버블 옆에 작게 (테마 따라 톤 변경) */}
-                    {m.unread > 0 && (
-                      <span
-                        title={m.unreadNames?.length ? `안 읽음: ${m.unreadNames.join(", ")}` : undefined}
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          color: C.blue,
-                          marginBottom: 2,
-                          fontVariantNumeric: "tabular-nums",
-                          whiteSpace: "nowrap",
-                          cursor: "help",
-                        }}
-                      >
-                        {m.unread}
-                      </span>
-                    )}
+                        {m.unread > 0 && (
+                          <span
+                            title={m.unreadNames?.length ? `안 읽음: ${m.unreadNames.join(", ")}` : undefined}
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              color: C.blue,
+                              fontVariantNumeric: "tabular-nums",
+                              cursor: "help",
+                              lineHeight: 1.1,
+                            }}
+                          >
+                            {m.unread}
+                          </span>
+                        )}
+                        {m.showTime && !m.deletedAt && (
+                          <span
+                            style={{
+                              fontSize: 10.5,
+                              fontWeight: 500,
+                              color: C.gray500,
+                              fontVariantNumeric: "tabular-nums",
+                              lineHeight: 1.1,
+                            }}
+                          >
+                            {formatClock(new Date(m.createdAt))}
+                          </span>
+                        )}
+                      </div>
+                    ) : null}
                     {m.deletedAt ? (
                       <div
                         style={{
