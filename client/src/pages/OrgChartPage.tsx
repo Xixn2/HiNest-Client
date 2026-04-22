@@ -15,19 +15,30 @@ type DirUser = {
   avatarUrl?: string | null;
 };
 type Position = { id: string; name: string; rank: number };
+type ViewMode = "tree" | "rank" | "list";
 
 // 직급 키워드 순위 (직급 데이터가 없을 때 fallback)
 const RANK_HINTS = ["이사", "부장", "팀장", "과장", "대리", "사원"];
+
+const VIEW_LS_KEY = "hinest.orgchart.view";
 
 export default function OrgChartPage() {
   const { user } = useAuth();
   const [users, setUsers] = useState<DirUser[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
-  // DM 버튼 연타 방지 — 같은 유저에게 방 생성 요청이 중복 나가면 서버에서 기존 방을
-  // 찾는 로직을 두 번 타고 이벤트도 두 번 발사돼 채팅 창이 깜빡임.
   const [dmBusyId, setDmBusyId] = useState<string | null>(null);
+  const [view, setView] = useState<ViewMode>(() => {
+    try {
+      const v = localStorage.getItem(VIEW_LS_KEY);
+      if (v === "tree" || v === "rank" || v === "list") return v;
+    } catch {}
+    return "tree";
+  });
 
-  // 초기 로딩 중 빠르게 탭 이탈해도 setState 누수 안 나도록 guard.
+  useEffect(() => {
+    try { localStorage.setItem(VIEW_LS_KEY, view); } catch {}
+  }, [view]);
+
   const aliveRef = useRef(true);
   useEffect(() => {
     aliveRef.current = true;
@@ -47,7 +58,6 @@ export default function OrgChartPage() {
   }
 
   async function loadPositions() {
-    // 직급 등록된 리스트를 가져오려면 관리자 API 필요. 일반 유저는 hint 만 사용.
     try {
       const r = await api<{ positions: Position[] }>("/api/admin/positions");
       if (!aliveRef.current) return;
@@ -85,9 +95,29 @@ export default function OrgChartPage() {
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b, "ko"));
   }, [users, rank]);
 
+  // 직급 기준 그룹 — 전사 전체를 직급 레벨별로 묶음.
+  // 라벨은 "직급명" 이 같은 사람끼리 한 노드로 — 직급명이 없는 사람은 "직급 미지정" 으로.
+  const byRank = useMemo(() => {
+    const map = new Map<string, DirUser[]>();
+    for (const u of users) {
+      const key = u.position ?? "직급 미지정";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(u);
+    }
+    for (const [, arr] of map) {
+      arr.sort((a, b) => a.name.localeCompare(b.name, "ko"));
+    }
+    return Array.from(map.entries()).sort(([a, aArr], [b, bArr]) => {
+      // 등록된 직급 rank 우선, 같은 rank 면 이름순
+      const ra = rank(aArr[0]?.position);
+      const rb = rank(bArr[0]?.position);
+      return ra - rb || a.localeCompare(b, "ko");
+    });
+  }, [users, rank]);
+
   async function startDM(target: DirUser) {
     if (target.id === user?.id) return;
-    if (dmBusyId) return; // 이미 어떤 유저와 방 생성 중이면 무시
+    if (dmBusyId) return;
     setDmBusyId(target.id);
     try {
       const res = await api<{ room: { id: string } }>("/api/chat/rooms", {
@@ -103,69 +133,387 @@ export default function OrgChartPage() {
     }
   }
 
+  const totalDesc =
+    view === "list"
+      ? `총 ${users.length}명 · ${grouped.length}개 팀 · 직급순 배열`
+      : view === "tree"
+      ? `총 ${users.length}명 · ${grouped.length}개 팀 트리 (팀 → 직급 → 인원)`
+      : `총 ${users.length}명 · ${byRank.length}개 직급 계층 (팀 무관)`;
+
   return (
     <div>
       <PageHeader
         eyebrow="조직"
         title="조직도"
-        description={`총 ${users.length}명 · ${grouped.length}개 팀 · 직급순 배열`}
+        description={totalDesc}
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {grouped.map(([team, members]) => (
-          <div key={team} className="panel p-0 overflow-hidden">
-            <div className="px-4 py-3 border-b border-ink-150 bg-gradient-to-r from-brand-50 to-white">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-brand-500 text-white grid place-items-center text-[13px] font-extrabold">
-                  {team[0]}
-                </div>
-                <div>
-                  <div className="text-[14px] font-extrabold text-ink-900 tracking-tight">{team}</div>
-                  <div className="text-[11px] text-ink-500 tabular">{members.length}명</div>
-                </div>
+      {/* 뷰 전환 탭 */}
+      <div className="flex items-center gap-1 p-1 bg-ink-100 dark:bg-ink-50 rounded-lg mb-4 w-fit">
+        <ViewTab active={view === "tree"} onClick={() => setView("tree")} label="팀 트리" hint="팀 단위 계층도" />
+        <ViewTab active={view === "rank"} onClick={() => setView("rank")} label="직급 트리" hint="직급 기준(팀 무관)" />
+        <ViewTab active={view === "list"} onClick={() => setView("list")} label="팀 카드" hint="팀별 카드 리스트" />
+      </div>
+
+      {view === "list" && (
+        <ListView grouped={grouped} meId={user?.id ?? null} dmBusyId={dmBusyId} onDM={startDM} />
+      )}
+      {view === "tree" && (
+        <TeamTreeView grouped={grouped} rank={rank} meId={user?.id ?? null} dmBusyId={dmBusyId} onDM={startDM} />
+      )}
+      {view === "rank" && (
+        <RankTreeView byRank={byRank} meId={user?.id ?? null} dmBusyId={dmBusyId} onDM={startDM} />
+      )}
+    </div>
+  );
+}
+
+function ViewTab({ active, onClick, label, hint }: { active: boolean; onClick: () => void; label: string; hint: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={hint}
+      className={`px-3 py-1.5 text-[12px] font-bold rounded-md transition-colors ${
+        active
+          ? "bg-white dark:bg-ink-100 text-ink-900 shadow-sm"
+          : "text-ink-500 hover:text-ink-700"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+/* ===================== List View (기존 카드) ===================== */
+function ListView({
+  grouped,
+  meId,
+  dmBusyId,
+  onDM,
+}: {
+  grouped: [string, DirUser[]][];
+  meId: string | null;
+  dmBusyId: string | null;
+  onDM: (u: DirUser) => void;
+}) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {grouped.map(([team, members]) => (
+        <div key={team} className="panel p-0 overflow-hidden">
+          <div className="px-4 py-3 border-b border-ink-150 bg-gradient-to-r from-brand-50 to-white dark:from-brand-500/10 dark:to-transparent">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-brand-500 text-white grid place-items-center text-[13px] font-extrabold">
+                {team[0]}
+              </div>
+              <div>
+                <div className="text-[14px] font-extrabold text-ink-900 tracking-tight">{team}</div>
+                <div className="text-[11px] text-ink-500 tabular">{members.length}명</div>
               </div>
             </div>
-            <div className="divide-y divide-ink-100">
-              {members.map((u) => (
-                <div key={u.id} className="group flex items-center gap-3 px-4 py-2.5 hover:bg-ink-25">
-                  <div className="w-9 h-9 rounded-full overflow-hidden relative flex-shrink-0"
-                    style={{ background: u.avatarUrl ? "transparent" : (u.avatarColor ?? "#3D54C4") }}>
-                    {u.avatarUrl ? (
-                      <img src={u.avatarUrl} alt={u.name} className="absolute inset-0 w-full h-full object-cover" />
-                    ) : (
-                      <div className="absolute inset-0 grid place-items-center text-white text-[13px] font-extrabold" style={{ letterSpacing: "-0.02em" }}>
-                        {u.name[0]}
-                      </div>
-                    )}
+          </div>
+          <div className="divide-y divide-ink-100">
+            {members.map((u) => (
+              <MemberRow key={u.id} u={u} meId={meId} dmBusyId={dmBusyId} onDM={onDM} />
+            ))}
+          </div>
+        </div>
+      ))}
+      {grouped.length === 0 && (
+        <div className="col-span-3 panel py-14 text-center">
+          <div className="text-[13px] font-bold text-ink-800">팀이 없어요</div>
+          <div className="text-[12px] text-ink-500 mt-1">관리자 페이지에서 팀을 추가하세요.</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MemberRow({
+  u, meId, dmBusyId, onDM,
+}: {
+  u: DirUser; meId: string | null; dmBusyId: string | null; onDM: (u: DirUser) => void;
+}) {
+  return (
+    <div className="group flex items-center gap-3 px-4 py-2.5 hover:bg-ink-25">
+      <UserAvatar u={u} size={36} />
+      <div className="flex-1 min-w-0">
+        <div className="text-[13px] font-bold text-ink-900 truncate">
+          {u.name}
+          {u.id === meId && <span className="chip-gray ml-1.5">나</span>}
+        </div>
+        <div className="text-[11px] text-ink-500 truncate">{u.position ?? "—"}</div>
+      </div>
+      {u.id !== meId && (
+        <button
+          onClick={() => onDM(u)}
+          disabled={dmBusyId === u.id}
+          className="md:opacity-0 md:group-hover:opacity-100 btn-icon disabled:opacity-60"
+          title="1:1 대화"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 5h16v11H9l-4 4z" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ===================== Team Tree View ===================== */
+/**
+ * 팀 단위 계층 트리 — 각 팀을 독립적인 mini tree 로 렌더.
+ *  - 루트: 팀
+ *  - 2단계: 직급 레벨 그룹 (한 직급에 여러 명이면 해당 그룹의 가로 묶음)
+ *  - 3단계: 개별 멤버 카드
+ *
+ * SVG 로 연결선을 그리지 않고 순수 CSS `border` 로 그리기 —
+ * DOM 만으로 조직도를 렌더하면 반응형/스크롤/검색 모두 자연스럽게 동작.
+ */
+function TeamTreeView({
+  grouped,
+  rank,
+  meId,
+  dmBusyId,
+  onDM,
+}: {
+  grouped: [string, DirUser[]][];
+  rank: (name?: string | null) => number;
+  meId: string | null;
+  dmBusyId: string | null;
+  onDM: (u: DirUser) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      {grouped.map(([team, members]) => {
+        // 팀 내부를 직급 레벨별로 묶기
+        const byLevel = new Map<string, DirUser[]>();
+        for (const m of members) {
+          const key = m.position ?? "직급 미지정";
+          if (!byLevel.has(key)) byLevel.set(key, []);
+          byLevel.get(key)!.push(m);
+        }
+        const levels = Array.from(byLevel.entries()).sort(
+          ([a, aArr], [b, bArr]) => rank(aArr[0]?.position) - rank(bArr[0]?.position) || a.localeCompare(b, "ko"),
+        );
+        return (
+          <div key={team} className="panel p-5 overflow-x-auto">
+            <div className="org-tree-scroll min-w-fit">
+              <TeamNode team={team} count={members.length} />
+              <div className="org-tree-children">
+                {levels.map(([level, ms]) => (
+                  <div key={level} className="org-tree-branch">
+                    <LevelNode level={level} count={ms.length} />
+                    <div className="org-tree-children">
+                      {ms.map((u) => (
+                        <div key={u.id} className="org-tree-branch">
+                          <PersonNode u={u} meId={meId} dmBusyId={dmBusyId} onDM={onDM} />
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-bold text-ink-900 truncate">{u.name}{u.id === user?.id && <span className="chip-gray ml-1.5">나</span>}</div>
-                    <div className="text-[11px] text-ink-500 truncate">{u.position ?? "—"}</div>
-                  </div>
-                  {u.id !== user?.id && (
-                    <button
-                      onClick={() => startDM(u)}
-                      disabled={dmBusyId === u.id}
-                      className="md:opacity-0 md:group-hover:opacity-100 btn-icon disabled:opacity-60"
-                      title="1:1 대화"
-                    >
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M4 5h16v11H9l-4 4z" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
-        ))}
-        {grouped.length === 0 && (
-          <div className="col-span-3 panel py-14 text-center">
-            <div className="text-[13px] font-bold text-ink-800">팀이 없어요</div>
-            <div className="text-[12px] text-ink-500 mt-1">관리자 페이지에서 팀을 추가하세요.</div>
-          </div>
-        )}
+        );
+      })}
+      <TreeStyles />
+    </div>
+  );
+}
+
+/* ===================== Rank Tree View ===================== */
+function RankTreeView({
+  byRank,
+  meId,
+  dmBusyId,
+  onDM,
+}: {
+  byRank: [string, DirUser[]][];
+  meId: string | null;
+  dmBusyId: string | null;
+  onDM: (u: DirUser) => void;
+}) {
+  return (
+    <div className="panel p-5 overflow-x-auto">
+      <div className="org-tree-scroll min-w-fit">
+        <RootNode label="전사 직급 계층" count={byRank.reduce((a, [, arr]) => a + arr.length, 0)} />
+        <div className="org-tree-children">
+          {byRank.map(([level, members]) => (
+            <div key={level} className="org-tree-branch">
+              <LevelNode level={level} count={members.length} />
+              <div className="org-tree-children">
+                {members.map((u) => (
+                  <div key={u.id} className="org-tree-branch">
+                    <PersonNode u={u} meId={meId} dmBusyId={dmBusyId} onDM={onDM} showTeam />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <TreeStyles />
+    </div>
+  );
+}
+
+/* ===================== Nodes ===================== */
+function RootNode({ label, count }: { label: string; count: number }) {
+  return (
+    <div className="org-tree-root-wrap">
+      <div className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 text-white shadow-pop">
+        <div className="w-8 h-8 rounded-lg bg-white/20 grid place-items-center">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
+          </svg>
+        </div>
+        <div>
+          <div className="text-[13px] font-extrabold tracking-tight">{label}</div>
+          <div className="text-[10px] opacity-80 tabular">{count}명</div>
+        </div>
       </div>
     </div>
+  );
+}
+
+function TeamNode({ team, count }: { team: string; count: number }) {
+  return (
+    <div className="org-tree-root-wrap">
+      <div className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-brand-500 text-white shadow-pop">
+        <div className="w-8 h-8 rounded-lg bg-white/20 grid place-items-center text-[13px] font-extrabold">
+          {team[0]}
+        </div>
+        <div>
+          <div className="text-[13px] font-extrabold tracking-tight">{team}</div>
+          <div className="text-[10px] opacity-80 tabular">{count}명</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LevelNode({ level, count }: { level: string; count: number }) {
+  return (
+    <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-ink-100 dark:bg-ink-100/40 border border-ink-150 text-ink-800">
+      <span className="text-[12px] font-bold tracking-tight">{level}</span>
+      <span className="text-[10px] text-ink-500 tabular">· {count}</span>
+    </div>
+  );
+}
+
+function PersonNode({
+  u, meId, dmBusyId, onDM, showTeam,
+}: {
+  u: DirUser; meId: string | null; dmBusyId: string | null; onDM: (u: DirUser) => void; showTeam?: boolean;
+}) {
+  const isMe = u.id === meId;
+  return (
+    <div className="group inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-ink-150 bg-white dark:bg-ink-50 hover:border-brand-300 hover:shadow-pop transition min-w-[140px]">
+      <UserAvatar u={u} size={28} />
+      <div className="flex-1 min-w-0">
+        <div className="text-[12px] font-bold text-ink-900 truncate">
+          {u.name}
+          {isMe && <span className="chip-gray ml-1.5 !text-[9px]">나</span>}
+        </div>
+        <div className="text-[10px] text-ink-500 truncate">
+          {showTeam ? (u.team ?? "—") : (u.position ?? "—")}
+        </div>
+      </div>
+      {!isMe && (
+        <button
+          onClick={() => onDM(u)}
+          disabled={dmBusyId === u.id}
+          className="md:opacity-0 md:group-hover:opacity-100 btn-icon !w-6 !h-6 disabled:opacity-60"
+          title="1:1 대화"
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 5h16v11H9l-4 4z" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
+function UserAvatar({ u, size }: { u: DirUser; size: number }) {
+  return (
+    <div
+      className="rounded-full overflow-hidden relative flex-shrink-0"
+      style={{ width: size, height: size, background: u.avatarUrl ? "transparent" : (u.avatarColor ?? "#3D54C4") }}
+    >
+      {u.avatarUrl ? (
+        <img src={u.avatarUrl} alt={u.name} className="absolute inset-0 w-full h-full object-cover" />
+      ) : (
+        <div
+          className="absolute inset-0 grid place-items-center text-white font-extrabold"
+          style={{ fontSize: Math.max(10, Math.round(size * 0.42)), letterSpacing: "-0.02em" }}
+        >
+          {u.name[0]}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ===================== CSS Tree (순수 border 로 연결선) ===================== */
+function TreeStyles() {
+  // 같은 페이지에 여러 번 mount 돼도 style 이 중복되지 않도록 data attribute guard.
+  return (
+    <style>{`
+      .org-tree-scroll { padding: 8px 4px 4px; }
+      .org-tree-root-wrap { text-align: center; padding-bottom: 16px; }
+      .org-tree-children {
+        display: flex;
+        justify-content: center;
+        gap: 18px;
+        flex-wrap: wrap;
+        position: relative;
+        padding-top: 16px;
+      }
+      .org-tree-children::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 50%;
+        width: 2px;
+        height: 16px;
+        background: var(--c-ink-200, #E5E7EB);
+      }
+      .org-tree-branch {
+        position: relative;
+        padding-top: 16px;
+      }
+      .org-tree-branch::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 50%;
+        width: 2px;
+        height: 16px;
+        background: var(--c-ink-200, #E5E7EB);
+      }
+      .org-tree-branch::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: var(--c-ink-200, #E5E7EB);
+      }
+      .org-tree-branch:first-child::after { left: 50%; }
+      .org-tree-branch:last-child::after { right: 50%; }
+      .org-tree-branch:only-child::after { display: none; }
+      .org-tree-branch .org-tree-children {
+        padding-top: 16px;
+      }
+      .dark .org-tree-children::before,
+      .dark .org-tree-branch::before,
+      .dark .org-tree-branch::after {
+        background: rgba(255,255,255,0.12);
+      }
+    `}</style>
   );
 }
