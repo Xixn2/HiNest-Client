@@ -61,8 +61,15 @@ export default function SearchModal({ open, onClose }: { open: boolean; onClose:
   }, [open]);
 
   useEffect(() => {
-    if (open) setTimeout(() => inputRef.current?.focus(), 50);
-    if (!open) { setQ(""); setResults({}); }
+    if (!open) {
+      setQ("");
+      setResults({});
+      return;
+    }
+    // 빠른 open/close 반복 시 stale focus 호출이 재열린 인풋을 낚아채거나 언마운트 된
+    // 레퍼런스로 포커스 시도하던 문제 — cleanup 에서 타이머 제거.
+    const t = setTimeout(() => inputRef.current?.focus(), 50);
+    return () => clearTimeout(t);
   }, [open]);
 
   // 빠르게 타이핑할 때 이전 요청이 나중에 도착해서 결과를 덮는 현상 방지.
