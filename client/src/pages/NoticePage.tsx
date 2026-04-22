@@ -146,8 +146,15 @@ export default function NoticePage() {
                   <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-brand-500" />
                 )}
                 <div className="flex items-center gap-2">
-                  {n.pinned && <span className="chip bg-rose-100 text-rose-600">고정</span>}
-                  <div className="font-semibold text-slate-900 truncate">{n.title}</div>
+                  {n.pinned && (
+                    <span className="chip chip-amber inline-flex items-center gap-1">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                        <path d="M14 2l-1.5 1.5L15 6l-5 5H6l4 4-5 5 1 1 5-5 4 4v-4l5-5 2.5 2.5L22 12 14 2z" />
+                      </svg>
+                      고정
+                    </span>
+                  )}
+                  <div className="font-semibold text-ink-900 truncate">{n.title}</div>
                 </div>
                 <div className="text-xs text-slate-500 mt-0.5">
                   {n.author?.name} · {new Date(n.createdAt).toLocaleDateString("ko-KR")}
@@ -164,7 +171,14 @@ export default function NoticePage() {
               <div className="flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-2 text-xs text-slate-500">
-                    {selected.pinned && <span className="chip bg-rose-100 text-rose-600">고정</span>}
+                    {selected.pinned && (
+                      <span className="chip chip-amber inline-flex items-center gap-1">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                          <path d="M14 2l-1.5 1.5L15 6l-5 5H6l4 4-5 5 1 1 5-5 4 4v-4l5-5 2.5 2.5L22 12 14 2z" />
+                        </svg>
+                        고정
+                      </span>
+                    )}
                     <span>{selected.author?.name}</span>
                     <span>·</span>
                     <span>{new Date(selected.createdAt).toLocaleString("ko-KR")}</span>
