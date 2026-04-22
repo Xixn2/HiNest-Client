@@ -514,6 +514,52 @@ function TreeStyles() {
       .dark .org-tree-branch::after {
         background: rgba(255,255,255,0.12);
       }
+
+      /* 모바일: 가로 트리는 화면 폭에 눌려 연결선이 깨지므로
+         좌측 들여쓰기 세로 트리로 전환. 같은 DOM 구조를 CSS 만으로 재배치. */
+      @media (max-width: 640px) {
+        .org-tree-root-wrap { text-align: left; padding-bottom: 8px; padding-left: 4px; }
+        .org-tree-children {
+          flex-direction: column;
+          align-items: stretch;
+          justify-content: flex-start;
+          gap: 6px;
+          padding-top: 4px;
+          padding-left: 22px;
+        }
+        .org-tree-children::before {
+          /* 좌측 수직 라인 */
+          left: 10px;
+          top: 0;
+          bottom: 10px;
+          height: auto;
+          width: 2px;
+        }
+        .org-tree-branch {
+          padding-top: 0;
+          padding-left: 14px;
+        }
+        .org-tree-branch::before {
+          /* 브랜치의 수직선은 제거 — 상위 컨테이너의 수직선으로 충분 */
+          display: none;
+        }
+        .org-tree-branch::after {
+          /* 좌측 수평 tick — 세로 라인에서 노드로 이어지는 L 자 */
+          top: 18px;
+          left: -12px;
+          right: auto;
+          width: 12px;
+          height: 2px;
+        }
+        /* 노드 자체는 full-width 로 펼침 — inline-flex 는 display:flex 로 바꿔야 width:100% 가 적용됨 */
+        .org-tree-root-wrap > .inline-flex,
+        .org-tree-branch > .inline-flex {
+          display: flex;
+          width: 100%;
+          justify-content: flex-start;
+        }
+        .org-tree-branch > .group { min-width: 0; }
+      }
     `}</style>
   );
 }
