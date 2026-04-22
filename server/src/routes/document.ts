@@ -177,7 +177,9 @@ async function assertFolderWritable(
 
 router.patch("/folders/:id", async (req, res) => {
   const u = (req as any).user;
-  const name = req.body?.name !== undefined ? String(req.body.name).trim() : undefined;
+  // folderCreateSchema 의 name max(100) 와 맞춰서 100자 하드 캡.
+  const rawName = req.body?.name !== undefined ? String(req.body.name).trim() : undefined;
+  const name = rawName && rawName.length > 100 ? rawName.slice(0, 100) : rawName;
   if (!name) return res.status(400).json({ error: "이름이 필요합니다" });
   const check = await assertFolderWritable(u, req.params.id);
   if (!check.folder) return res.status(404).json({ error: "not found" });
@@ -230,7 +232,10 @@ function visibilityWhere(u: { id: string; team: string | null; role: string }) {
 router.get("/", async (req, res) => {
   const u = (req as any).user;
   const folderId = req.query.folderId ? String(req.query.folderId) : undefined;
-  const q = req.query.q ? String(req.query.q).trim() : "";
+  // q 는 title/description/tags 3개 컬럼에 contains: q 로 들어감 — 수KB 입력이면 LIKE 스캔 폭주.
+  // 클라이언트 검색창 maxLength(80) 과 맞춰 128자로 하드 캡.
+  const rawQ = req.query.q ? String(req.query.q).trim() : "";
+  const q = rawQ.length > 128 ? rawQ.slice(0, 128) : rawQ;
   const scope = req.query.scope ? String(req.query.scope) : "all";
   const projectId = req.query.projectId ? String(req.query.projectId) : null;
 

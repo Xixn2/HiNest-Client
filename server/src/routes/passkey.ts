@@ -140,9 +140,14 @@ router.post("/register/verify", requireAuth, async (req, res) => {
   const credentialId = credential.id;
   const publicKey = Buffer.from(credential.publicKey);
   const counter = credential.counter ?? 0;
-  const transports = (credential.transports ?? req.body?.response?.response?.transports)?.join(",");
+  // transports 는 "usb,nfc,ble,internal" 같은 문자열 — 전체 다 합쳐도 100자 미만.
+  // 악성 클라이언트가 수KB 배열을 보내 DB 컬럼을 부풀리지 못하게 캡.
+  const rawTransports = (credential.transports ?? req.body?.response?.response?.transports)?.join(",");
+  const transports = rawTransports && rawTransports.length > 120 ? rawTransports.slice(0, 120) : rawTransports;
 
-  const deviceName = String(req.body?.deviceName ?? inferDeviceName(req.get("user-agent") ?? ""));
+  // deviceName 은 사용자 표시용 문자열. UI 상 60자 이상 의미없고, DB 비대화 방어 위해 80자 하드 캡.
+  const rawDeviceName = String(req.body?.deviceName ?? inferDeviceName(req.get("user-agent") ?? ""));
+  const deviceName = rawDeviceName.length > 80 ? rawDeviceName.slice(0, 80) : rawDeviceName;
 
   await prisma.passkey.create({
     data: {
