@@ -35,10 +35,13 @@ export default function DirectoryPage() {
 
   // SWR — 팀원 목록은 변동이 느리므로 캐시 히트 효과가 크다.
   useEffect(() => {
+    // 다른 SWR 페이지들과 동일한 alive 가드 — 언마운트 후 setState 방지.
+    let alive = true;
     apiSWR<{ users: DirectoryUser[] }>("/api/users", {
-      onCached: (d) => setUsers(d.users),
-      onFresh: (d) => setUsers(d.users),
+      onCached: (d) => { if (alive) setUsers(d.users); },
+      onFresh: (d) => { if (alive) setUsers(d.users); },
     });
+    return () => { alive = false; };
   }, []);
 
   const teams = useMemo(
