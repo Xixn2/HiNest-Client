@@ -23,6 +23,9 @@ model User {
   position     String?  // 사원/대리/과장/팀장/이사 등
   team         String?
   active       Boolean  @default(true)
+  // 퇴사일 — 관리자가 "퇴사 처리" 하면 set. 동시에 active=false 로 로그인 차단.
+  // null 이면 재직 중. 날짜(YYYY-MM-DD) 가 아니라 DateTime 으로 두어 정렬/기간 조회 편의성 확보.
+  resignedAt   DateTime?
   avatarColor  String   @default("#36D7B7")
   /// 업로드된 프로필 이미지 URL. null 이면 avatarColor + 이니셜 fallback.
   avatarUrl    String?

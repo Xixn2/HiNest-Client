@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import crypto from "node:crypto";
+import bcrypt from "bcryptjs";
 import { prisma } from "../lib/db.js";
 import { requireAdmin, requireAuth, requireSuperAdmin, requireSuperAdminStepUp, verifySuperToken, writeLog } from "../lib/auth.js";
 import { todayStr } from "../lib/dates.js";
@@ -70,6 +71,7 @@ const HR_SELECT = {
   team: true,
   position: true,
   active: true,
+  resignedAt: true,
   avatarColor: true,
   avatarUrl: true,
   createdAt: true,
@@ -311,6 +313,99 @@ router.delete("/users/:id", async (req, res) => {
   await prisma.user.delete({ where: { id: req.params.id } });
   await writeLog(u.id, "USER_DELETE", req.params.id);
   res.json({ ok: true });
+});
+
+/* ===== 퇴사 처리 =====
+ * 구성원을 퇴사로 표시하고 로그인을 즉시 차단한다.
+ *
+ * 보안 정책:
+ *  - 관리자가 자기 자신의 비밀번호를 한 번 더 입력해야 처리 가능 (계정 탈취·실수 방지 step-up).
+ *  - 총관리자 계정은 일반 관리자가 건드릴 수 없음 (기존 PATCH 와 동일 정책).
+ *  - 본인 퇴사는 불가 — 관리자 본인이 사고로 자기 로그인을 막는 상황을 차단.
+ *
+ * 동작:
+ *  - resignedAt 에 퇴사일(관리자가 캘린더에서 고른 YYYY-MM-DD) 저장.
+ *  - active=false 로 설정 → 로그인 로직(auth.ts) 이 user.active 로 가드하므로 바로 차단됨.
+ */
+const resignSchema = z.object({
+  // 관리자의 현재 계정 비밀번호 (step-up 재확인)
+  password: z.string().min(1).max(128),
+  // 퇴사일 — "YYYY-MM-DD" 문자열. 빈 값이면 오늘 날짜로.
+  resignedAt: z.string().max(40).optional(),
+});
+
+router.post("/users/:id/resign", async (req, res) => {
+  const u = (req as any).user;
+  const parsed = resignSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid input" });
+
+  if (req.params.id === u.id) {
+    return res.status(400).json({ error: "본인 계정은 퇴사 처리할 수 없습니다" });
+  }
+
+  const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!target) return res.status(404).json({ error: "not found" });
+  if (target.superAdmin && !u.superAdmin) return res.status(404).json({ error: "not found" });
+
+  // 관리자 본인 비밀번호 재확인 — 잘못된 재확인을 attacker 가 폭주시키지 못하게 bcrypt.compare 자체가 slow.
+  const me = await prisma.user.findUnique({ where: { id: u.id }, select: { passwordHash: true } });
+  if (!me) return res.status(401).json({ error: "세션이 유효하지 않습니다" });
+  const ok = await bcrypt.compare(parsed.data.password, me.passwordHash);
+  if (!ok) {
+    await writeLog(u.id, "USER_RESIGN_FAIL", req.params.id, "bad_password");
+    return res.status(401).json({ error: "비밀번호가 올바르지 않습니다", code: "BAD_PASSWORD" });
+  }
+
+  // 날짜 파싱 — 빈 값이면 지금 시각. YYYY-MM-DD 는 자정(로컬) 기준으로 해석.
+  let when: Date;
+  if (parsed.data.resignedAt) {
+    const s = parsed.data.resignedAt;
+    // ISO 혹은 YYYY-MM-DD 둘 다 허용
+    when = new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s}T00:00:00` : s);
+    if (Number.isNaN(when.getTime())) {
+      return res.status(400).json({ error: "퇴사일 형식이 올바르지 않습니다" });
+    }
+  } else {
+    when = new Date();
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: target.id },
+    data: { resignedAt: when, active: false },
+    select: HR_SELECT,
+  });
+  await writeLog(u.id, "USER_RESIGN", target.id, `at=${when.toISOString()}`);
+  res.json({ user: updated });
+});
+
+/**
+ * 퇴사 취소(복직) — 실수로 퇴사 처리한 경우를 되돌리기 위함.
+ * 동일하게 관리자 비밀번호 재확인 필요.
+ */
+router.post("/users/:id/unresign", async (req, res) => {
+  const u = (req as any).user;
+  const parsed = z.object({ password: z.string().min(1).max(128) }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid input" });
+
+  const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!target) return res.status(404).json({ error: "not found" });
+  if (target.superAdmin && !u.superAdmin) return res.status(404).json({ error: "not found" });
+
+  const me = await prisma.user.findUnique({ where: { id: u.id }, select: { passwordHash: true } });
+  if (!me) return res.status(401).json({ error: "세션이 유효하지 않습니다" });
+  const ok = await bcrypt.compare(parsed.data.password, me.passwordHash);
+  if (!ok) {
+    await writeLog(u.id, "USER_UNRESIGN_FAIL", req.params.id, "bad_password");
+    return res.status(401).json({ error: "비밀번호가 올바르지 않습니다", code: "BAD_PASSWORD" });
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: target.id },
+    data: { resignedAt: null, active: true },
+    select: HR_SELECT,
+  });
+  await writeLog(u.id, "USER_UNRESIGN", target.id);
+  res.json({ user: updated });
 });
 
 /* ===== 팀 ===== */
