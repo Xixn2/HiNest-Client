@@ -398,15 +398,15 @@ export default function ProjectQaList({
       <div
         className="hidden sm:grid items-center gap-2 px-2 py-1.5 mt-2 text-[11px] font-medium uppercase tracking-wider text-ink-400"
         style={{
-          gridTemplateColumns: "16px minmax(0, 2.2fr) 110px 1fr 150px 88px 28px",
+          gridTemplateColumns: "16px minmax(0, 2.2fr) 88px 1fr 150px 110px 28px",
         }}
       >
         <span />
         <span>제목</span>
-        <span>상태</span>
+        <span>우선순위</span>
         <span>화면 · 플랫폼</span>
         <span>담당자</span>
-        <span>우선순위</span>
+        <span>상태</span>
         <span />
       </div>
 
@@ -568,9 +568,9 @@ function QaRow({
           )}
         </div>
 
-        {/* 상태 — 모바일에서는 아래 카드 형태로 내려감 */}
+        {/* 우선순위 — 모바일에서는 아래 카드 형태로 내려감 */}
         <div className="hidden sm:block">
-          <StatusSelect value={item.status} onChange={(v) => onPatch({ status: v })} />
+          <PrioritySelect value={item.priority} onChange={(v) => onPatch({ priority: v })} />
         </div>
 
         {/* 화면 · 플랫폼 */}
@@ -598,9 +598,9 @@ function QaRow({
           />
         </div>
 
-        {/* 우선순위 */}
+        {/* 상태 */}
         <div className="hidden sm:block">
-          <PrioritySelect value={item.priority} onChange={(v) => onPatch({ priority: v })} />
+          <StatusSelect value={item.status} onChange={(v) => onPatch({ status: v })} />
         </div>
 
         {/* 삭제 */}
@@ -630,8 +630,8 @@ function QaRow({
           onToggleExpand();
         }}
       >
-        <StatusSelect value={item.status} onChange={(v) => onPatch({ status: v })} />
         <PrioritySelect value={item.priority} onChange={(v) => onPatch({ priority: v })} />
+        <StatusSelect value={item.status} onChange={(v) => onPatch({ status: v })} />
         {item.platform && (
           <span className="chip chip-blue">
             {PLATFORM_ICON[item.platform]} {PLATFORM_LABEL[item.platform]}
@@ -663,11 +663,11 @@ function QaRow({
         <div className="px-3 sm:px-4 pb-4 pt-1 bg-ink-25 border-t border-ink-100 flex flex-col gap-3">
           {/* 속성 그리드 — Notion 페이지 상단 Properties 영역 */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 pt-3">
-            <PropertyRow label="상태">
-              <StatusSelect value={item.status} onChange={(v) => onPatch({ status: v })} />
-            </PropertyRow>
             <PropertyRow label="우선순위">
               <PrioritySelect value={item.priority} onChange={(v) => onPatch({ priority: v })} />
+            </PropertyRow>
+            <PropertyRow label="상태">
+              <StatusSelect value={item.status} onChange={(v) => onPatch({ status: v })} />
             </PropertyRow>
             <PropertyRow label="플랫폼">
               <select
