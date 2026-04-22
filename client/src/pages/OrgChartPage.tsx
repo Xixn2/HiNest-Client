@@ -70,14 +70,18 @@ export default function OrgChartPage() {
     loadPositions();
   }, []);
 
+  // 직급 정렬 — 관리자 페이지의 '직급 목록' 순서 그대로 따라감.
+  // API 가 이미 rank asc + createdAt asc 로 정렬해서 내려주므로 그 배열 인덱스를 최종 순위로 사용.
+  // (등록된 모든 직급의 rank 값이 0 일 때도 관리자 페이지에 보이는 순서와 100% 일치하게 됨)
   const rank = useMemo(() => {
-    const map = new Map<string, number>();
-    positions.forEach((p) => map.set(p.name, p.rank));
+    const idxMap = new Map<string, number>();
+    positions.forEach((p, i) => idxMap.set(p.name, i));
     return (name?: string | null) => {
-      if (!name) return 999;
-      if (map.has(name)) return map.get(name)!;
+      if (!name) return 9999;
+      if (idxMap.has(name)) return idxMap.get(name)!;
+      // 등록되지 않은 직급명은 키워드 힌트로 최대한 유사 순위를 추정.
       const idx = RANK_HINTS.findIndex((k) => name.includes(k));
-      return idx === -1 ? 500 : idx;
+      return idx === -1 ? 5000 : 1000 + idx;
     };
   }, [positions]);
 
