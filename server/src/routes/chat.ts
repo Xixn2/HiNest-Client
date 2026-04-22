@@ -186,7 +186,10 @@ router.post("/rooms", async (req, res) => {
  */
 router.get("/search", async (req, res) => {
   const u = (req as any).user;
-  const q = String(req.query.q ?? "").trim();
+  // q 가 수 KB 길이로 들어오면 `contains: q` 가 백엔드 B-tree LIKE 스캔을 폭주시킴.
+  // 검색창 maxLength(80) 과 맞춰 128자로 하드 캡 — DoS 방어.
+  const rawQ = String(req.query.q ?? "").trim();
+  const q = rawQ.length > 128 ? rawQ.slice(0, 128) : rawQ;
   if (!q) return res.json({ hits: [] });
 
   const now = new Date();
@@ -462,7 +465,10 @@ router.post("/rooms/:id/messages", async (req, res) => {
 /* ===== Reactions ===== */
 router.post("/messages/:id/reactions", async (req, res) => {
   const u = (req as any).user;
-  const emoji = String(req.body?.emoji ?? "").trim();
+  // emoji 는 짧은 유니코드 시퀀스여야 함 — 길어도 ZWJ 조합 포함 16자 이내.
+  // 캡 없으면 DB 용량 공격 / 알림 표시 깨짐.
+  const rawEmoji = String(req.body?.emoji ?? "").trim();
+  const emoji = rawEmoji.length > 16 ? rawEmoji.slice(0, 16) : rawEmoji;
   if (!emoji) return res.status(400).json({ error: "invalid" });
   const msg = await prisma.chatMessage.findUnique({ where: { id: req.params.id } });
   if (!msg) return res.status(404).json({ error: "not found" });
@@ -500,9 +506,13 @@ router.post("/messages/:id/reactions", async (req, res) => {
  */
 router.patch("/messages/:id", async (req, res) => {
   const u = (req as any).user;
-  const content = req.body?.content !== undefined ? String(req.body.content) : undefined;
-  const scheduledAt = req.body?.scheduledAt !== undefined
-    ? (req.body.scheduledAt ? new Date(req.body.scheduledAt) : null)
+  // sendSchema 의 8000자 상한과 동일하게 PATCH 경로도 강제 — 수정으로 우회 방지.
+  const rawContent = req.body?.content !== undefined ? String(req.body.content) : undefined;
+  const content = rawContent !== undefined && rawContent.length > 8000 ? rawContent.slice(0, 8000) : rawContent;
+  // scheduledAt 문자열이 40자 넘으면 new Date() 가 Invalid Date 를 반환 — 사전에 잘라냄.
+  const rawScheduledAt = req.body?.scheduledAt;
+  const scheduledAt = rawScheduledAt !== undefined
+    ? (rawScheduledAt ? new Date(String(rawScheduledAt).slice(0, 40)) : null)
     : undefined;
 
   const msg = await prisma.chatMessage.findUnique({ where: { id: req.params.id } });
