@@ -1695,6 +1695,9 @@ function RoomView({
                     ) : (
                       <LongPress
                         onLongPress={() => setReactingId(m.id)}
+                        // 상대 메시지 두 번 탭 → 👍 토글 (있으면 제거, 없으면 추가).
+                        // 본인 메시지에선 더블탭이 무의미하므로 비활성.
+                        onDoubleTap={!mine ? () => onReact(m.id, "👍") : undefined}
                         style={{
                           transition: "transform .12s ease",
                           transform: isPicking ? "scale(.97)" : "scale(1)",
