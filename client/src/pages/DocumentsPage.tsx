@@ -526,7 +526,13 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
             <circle cx="11" cy="11" r="7" />
             <path d="m20 20-3.5-3.5" />
           </svg>
-          <input className="input pl-9" placeholder="문서 검색" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input
+            className="input pl-9"
+            placeholder="문서 검색"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            maxLength={80}
+          />
         </div>
       </div>
 

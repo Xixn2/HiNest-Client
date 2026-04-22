@@ -624,6 +624,7 @@ function ListView({
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="이름 · 메시지 검색"
+            maxLength={80}
             style={{
               flex: 1, border: 0, outline: 0, background: "transparent",
               fontSize: 14, fontWeight: 500, color: C.ink,
@@ -1013,6 +1014,7 @@ function CreateGroupView({
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="이름 · 팀 · 직책으로 검색"
+            maxLength={80}
             style={{
               flex: 1, border: 0, outline: 0, background: "transparent",
               fontSize: 14, fontWeight: 500, color: C.ink,
@@ -1176,6 +1178,7 @@ function SettingsView({
                 if (e.key === "Escape") { setDraft(settings.nickname ?? ""); setEditing(false); }
               }}
               placeholder={originalTitle}
+              maxLength={120}
               style={{
                 flex: 1, border: 0, outline: 0, background: "transparent",
                 fontSize: 14, fontWeight: 600, color: C.ink,
@@ -1774,6 +1777,7 @@ function RoomView({
                 autoCorrect="off"
                 autoCapitalize="off"
                 spellCheck={false}
+                maxLength={8000}
                 data-1p-ignore="true"
                 data-lpignore="true"
                 data-form-type="other"
