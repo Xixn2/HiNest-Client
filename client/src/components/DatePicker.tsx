@@ -12,11 +12,17 @@ export default function DatePicker({
   onChange,
   placeholder = "YYYY-MM-DD",
   className,
+  variant = "plain",
+  disabled,
 }: {
   value: string; // "YYYY-MM-DD" or ""
   onChange: (next: string) => void;
   placeholder?: string;
   className?: string;
+  // plain: 테이블/인라인용 최소 스타일 (기본)
+  // input: 폼 필드용 — `.input` 과 동일한 테두리/패딩/배경
+  variant?: "plain" | "input";
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   // 팝오버 커서(보여줄 월) — 값이 없으면 오늘 기준
@@ -86,10 +92,23 @@ export default function DatePicker({
     <div className={`relative ${className ?? ""}`} ref={wrapperRef}>
       <button
         type="button"
-        className="w-full min-w-0 bg-transparent border-0 focus:bg-[color:var(--c-surface)] text-[color:var(--c-text)] focus:outline-none focus:ring-1 focus:ring-brand-400 rounded text-[12px] px-1 py-1.5 tabular text-left hover:bg-[color:var(--c-surface-3)]"
-        onClick={() => setOpen((v) => !v)}
+        disabled={disabled}
+        className={
+          variant === "input"
+            ? "input text-left tabular flex items-center justify-between disabled:opacity-60"
+            : "w-full min-w-0 bg-transparent border-0 focus:bg-[color:var(--c-surface)] text-[color:var(--c-text)] focus:outline-none focus:ring-1 focus:ring-brand-400 rounded text-[12px] px-1 py-1.5 tabular text-left hover:bg-[color:var(--c-surface-3)]"
+        }
+        onClick={() => !disabled && setOpen((v) => !v)}
       >
-        {value || <span className="text-ink-400">{placeholder}</span>}
+        <span className={value ? "" : "text-ink-400"}>
+          {value || placeholder}
+        </span>
+        {variant === "input" && (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-ink-400">
+            <rect x="3" y="4" width="18" height="17" rx="2" stroke="currentColor" strokeWidth="1.8" />
+            <path d="M3 9h18M8 2v4M16 2v4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+        )}
       </button>
       {open && pos && createPortal(
         <div
