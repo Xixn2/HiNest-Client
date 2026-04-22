@@ -47,10 +47,15 @@ export default function NoticePage() {
 
   // 첫 진입은 SWR — 이전 캐시가 있으면 즉시 렌더하고, 네트워크로 최신값 병합.
   useEffect(() => {
+    // 다른 SWR 페이지들과 동일하게 alive 가드 — 네트워크 응답이 언마운트 뒤 도착해
+    // setList 가 dead component 에 꽂히는 것 방지 (React 18 이 warn 을 삼키긴 해도
+    // 일관성 유지·메모리 참조 즉시 해제).
+    let alive = true;
     apiSWR<{ notices: Notice[] }>("/api/notice", {
-      onCached: (d) => setList(d.notices),
-      onFresh: (d) => setList(d.notices),
+      onCached: (d) => { if (alive) setList(d.notices); },
+      onFresh: (d) => { if (alive) setList(d.notices); },
     });
+    return () => { alive = false; };
   }, []);
 
   // 알림 등에서 ?id=... 로 들어왔을 때 자동 선택

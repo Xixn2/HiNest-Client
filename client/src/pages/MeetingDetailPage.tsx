@@ -366,6 +366,7 @@ function ViewerPicker({
         placeholder="이름·팀·직급으로 검색"
         value={q}
         onChange={(e) => setQ(e.target.value)}
+        maxLength={80}
       />
       <div className="flex flex-wrap gap-1.5 max-h-48 overflow-auto border border-slate-100 rounded-lg p-2">
         {filtered.map((u) => {

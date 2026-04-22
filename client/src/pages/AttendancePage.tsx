@@ -72,20 +72,24 @@ export default function AttendancePage() {
   // SWR — 월별 출퇴근과 휴가 목록은 탭 재진입 시 캐시로 즉시 채움.
   const isReviewer = user?.role === "ADMIN" || user?.role === "MANAGER";
   useEffect(() => {
+    // month 를 빠르게 넘기면 이전 달의 onFresh 가 새 달의 setRecords 를 덮어쓰는 race 가 있음.
+    // 의존성 변경으로 effect 가 재실행되는 순간 alive=false 로 만들어 이전 요청 응답은 조용히 무시.
+    let alive = true;
     apiSWR<{ attendances: Attendance[] }>(`/api/attendance/month?month=${month}`, {
-      onCached: (d) => setRecords(d.attendances),
-      onFresh: (d) => setRecords(d.attendances),
+      onCached: (d) => { if (alive) setRecords(d.attendances); },
+      onFresh: (d) => { if (alive) setRecords(d.attendances); },
     });
     apiSWR<{ leaves: Leave[] }>("/api/attendance/leave", {
-      onCached: (d) => setLeaves(d.leaves),
-      onFresh: (d) => setLeaves(d.leaves),
+      onCached: (d) => { if (alive) setLeaves(d.leaves); },
+      onFresh: (d) => { if (alive) setLeaves(d.leaves); },
     });
     if (isReviewer) {
       apiSWR<{ leaves: Leave[] }>("/api/attendance/leave?all=1", {
-        onCached: (d) => setAllLeaves(d.leaves),
-        onFresh: (d) => setAllLeaves(d.leaves),
+        onCached: (d) => { if (alive) setAllLeaves(d.leaves); },
+        onFresh: (d) => { if (alive) setAllLeaves(d.leaves); },
       });
     }
+    return () => { alive = false; };
   }, [month, isReviewer]);
 
   async function submit(e: React.FormEvent) {
