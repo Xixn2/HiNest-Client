@@ -1541,7 +1541,11 @@ function RoomView({
               )}
             <div style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", marginBottom: 4 }}>
               <div style={{ display: "flex", alignItems: "flex-end", gap: 8, maxWidth: "78%", flexDirection: mine ? "row-reverse" : "row" }}>
-                {!mine && m.showMeta ? (
+                {/* 프로필은 "연속 묶음의 마지막 메시지" 옆에 붙인다 (KakaoTalk 패턴).
+                    showMeta(첫 메시지) 기준이면 여러 개를 연속으로 보낼 때 아바타가
+                    맨 윗 버블 옆에 붙어 마지막 버블과 멀어져 어색함. showTime 이 곧
+                    같은 묶음의 마지막 메시지 플래그이므로 그걸로 교체. */}
+                {!mine && m.showTime ? (
                   (() => {
                     const p = presenceMap[m.sender.id];
                     const info = resolvePresence(
