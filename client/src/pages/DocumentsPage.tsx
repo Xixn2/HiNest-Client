@@ -806,6 +806,24 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
               </div>
               <div>
                 <label className="field-label">공개 범위</label>
+                {inProject ? (
+                  (() => {
+                    const proj = projects.find((p) => p.id === activeProjectId);
+                    return (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-ink-200 bg-[color:var(--c-surface-2)]">
+                        <span
+                          className="w-2 h-2 rounded-full flex-shrink-0"
+                          style={{ background: proj?.color ?? "#6B7280" }}
+                        />
+                        <div className="text-[12px] text-ink-700">
+                          <span className="font-bold">{proj?.name ?? "프로젝트"}</span>
+                          <span className="text-ink-500"> 프로젝트 폴더 · 멤버만 열람 가능</span>
+                        </div>
+                      </div>
+                    );
+                  })()
+                ) : (
+                <>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {(["ALL", "TEAM", "PRIVATE", "CUSTOM"] as DocScope[]).map((s) => (
                     <button
@@ -851,6 +869,8 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
                       })
                     )}
                   </div>
+                )}
+                </>
                 )}
               </div>
               {modalErr && (
@@ -908,6 +928,26 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
               </div>
               <div>
                 <label className="field-label">공개 범위</label>
+                {inProject ? (
+                  // 프로젝트가 선택된 상태에서 업로드하면 scope 는 의미가 없다.
+                  // 프로젝트 멤버십이 권한을 결정하므로 선택 UI 대신 어디로 올라가는지만 알림.
+                  (() => {
+                    const proj = projects.find((p) => p.id === activeProjectId);
+                    return (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-ink-200 bg-[color:var(--c-surface-2)]">
+                        <span
+                          className="w-2 h-2 rounded-full flex-shrink-0"
+                          style={{ background: proj?.color ?? "#6B7280" }}
+                        />
+                        <div className="text-[12px] text-ink-700">
+                          <span className="font-bold">{proj?.name ?? "프로젝트"}</span>
+                          <span className="text-ink-500"> 프로젝트에 업로드 · 멤버만 열람 가능</span>
+                        </div>
+                      </div>
+                    );
+                  })()
+                ) : (
+                <>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {(["ALL", "TEAM", "PRIVATE", "CUSTOM"] as DocScope[]).map((s) => (
                     <button
@@ -955,6 +995,8 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
                       })
                     )}
                   </div>
+                )}
+                </>
                 )}
               </div>
               {modalErr && (
