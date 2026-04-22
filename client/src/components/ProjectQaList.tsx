@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api, apiSWR } from "../api";
 import { confirmAsync } from "./ConfirmHost";
 
-type Status = "OPEN" | "PASSED" | "FAILED" | "SKIPPED";
+type Status = "BUG" | "IN_PROGRESS" | "DONE" | "ON_HOLD";
 type Priority = "LOW" | "NORMAL" | "HIGH";
 type Platform = "WEB" | "IOS" | "ANDROID" | "MAC_APP" | "WINDOWS_APP" | "OTHER";
 type AttachmentKind = "IMAGE" | "VIDEO" | "FILE";
@@ -42,29 +42,31 @@ type QaItem = {
 
 type Member = { id: string; name: string; avatarColor: string };
 
-const STATUS_ORDER: Status[] = ["OPEN", "PASSED", "FAILED", "SKIPPED"];
+// 상태 순서 — 필터 탭/드롭다운에서 좌→우, 위→아래 순.
+// BUG(리포트) → IN_PROGRESS(수정 중) → DONE(완료) / ON_HOLD(보류).
+const STATUS_ORDER: Status[] = ["BUG", "IN_PROGRESS", "DONE", "ON_HOLD"];
 const STATUS_LABEL: Record<Status, string> = {
-  OPEN: "대기",
-  PASSED: "통과",
-  FAILED: "실패",
-  SKIPPED: "생략",
+  BUG: "오류",
+  IN_PROGRESS: "수정 중",
+  DONE: "완료",
+  ON_HOLD: "보류",
 };
 
-// Notion 태그 특유의 파스텔톤 — 라이트/다크 각각 rgba 로 조절.
-// 베이스 클래스는 styles.css 의 chip-* 토큰을 재활용해 다크모드에서도 자동 대응.
+// Notion 태그 스타일의 파스텔 톤 — styles.css 의 chip-* 토큰 재활용로
+// 라이트/다크 모두 대비 자동 보정.
 const STATUS_CHIP: Record<Status, string> = {
-  OPEN: "chip chip-gray",
-  PASSED: "chip chip-green",
-  FAILED: "chip chip-red",
-  SKIPPED: "chip chip-amber",
+  BUG: "chip chip-red",
+  IN_PROGRESS: "chip chip-blue",
+  DONE: "chip chip-green",
+  ON_HOLD: "chip chip-amber",
 };
 
-// 왼쪽 마커 점(dot) 색 — 상태 한눈에 보이도록 행 앞에 배치.
+// 행 좌측 마커 점 — 상태를 한눈에 인지할 수 있도록.
 const STATUS_DOT: Record<Status, string> = {
-  OPEN: "#9CA3AF",
-  PASSED: "#10B981",
-  FAILED: "#EF4444",
-  SKIPPED: "#F59E0B",
+  BUG: "#EF4444",
+  IN_PROGRESS: "#3B82F6",
+  DONE: "#10B981",
+  ON_HOLD: "#F59E0B",
 };
 
 const PRIORITY_ORDER: Priority[] = ["LOW", "NORMAL", "HIGH"];
@@ -338,10 +340,10 @@ export default function ProjectQaList({
   const visible = filter === "ALL" ? items : items.filter((i) => i.status === filter);
   const counts = {
     ALL: items.length,
-    OPEN: items.filter((i) => i.status === "OPEN").length,
-    PASSED: items.filter((i) => i.status === "PASSED").length,
-    FAILED: items.filter((i) => i.status === "FAILED").length,
-    SKIPPED: items.filter((i) => i.status === "SKIPPED").length,
+    BUG: items.filter((i) => i.status === "BUG").length,
+    IN_PROGRESS: items.filter((i) => i.status === "IN_PROGRESS").length,
+    DONE: items.filter((i) => i.status === "DONE").length,
+    ON_HOLD: items.filter((i) => i.status === "ON_HOLD").length,
   } as const;
 
   return (
@@ -770,7 +772,7 @@ function QaRow({
                 })}
               </span>
             )}
-            {item.resolvedBy && item.resolvedAt && item.status !== "OPEN" && (
+            {item.resolvedBy && item.resolvedAt && item.status !== "BUG" && (
               <span>
                 {STATUS_LABEL[item.status]} · {item.resolvedBy.name} ·{" "}
                 {new Date(item.resolvedAt).toLocaleString("ko-KR", {

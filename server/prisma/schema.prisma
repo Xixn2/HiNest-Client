@@ -110,8 +110,8 @@ model ProjectQaItem {
   platform     String?
   /// 이 이슈를 수정/담당할 사람 (프로젝트 멤버 중 선택). 해지는 null.
   assigneeId   String?
-  /// OPEN | PASSED | FAILED | SKIPPED
-  status       String    @default("OPEN")
+  /// BUG | IN_PROGRESS | DONE | ON_HOLD — 오류/수정 중/완료/보류
+  status       String    @default("BUG")
   /// LOW | NORMAL | HIGH
   priority     String    @default("NORMAL")
   /// 리스트 수동 정렬용 — 값이 같으면 createdAt 기준.
