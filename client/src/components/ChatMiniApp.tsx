@@ -1540,49 +1540,54 @@ function RoomView({
                 </div>
               )}
             <div style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", marginBottom: 4 }}>
-              <div style={{ display: "flex", alignItems: "flex-end", gap: 8, maxWidth: "78%", flexDirection: mine ? "row-reverse" : "row" }}>
-                {/* 프로필은 "연속 묶음의 마지막 메시지" 옆에 붙인다 (KakaoTalk 패턴).
-                    showMeta(첫 메시지) 기준이면 여러 개를 연속으로 보낼 때 아바타가
-                    맨 윗 버블 옆에 붙어 마지막 버블과 멀어져 어색함. showTime 이 곧
-                    같은 묶음의 마지막 메시지 플래그이므로 그걸로 교체. */}
-                {!mine && m.showTime ? (
-                  (() => {
-                    const p = presenceMap[m.sender.id];
-                    const info = resolvePresence(
-                      (p?.presenceStatus ?? null) as any,
-                      (p?.workStatus ?? null) as any,
-                    );
-                    return (
-                      <Avatar
-                        name={m.sender.name}
-                        color={m.sender.avatarColor ?? C.blue}
-                        imageUrl={m.sender.avatarUrl ?? null}
-                        size={26}
-                        presenceColor={info.color}
-                        presenceTitle={info.label + (p?.presenceMessage ? ` · ${p.presenceMessage}` : "")}
-                      />
-                    );
-                  })()
-                ) : !mine ? (
-                  <div style={{ width: 26, flexShrink: 0 }} />
-                ) : null}
-                <div style={{ minWidth: 0, flex: "0 1 auto", position: "relative" }}>
-                  {!mine && m.showMeta && (
-                    <div style={{ fontSize: 11.5, fontWeight: 600, color: C.gray600, marginLeft: 4, marginBottom: 3 }}>
-                      {m.sender.name}
-                    </div>
-                  )}
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "flex-end",
-                      gap: 4,
-                      flexDirection: mine ? "row" : "row-reverse",
-                      justifyContent: "flex-end",
-                      minWidth: 0,
-                      maxWidth: "100%",
-                    }}
-                  >
+              {/* 세로 컬럼: [아바타+이름+버블row] 을 먼저 두고 그 아래에 리액션/피커를 형제로 배치.
+                  기존엔 리액션이 inner column 안에 같이 들어있어 flex-end 정렬의 '컬럼 바닥' 이
+                  리액션 줄까지 내려가 아바타가 리액션 옆에 붙었음. 리액션을 형제로 빼서
+                  아바타가 버블과 정확히 정렬되도록 바꿈. */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start", maxWidth: "78%", minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flexDirection: mine ? "row-reverse" : "row", maxWidth: "100%", minWidth: 0 }}>
+                  {/* 프로필은 "연속 묶음의 마지막 메시지" 옆에 붙인다 (KakaoTalk 패턴).
+                      showMeta(첫 메시지) 기준이면 여러 개를 연속으로 보낼 때 아바타가
+                      맨 윗 버블 옆에 붙어 마지막 버블과 멀어져 어색함. showTime 이 곧
+                      같은 묶음의 마지막 메시지 플래그이므로 그걸로 교체. */}
+                  {!mine && m.showTime ? (
+                    (() => {
+                      const p = presenceMap[m.sender.id];
+                      const info = resolvePresence(
+                        (p?.presenceStatus ?? null) as any,
+                        (p?.workStatus ?? null) as any,
+                      );
+                      return (
+                        <Avatar
+                          name={m.sender.name}
+                          color={m.sender.avatarColor ?? C.blue}
+                          imageUrl={m.sender.avatarUrl ?? null}
+                          size={26}
+                          presenceColor={info.color}
+                          presenceTitle={info.label + (p?.presenceMessage ? ` · ${p.presenceMessage}` : "")}
+                        />
+                      );
+                    })()
+                  ) : !mine ? (
+                    <div style={{ width: 26, flexShrink: 0 }} />
+                  ) : null}
+                  <div style={{ minWidth: 0, flex: "0 1 auto", position: "relative" }}>
+                    {!mine && m.showMeta && (
+                      <div style={{ fontSize: 11.5, fontWeight: 600, color: C.gray600, marginLeft: 4, marginBottom: 3 }}>
+                        {m.sender.name}
+                      </div>
+                    )}
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-end",
+                        gap: 4,
+                        flexDirection: mine ? "row" : "row-reverse",
+                        justifyContent: "flex-end",
+                        minWidth: 0,
+                        maxWidth: "100%",
+                      }}
+                    >
                     {/* 버블 옆 메타 — 안읽음 카운트(위) + 시각(아래) 을 세로로 스택.
                         예전에는 [시각 | 안읽음 | 버블] 이 한 줄로 늘어서 있어 "오후 6:03 1"
                         처럼 읽혀 어떤 값이 안읽음인지 즉시 구분되지 않던 문제가 있었음.
@@ -1652,46 +1657,52 @@ function RoomView({
                         <MessageBubble msg={m} mine={mine} />
                       </LongPress>
                     )}
-                  </div>
-
-                  {/* 리액션 칩 */}
-                  {m.reactions && m.reactions.length > 0 && (
-                    <div
-                      style={{
-                        display: "flex", flexWrap: "wrap", gap: 4,
-                        marginTop: 4,
-                        justifyContent: mine ? "flex-end" : "flex-start",
-                      }}
-                    >
-                      {groupReactions(m.reactions).map((g) => {
-                        const isMine = g.userIds.includes(meId);
-                        return (
-                          <button
-                            key={g.emoji}
-                            type="button"
-                            onClick={() => onReact(m.id, g.emoji)}
-                            title={g.names.join(", ")}
-                            style={{
-                              display: "inline-flex", alignItems: "center", gap: 4,
-                              padding: "2px 8px", height: 24,
-                              borderRadius: 999,
-                              background: isMine ? C.blueSoft : C.gray100,
-                              border: isMine ? `1px solid ${C.blue}` : `1px solid ${C.gray200}`,
-                              color: C.ink, cursor: "pointer",
-                              fontSize: 12, fontWeight: 600,
-                              fontFamily: FONT,
-                            }}
-                          >
-                            <span style={{ fontSize: 13 }}>{g.emoji}</span>
-                            <span style={{ fontVariantNumeric: "tabular-nums" }}>{g.count}</span>
-                          </button>
-                        );
-                      })}
                     </div>
-                  )}
+                  </div>
+                </div>
+                {/* 리액션 칩 — 버블 행 바깥(하단 형제) 로 뺐다. 안에 두면 inner column 의
+                    flex-end 정렬 기준이 리액션 줄까지 내려가 아바타가 리액션 옆에 붙는다.
+                    상대방(non-mine) 기준으로 아바타(26px) + gap(8px) = 34px 만큼 좌측으로
+                    들여 버블과 정렬 맞춤. */}
+                {m.reactions && m.reactions.length > 0 && (
+                  <div
+                    style={{
+                      display: "flex", flexWrap: "wrap", gap: 4,
+                      marginTop: 4,
+                      justifyContent: mine ? "flex-end" : "flex-start",
+                      paddingLeft: !mine ? 34 : 0,
+                    }}
+                  >
+                    {groupReactions(m.reactions).map((g) => {
+                      const isMine = g.userIds.includes(meId);
+                      return (
+                        <button
+                          key={g.emoji}
+                          type="button"
+                          onClick={() => onReact(m.id, g.emoji)}
+                          title={g.names.join(", ")}
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: 4,
+                            padding: "2px 8px", height: 24,
+                            borderRadius: 999,
+                            background: isMine ? C.blueSoft : C.gray100,
+                            border: isMine ? `1px solid ${C.blue}` : `1px solid ${C.gray200}`,
+                            color: C.ink, cursor: "pointer",
+                            fontSize: 12, fontWeight: 600,
+                            fontFamily: FONT,
+                          }}
+                        >
+                          <span style={{ fontSize: 13 }}>{g.emoji}</span>
+                          <span style={{ fontVariantNumeric: "tabular-nums" }}>{g.count}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
 
-                  {/* 컨텍스트 메뉴: 이모지 + 액션 — 헤더는 상세 시각 */}
-                  {isPicking && (
+                {/* 컨텍스트 메뉴: 이모지 + 액션 — 헤더는 상세 시각 */}
+                {isPicking && (
+                  <div style={{ paddingLeft: !mine ? 34 : 0, position: "relative" }}>
                     <ReactionPicker
                       mine={mine}
                       onPick={(e) => { onReact(m.id, e); setReactingId(null); }}
@@ -1699,8 +1710,8 @@ function RoomView({
                       header={formatDetailed(new Date(m.createdAt))}
                       actions={buildMessageActions(m, onPin)}
                     />
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
             </div>
