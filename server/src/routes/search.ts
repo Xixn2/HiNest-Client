@@ -60,6 +60,11 @@ router.get("/", async (req, res) => {
         { scope: "CUSTOM", scopeUserIds: { contains: u.id }, projectId: null },
       ];
 
+  // Postgres 의 Prisma `contains` 는 기본이 case-sensitive LIKE — "Login" 을 쳤을 때 "login"
+  // 제목의 공지/메시지가 빠져 검색 UX 가 안 맞는 이슈가 있었음. mode:"insensitive" 로 전환해
+  // ILIKE 를 쓰도록 변경 (모든 필드 공통 적용).
+  const ic = { contains: q, mode: "insensitive" as const };
+
   const [people, notices, events, documents, messages] = await Promise.all([
     prisma.user.findMany({
       where: {
@@ -68,10 +73,10 @@ router.get("/", async (req, res) => {
         AND: [
           {
             OR: [
-              { name: { contains: q } },
-              { email: { contains: q } },
-              { team: { contains: q } },
-              { position: { contains: q } },
+              { name: ic },
+              { email: ic },
+              { team: ic },
+              { position: ic },
             ],
           },
         ],
@@ -81,7 +86,7 @@ router.get("/", async (req, res) => {
     }),
     prisma.notice.findMany({
       where: {
-        OR: [{ title: { contains: q } }, { content: { contains: q } }],
+        OR: [{ title: ic }, { content: ic }],
       },
       take: 8,
       orderBy: { createdAt: "desc" },
@@ -91,7 +96,7 @@ router.get("/", async (req, res) => {
       where: {
         AND: [
           { OR: eventOr },
-          { OR: [{ title: { contains: q } }, { content: { contains: q } }] },
+          { OR: [{ title: ic }, { content: ic }] },
         ],
       },
       take: 8,
@@ -100,7 +105,7 @@ router.get("/", async (req, res) => {
     prisma.document.findMany({
       where: {
         AND: [
-          { OR: [{ title: { contains: q } }, { description: { contains: q } }, { tags: { contains: q } }] },
+          { OR: [{ title: ic }, { description: ic }, { tags: ic }] },
           { OR: docScopeOr },
         ],
       },
@@ -112,7 +117,7 @@ router.get("/", async (req, res) => {
       where: {
         deletedAt: null,
         room: { members: { some: { userId: u.id } } },
-        content: { contains: q },
+        content: ic,
       },
       take: 8,
       orderBy: { createdAt: "desc" },

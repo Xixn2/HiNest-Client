@@ -249,9 +249,9 @@ router.get("/", async (req, res) => {
     else if (folderId) ands.push({ folderId });
     if (q) ands.push({
       OR: [
-        { title: { contains: q } },
-        { description: { contains: q } },
-        { tags: { contains: q } },
+        { title: { contains: q, mode: "insensitive" } },
+        { description: { contains: q, mode: "insensitive" } },
+        { tags: { contains: q, mode: "insensitive" } },
       ],
     });
     // 상한 500 — 문서함은 폴더/검색으로 좁혀지는 UX 라 실질적으로 넘지 않지만,
@@ -274,9 +274,9 @@ router.get("/", async (req, res) => {
   else if (folderId) ands.push({ folderId });
   if (q) ands.push({
     OR: [
-      { title: { contains: q } },
-      { description: { contains: q } },
-      { tags: { contains: q } },
+      { title: { contains: q, mode: "insensitive" } },
+      { description: { contains: q, mode: "insensitive" } },
+      { tags: { contains: q, mode: "insensitive" } },
     ],
   });
   if (scope === "team") ands.push({ scope: "TEAM" });

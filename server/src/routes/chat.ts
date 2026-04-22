@@ -196,7 +196,8 @@ router.get("/search", async (req, res) => {
   const raw = await prisma.chatMessage.findMany({
     where: {
       deletedAt: null,
-      content: { contains: q },
+      // case-insensitive — Postgres ILIKE. 대소문자 다른 검색어도 매치되게.
+      content: { contains: q, mode: "insensitive" },
       OR: [
         { scheduledAt: null },
         { scheduledAt: { lte: now } },
