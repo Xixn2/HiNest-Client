@@ -702,20 +702,21 @@ function QaRow({
           <PrioritySelect value={item.priority} onChange={(v) => onPatch({ priority: v })} />
         </div>
 
-        {/* 화면 · 플랫폼 */}
+        {/* 화면 · 플랫폼 — 헤더 라벨 순서와 동일하게 화면 먼저, 플랫폼 나중에 */}
         <div className="hidden sm:flex items-center gap-1.5 min-w-0">
+          {item.screen ? (
+            <span className="chip chip-gray truncate" title={item.screen}>
+              📍 {item.screen}
+            </span>
+          ) : null}
           {item.platform && (
             <span className="chip chip-blue">
               {PLATFORM_ICON[item.platform]} {PLATFORM_LABEL[item.platform]}
             </span>
           )}
-          {item.screen ? (
-            <span className="chip chip-gray truncate" title={item.screen}>
-              📍 {item.screen}
-            </span>
-          ) : !item.platform ? (
+          {!item.screen && !item.platform && (
             <span className="text-[12px] text-ink-400">—</span>
-          ) : null}
+          )}
         </div>
 
         {/* 담당자 */}
@@ -790,14 +791,14 @@ function QaRow({
       >
         <PrioritySelect value={item.priority} onChange={(v) => onPatch({ priority: v })} />
         <StatusSelect value={item.status} onChange={(v) => onPatch({ status: v })} />
-        {item.platform && (
-          <span className="chip chip-blue">
-            {PLATFORM_ICON[item.platform]} {PLATFORM_LABEL[item.platform]}
-          </span>
-        )}
         {item.screen && (
           <span className="chip chip-gray truncate" title={item.screen}>
             📍 {item.screen}
+          </span>
+        )}
+        {item.platform && (
+          <span className="chip chip-blue">
+            {PLATFORM_ICON[item.platform]} {PLATFORM_LABEL[item.platform]}
           </span>
         )}
         {item.assignee && (
