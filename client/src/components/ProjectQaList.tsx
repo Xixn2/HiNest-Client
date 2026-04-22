@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, apiSWR } from "../api";
-import { confirmAsync } from "./ConfirmHost";
+import { alertAsync, confirmAsync } from "./ConfirmHost";
 
 type Status = "BUG" | "IN_PROGRESS" | "DONE" | "ON_HOLD";
 type Priority = "LOW" | "NORMAL" | "HIGH";
@@ -221,7 +221,7 @@ export default function ProjectQaList({
       // 방금 만든 항목을 자동으로 펼쳐 상세 입력을 바로 시작할 수 있게.
       setExpandedId(newItem.id);
     } catch (err: any) {
-      alert(err?.message ?? "추가에 실패했어요");
+      await alertAsync({ title: "추가 실패", description: err?.message ?? "추가에 실패했어요" });
     } finally {
       setCreating(false);
     }
@@ -270,7 +270,7 @@ export default function ProjectQaList({
       );
     } catch (err: any) {
       setItems(snapshot);
-      alert(err?.message ?? "수정에 실패했어요");
+      await alertAsync({ title: "수정 실패", description: err?.message ?? "수정에 실패했어요" });
     }
   }
 
@@ -289,7 +289,7 @@ export default function ProjectQaList({
       await api(`/api/project/${projectId}/qa/${id}`, { method: "DELETE" });
     } catch (err: any) {
       setItems(snapshot);
-      alert(err?.message ?? "삭제에 실패했어요");
+      await alertAsync({ title: "삭제 실패", description: err?.message ?? "삭제에 실패했어요" });
     }
   }
 
@@ -312,7 +312,7 @@ export default function ProjectQaList({
             ),
           );
         } catch (e: any) {
-          alert(e?.message ?? "첨부 추가 실패");
+          await alertAsync({ title: "첨부 추가 실패", description: e?.message ?? "첨부 추가 실패" });
         }
       }
     } finally {
@@ -335,7 +335,7 @@ export default function ProjectQaList({
       });
     } catch (err: any) {
       setItems(snapshot);
-      alert(err?.message ?? "첨부 삭제 실패");
+      await alertAsync({ title: "첨부 삭제 실패", description: err?.message ?? "첨부 삭제 실패" });
     }
   }
 
