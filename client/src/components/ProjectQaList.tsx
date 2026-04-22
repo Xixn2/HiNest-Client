@@ -42,6 +42,7 @@ type QaItem = {
 
 type Member = { id: string; name: string; avatarColor: string };
 
+const STATUS_ORDER: Status[] = ["OPEN", "PASSED", "FAILED", "SKIPPED"];
 const STATUS_LABEL: Record<Status, string> = {
   OPEN: "대기",
   PASSED: "통과",
@@ -49,7 +50,8 @@ const STATUS_LABEL: Record<Status, string> = {
   SKIPPED: "생략",
 };
 
-// 라이트/다크 양쪽에서 대비가 맞는 design-token 기반 chip 클래스로 매핑.
+// Notion 태그 특유의 파스텔톤 — 라이트/다크 각각 rgba 로 조절.
+// 베이스 클래스는 styles.css 의 chip-* 토큰을 재활용해 다크모드에서도 자동 대응.
 const STATUS_CHIP: Record<Status, string> = {
   OPEN: "chip chip-gray",
   PASSED: "chip chip-green",
@@ -57,18 +59,27 @@ const STATUS_CHIP: Record<Status, string> = {
   SKIPPED: "chip chip-amber",
 };
 
+// 왼쪽 마커 점(dot) 색 — 상태 한눈에 보이도록 행 앞에 배치.
+const STATUS_DOT: Record<Status, string> = {
+  OPEN: "#9CA3AF",
+  PASSED: "#10B981",
+  FAILED: "#EF4444",
+  SKIPPED: "#F59E0B",
+};
+
+const PRIORITY_ORDER: Priority[] = ["LOW", "NORMAL", "HIGH"];
 const PRIORITY_LABEL: Record<Priority, string> = {
   LOW: "낮음",
   NORMAL: "보통",
   HIGH: "높음",
 };
-
 const PRIORITY_CHIP: Record<Priority, string> = {
   LOW: "chip chip-gray",
   NORMAL: "chip chip-blue",
   HIGH: "chip chip-red",
 };
 
+const PLATFORM_ORDER: Platform[] = ["WEB", "IOS", "ANDROID", "MAC_APP", "WINDOWS_APP", "OTHER"];
 const PLATFORM_LABEL: Record<Platform, string> = {
   WEB: "Web",
   IOS: "iOS",
@@ -77,7 +88,6 @@ const PLATFORM_LABEL: Record<Platform, string> = {
   WINDOWS_APP: "Windows 앱",
   OTHER: "기타",
 };
-
 const PLATFORM_ICON: Record<Platform, string> = {
   WEB: "🌐",
   IOS: "",
@@ -89,7 +99,6 @@ const PLATFORM_ICON: Record<Platform, string> = {
 
 type Filter = "ALL" | Status;
 
-// 간단한 바이트 포매팅 — 첨부 사이즈 라벨에 사용.
 function humanSize(bytes: number) {
   if (!bytes) return "0 B";
   if (bytes < 1024) return `${bytes} B`;
@@ -99,16 +108,15 @@ function humanSize(bytes: number) {
 }
 
 /**
- * 프로젝트 QA 체크리스트 — 버그/확인 항목을 기록한다.
+ * 프로젝트 QA 체크리스트 — Notion 데이터베이스 뷰를 참고한 디자인.
  *
- * 기록 요소
- *  - 제목 + 메모 (재현 스텝)
- *  - 문제 화면(screen) / 재현 플랫폼(platform)
- *  - 담당자(assigneeId) — 프로젝트 멤버 중 선택
- *  - 이미지/영상/파일 첨부 (복수)
- *  - 상태(대기/통과/실패/생략) · 우선순위(낮음/보통/높음)
+ * 구조
+ *  - 상단 바: 제목 + 필터 탭(ALL/대기/통과/실패/생략) + 새 항목 추가 버튼
+ *  - 테이블 헤더: 컬럼 라벨 (제목/상태/플랫폼/화면/담당자/우선순위)
+ *  - 행: 클릭 시 아래로 펼쳐서 메모·첨부·상세 속성 편집
+ *  - 맨 아래 "+ 새 QA 항목" 인라인 행
  *
- * 상태 전환 시 서버가 resolvedBy/At 를 자동 스탬프.
+ * 모바일(<= sm) 에서는 컬럼 대신 카드 스타일로 쌓여 렌더됨.
  */
 export default function ProjectQaList({
   projectId,
@@ -120,29 +128,18 @@ export default function ProjectQaList({
   const [items, setItems] = useState<QaItem[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [filter, setFilter] = useState<Filter>("ALL");
-
-  // ---------- 추가 폼 상태 ----------
-  const [title, setTitle] = useState("");
-  const [note, setNote] = useState("");
-  const [screen, setScreen] = useState("");
-  const [platform, setPlatform] = useState<Platform | "">("");
-  const [assigneeId, setAssigneeId] = useState<string>("");
-  const [priority, setPriority] = useState<Priority>("NORMAL");
-  const [initStatus, setInitStatus] = useState<Status>("OPEN");
-  const [pendingFiles, setPendingFiles] = useState<Attachment[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const addFileInputRef = useRef<HTMLInputElement>(null);
-
-  const [expandedNote, setExpandedNote] = useState<Record<string, boolean>>({});
-
-  // 채널/프로젝트 전환 시 stale 응답 방지.
-  const tokenRef = useRef(0);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [quickTitle, setQuickTitle] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [uploadingFor, setUploadingFor] = useState<string | null>(null);
 
   const memberMap = useMemo(
     () => new Map(members.map((m) => [m.id, m])),
     [members],
   );
+
+  // stale response 방어 — 프로젝트 전환/재로드 시.
+  const tokenRef = useRef(0);
 
   async function load() {
     const my = ++tokenRef.current;
@@ -168,12 +165,16 @@ export default function ProjectQaList({
     tokenRef.current++;
     setItems([]);
     setLoaded(false);
+    setExpandedId(null);
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
-  // ---------- 파일 업로드 ----------
-  async function uploadToServer(file: File): Promise<Attachment> {
+  // ---------- 업로드 ----------
+  async function uploadToServer(file: File): Promise<{
+    url: string; name: string; mimeType: string; sizeBytes: number;
+    kind: AttachmentKind;
+  }> {
     const fd = new FormData();
     fd.append("file", file);
     const r = await fetch("/api/upload", { method: "POST", credentials: "include", body: fd });
@@ -189,95 +190,44 @@ export default function ProjectQaList({
       url: string; name: string; type: string; size: number;
       kind: "IMAGE" | "VIDEO" | "FILE";
     };
-    return {
-      id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      qaItemId: "",
-      url: d.url,
-      name: d.name,
-      mimeType: d.type,
-      sizeBytes: d.size,
-      kind: d.kind,
-      createdAt: new Date().toISOString(),
-    };
+    return { url: d.url, name: d.name, mimeType: d.type, sizeBytes: d.size, kind: d.kind };
   }
 
-  async function handleAddFormFiles(files: FileList | null) {
-    if (!files || !files.length) return;
-    setUploading(true);
-    try {
-      for (const f of Array.from(files)) {
-        try {
-          const att = await uploadToServer(f);
-          setPendingFiles((prev) => [...prev, att]);
-        } catch (e: any) {
-          alert(e?.message ?? "업로드 실패");
-        }
-      }
-    } finally {
-      setUploading(false);
-      if (addFileInputRef.current) addFileInputRef.current.value = "";
-    }
-  }
-
-  // ---------- 추가 제출 ----------
-  async function addItem(e: React.FormEvent) {
-    e.preventDefault();
-    const t = title.trim();
-    if (!t || submitting) return;
-    setSubmitting(true);
+  // ---------- CRUD ----------
+  async function quickCreate(e?: React.FormEvent) {
+    e?.preventDefault();
+    const t = quickTitle.trim();
+    if (!t || creating) return;
+    setCreating(true);
     try {
       const r = await api<{ item: QaItem }>(`/api/project/${projectId}/qa`, {
         method: "POST",
-        json: {
-          title: t,
-          note: note.trim() || undefined,
-          screen: screen.trim() || undefined,
-          platform: platform || undefined,
-          assigneeId: assigneeId || undefined,
-          priority,
-          status: initStatus,
-          attachments: pendingFiles.map((a) => ({
-            url: a.url,
-            name: a.name,
-            mimeType: a.mimeType,
-            sizeBytes: a.sizeBytes,
-            kind: a.kind,
-          })),
-        },
+        json: { title: t },
       });
-      // 서버 응답은 createdBy/assignee join 이 없어 있는 것만 최대한 채움.
       const newItem: QaItem = {
         ...r.item,
         createdBy: null,
         resolvedBy: null,
-        assignee: r.item.assigneeId
-          ? memberMap.get(r.item.assigneeId) ?? null
-          : null,
+        assignee: r.item.assigneeId ? memberMap.get(r.item.assigneeId) ?? null : null,
         attachments: r.item.attachments ?? [],
       };
       setItems((prev) => [...prev, newItem]);
-      setTitle("");
-      setNote("");
-      setScreen("");
-      setPlatform("");
-      setAssigneeId("");
-      setPriority("NORMAL");
-      setInitStatus("OPEN");
-      setPendingFiles([]);
+      setQuickTitle("");
+      // 방금 만든 항목을 자동으로 펼쳐 상세 입력을 바로 시작할 수 있게.
+      setExpandedId(newItem.id);
     } catch (err: any) {
       alert(err?.message ?? "추가에 실패했어요");
     } finally {
-      setSubmitting(false);
+      setCreating(false);
     }
   }
 
-  // ---------- 항목 수정 ----------
   async function patchItem(
     id: string,
     patch: Partial<Pick<QaItem, "status" | "priority" | "title" | "note" | "screen" | "platform" | "assigneeId">>,
   ) {
     const snapshot = items;
-    // 낙관적 반영 — assignee 필드는 memberMap 으로 즉시 join.
+    // 낙관적 반영 (assignee join 은 memberMap 으로 즉시 구성)
     setItems((prev) =>
       prev.map((x) =>
         x.id === id
@@ -305,7 +255,6 @@ export default function ProjectQaList({
             ? {
                 ...x,
                 ...r.item,
-                // 목록 GET 이 오기 전까지 join 정보는 기존값 유지 + assignee 는 memberMap 으로 재계산.
                 createdBy: x.createdBy,
                 resolvedBy: x.resolvedBy,
                 assignee: r.item.assigneeId ? memberMap.get(r.item.assigneeId) ?? null : null,
@@ -330,6 +279,7 @@ export default function ProjectQaList({
     if (!ok) return;
     const snapshot = items;
     setItems((prev) => prev.filter((x) => x.id !== id));
+    if (expandedId === id) setExpandedId(null);
     try {
       await api(`/api/project/${projectId}/qa/${id}`, { method: "DELETE" });
     } catch (err: any) {
@@ -338,33 +288,30 @@ export default function ProjectQaList({
     }
   }
 
-  // ---------- 기존 항목에 첨부 추가/삭제 ----------
   async function addAttachment(itemId: string, files: FileList | null) {
     if (!files || !files.length) return;
-    for (const f of Array.from(files)) {
-      try {
-        const local = await uploadToServer(f);
-        const r = await api<{ attachment: Attachment }>(
-          `/api/project/${projectId}/qa/${itemId}/attachment`,
-          {
-            method: "POST",
-            json: {
-              url: local.url,
-              name: local.name,
-              mimeType: local.mimeType,
-              sizeBytes: local.sizeBytes,
-              kind: local.kind,
-            },
-          },
-        );
-        setItems((prev) =>
-          prev.map((x) =>
-            x.id === itemId ? { ...x, attachments: [...x.attachments, r.attachment] } : x,
-          ),
-        );
-      } catch (e: any) {
-        alert(e?.message ?? "첨부 추가 실패");
+    setUploadingFor(itemId);
+    try {
+      for (const f of Array.from(files)) {
+        try {
+          const meta = await uploadToServer(f);
+          const r = await api<{ attachment: Attachment }>(
+            `/api/project/${projectId}/qa/${itemId}/attachment`,
+            { method: "POST", json: meta },
+          );
+          setItems((prev) =>
+            prev.map((x) =>
+              x.id === itemId
+                ? { ...x, attachments: [...x.attachments, r.attachment] }
+                : x,
+            ),
+          );
+        } catch (e: any) {
+          alert(e?.message ?? "첨부 추가 실패");
+        }
       }
+    } finally {
+      setUploadingFor(null);
     }
   }
 
@@ -387,6 +334,7 @@ export default function ProjectQaList({
     }
   }
 
+  // ---------- 뷰 ----------
   const visible = filter === "ALL" ? items : items.filter((i) => i.status === filter);
   const counts = {
     ALL: items.length,
@@ -397,355 +345,572 @@ export default function ProjectQaList({
   } as const;
 
   return (
-    <div>
-      <div className="section-head">
-        <div className="title">QA 체크리스트</div>
+    <div className="qa-board">
+      {/* ===== 헤더: 제목 + 설명 + 필터 탭 ===== */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-[15px] font-bold text-ink-900">QA 체크리스트</span>
+            <span className="text-[12px] text-ink-400">{counts.ALL}개</span>
+          </div>
+        </div>
         <div className="text-[12px] text-ink-500">
           테스트 항목·버그 제보를 기록하고 담당자·화면·플랫폼까지 한곳에서 관리합니다.
         </div>
-      </div>
 
-      {/* 필터 탭 — chip-* 토큰 사용으로 다크모드에서도 자동 대응 */}
-      <div className="flex flex-wrap gap-1.5 mt-3 mb-3">
-        {(["ALL", "OPEN", "PASSED", "FAILED", "SKIPPED"] as const).map((k) => {
-          const active = filter === k;
-          return (
-            <button
-              key={k}
-              type="button"
-              className={[
-                "px-2.5 py-1 rounded-full text-[12px] font-medium transition-colors",
-                active ? "chip chip-brand" : "chip chip-gray",
-              ].join(" ")}
-              onClick={() => setFilter(k)}
-            >
-              {k === "ALL" ? "전체" : STATUS_LABEL[k]}{" "}
-              <span className="opacity-70">{counts[k]}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* 추가 폼 */}
-      <form
-        onSubmit={addItem}
-        className="flex flex-col gap-2 mb-4 border border-ink-100 rounded-xl p-3 bg-ink-25"
-      >
-        <input
-          className="input w-full"
-          placeholder="테스트 / 확인할 항목 (예: 로그인 후 대시보드 진입)"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          maxLength={200}
-        />
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <input
-            className="input w-full"
-            placeholder="문제 화면 / 위치 (예: 설정 > 프로필 편집)"
-            value={screen}
-            onChange={(e) => setScreen(e.target.value)}
-            maxLength={200}
-          />
-          <select
-            className="input w-full"
-            value={platform}
-            onChange={(e) => setPlatform(e.target.value as Platform | "")}
-            title="재현 플랫폼"
-          >
-            <option value="">플랫폼 (미지정)</option>
-            <option value="WEB">🌐 Web</option>
-            <option value="IOS"> iOS</option>
-            <option value="ANDROID">🤖 Android</option>
-            <option value="MAC_APP">🖥 macOS 앱</option>
-            <option value="WINDOWS_APP">🪟 Windows 앱</option>
-            <option value="OTHER">📦 기타</option>
-          </select>
-        </div>
-
-        <textarea
-          className="input w-full min-h-[60px] resize-y"
-          placeholder="상세 메모 (선택) — 재현 스텝, 기대 결과, 비고"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          maxLength={4000}
-        />
-
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            className="input w-auto"
-            value={assigneeId}
-            onChange={(e) => setAssigneeId(e.target.value)}
-            title="담당자"
-          >
-            <option value="">담당자 미지정</option>
-            {members.map((m) => (
-              <option key={m.id} value={m.id}>
-                담당 · {m.name}
-              </option>
-            ))}
-          </select>
-          <select
-            className="input w-auto"
-            value={priority}
-            onChange={(e) => setPriority(e.target.value as Priority)}
-          >
-            <option value="LOW">우선순위 · 낮음</option>
-            <option value="NORMAL">우선순위 · 보통</option>
-            <option value="HIGH">우선순위 · 높음</option>
-          </select>
-          <select
-            className="input w-auto"
-            value={initStatus}
-            onChange={(e) => setInitStatus(e.target.value as Status)}
-            title="처음 기록 시 결과"
-          >
-            <option value="OPEN">대기 상태로</option>
-            <option value="PASSED">통과로 기록</option>
-            <option value="FAILED">실패로 기록</option>
-            <option value="SKIPPED">생략으로 기록</option>
-          </select>
-        </div>
-
-        {/* 파일 업로드 */}
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            ref={addFileInputRef}
-            type="file"
-            multiple
-            accept="image/*,video/*"
-            className="hidden"
-            onChange={(e) => handleAddFormFiles(e.target.files)}
-          />
-          <button
-            type="button"
-            className="chip chip-gray"
-            onClick={() => addFileInputRef.current?.click()}
-            disabled={uploading}
-          >
-            {uploading ? "업로드 중…" : "📎 사진/영상 첨부"}
-          </button>
-          {pendingFiles.length > 0 && (
-            <span className="text-[12px] text-ink-500">
-              {pendingFiles.length}개 준비됨
-            </span>
-          )}
-          <div className="flex-1" />
-          <button
-            type="submit"
-            className="btn btn-primary"
-            disabled={submitting || uploading || !title.trim()}
-          >
-            {submitting ? "추가 중…" : "추가"}
-          </button>
-        </div>
-
-        {/* 준비된 첨부 미리보기 */}
-        {pendingFiles.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {pendingFiles.map((a, idx) => (
-              <AttachmentThumb
-                key={a.id}
-                att={a}
-                onRemove={() =>
-                  setPendingFiles((prev) => prev.filter((_, i) => i !== idx))
-                }
-              />
-            ))}
-          </div>
-        )}
-      </form>
-
-      {/* 목록 */}
-      {!loaded ? (
-        <div className="text-center text-ink-400 text-sm py-6">불러오는 중…</div>
-      ) : visible.length === 0 ? (
-        <div className="text-center text-ink-400 text-sm py-6">
-          {filter === "ALL"
-            ? "아직 기록된 QA 항목이 없어요."
-            : "해당 상태의 항목이 없어요."}
-        </div>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {visible.map((i) => {
-            const expanded = !!expandedNote[i.id];
+        {/* 필터 탭 — Notion "그룹 보기" 느낌의 탭 스타일 */}
+        <div className="flex flex-wrap items-center gap-x-1 gap-y-1 mt-1 border-b border-ink-100">
+          {(["ALL", ...STATUS_ORDER] as const).map((k) => {
+            const active = filter === k;
             return (
-              <li
-                key={i.id}
-                className="border border-ink-100 rounded-xl p-3 bg-ink-25"
+              <button
+                key={k}
+                type="button"
+                onClick={() => setFilter(k)}
+                className={[
+                  "relative px-2.5 py-1.5 text-[13px] font-medium transition-colors",
+                  active
+                    ? "text-ink-900"
+                    : "text-ink-500 hover:text-ink-700",
+                ].join(" ")}
+                style={{
+                  // active 인 탭 아래쪽에 밑줄 — Notion 데이터베이스 뷰 탭과 유사.
+                  borderBottom: active ? "2px solid var(--c-brand, #3B5CF0)" : "2px solid transparent",
+                  marginBottom: -1,
+                }}
               >
-                <div className="flex items-start gap-3">
-                  <div className="flex-1 min-w-0">
-                    {/* 상단 메타 줄 */}
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className={STATUS_CHIP[i.status]}>
-                        {STATUS_LABEL[i.status]}
-                      </span>
-                      <span className={PRIORITY_CHIP[i.priority]}>
-                        {PRIORITY_LABEL[i.priority]}
-                      </span>
-                      {i.platform && (
-                        <span className="chip chip-blue">
-                          {PLATFORM_ICON[i.platform]} {PLATFORM_LABEL[i.platform]}
-                        </span>
-                      )}
-                      {i.screen && (
-                        <span className="chip chip-gray" title="문제 화면">
-                          📍 {i.screen}
-                        </span>
-                      )}
-                      <span className="text-[13px] font-semibold break-words text-ink-900">
-                        {i.title}
-                      </span>
-                    </div>
-
-                    {/* 담당자 */}
-                    {i.assignee && (
-                      <div className="mt-1.5 flex items-center gap-1.5 text-[12px] text-ink-600">
-                        <span
-                          className="inline-flex items-center justify-center rounded-full text-white"
-                          style={{
-                            background: i.assignee.avatarColor,
-                            width: 18,
-                            height: 18,
-                            fontSize: 11,
-                          }}
-                        >
-                          {i.assignee.name[0]}
-                        </span>
-                        <span>담당 · {i.assignee.name}</span>
-                      </div>
-                    )}
-
-                    {/* 메모 */}
-                    {i.note && (
-                      <div className="mt-1.5">
-                        <div
-                          className={[
-                            "text-[12px] text-ink-600 whitespace-pre-wrap break-words",
-                            expanded ? "" : "line-clamp-2",
-                          ].join(" ")}
-                        >
-                          {i.note}
-                        </div>
-                        {i.note.length > 80 && (
-                          <button
-                            type="button"
-                            className="text-[11px] text-brand-600 hover:underline mt-0.5"
-                            onClick={() =>
-                              setExpandedNote((prev) => ({ ...prev, [i.id]: !prev[i.id] }))
-                            }
-                          >
-                            {expanded ? "접기" : "더 보기"}
-                          </button>
-                        )}
-                      </div>
-                    )}
-
-                    {/* 첨부 썸네일 */}
-                    {i.attachments.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {i.attachments.map((a) => (
-                          <AttachmentThumb
-                            key={a.id}
-                            att={a}
-                            onRemove={() => removeAttachment(i.id, a.id)}
-                          />
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="mt-1.5 text-[11px] text-ink-400 flex flex-wrap gap-x-2">
-                      {i.createdBy && <span>작성 · {i.createdBy.name}</span>}
-                      {i.resolvedBy && i.resolvedAt && i.status !== "OPEN" && (
-                        <span>
-                          {STATUS_LABEL[i.status]} · {i.resolvedBy.name} ·{" "}
-                          {new Date(i.resolvedAt).toLocaleString("ko-KR", {
-                            month: "2-digit",
-                            day: "2-digit",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 액션 */}
-                  <div className="flex flex-col items-end gap-1 shrink-0">
-                    <select
-                      className="input w-auto text-[12px] py-1"
-                      value={i.status}
-                      onChange={(e) => patchItem(i.id, { status: e.target.value as Status })}
-                      title="상태 변경"
-                    >
-                      <option value="OPEN">대기</option>
-                      <option value="PASSED">통과</option>
-                      <option value="FAILED">실패</option>
-                      <option value="SKIPPED">생략</option>
-                    </select>
-                    <select
-                      className="input w-auto text-[12px] py-1"
-                      value={i.assigneeId ?? ""}
-                      onChange={(e) => patchItem(i.id, { assigneeId: e.target.value || null })}
-                      title="담당자 변경"
-                    >
-                      <option value="">담당자 미지정</option>
-                      {members.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="flex items-center gap-1">
-                      <label
-                        className="btn-icon text-ink-400 hover:text-brand-600 cursor-pointer"
-                        title="첨부 추가"
-                        aria-label="첨부 추가"
-                      >
-                        <input
-                          type="file"
-                          multiple
-                          accept="image/*,video/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            addAttachment(i.id, e.target.files);
-                            e.target.value = "";
-                          }}
-                        />
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
-                        </svg>
-                      </label>
-                      <button
-                        type="button"
-                        className="btn-icon text-ink-400 hover:text-rose-600"
-                        title="삭제"
-                        aria-label="삭제"
-                        onClick={() => removeItem(i.id, i.title)}
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M3 6h18" />
-                          <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-                          <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </li>
+                {k === "ALL" ? "전체" : STATUS_LABEL[k]}
+                <span
+                  className={active ? "ml-1 text-ink-500" : "ml-1 text-ink-400"}
+                  style={{ fontSize: 11 }}
+                >
+                  {counts[k]}
+                </span>
+              </button>
             );
           })}
-        </ul>
+        </div>
+      </div>
+
+      {/* ===== 테이블 헤더 (sm 이상에서만) ===== */}
+      <div
+        className="hidden sm:grid items-center gap-2 px-2 py-1.5 mt-2 text-[11px] font-medium uppercase tracking-wider text-ink-400"
+        style={{
+          gridTemplateColumns: "16px minmax(0, 2.2fr) 110px 1fr 150px 88px 28px",
+        }}
+      >
+        <span />
+        <span>제목</span>
+        <span>상태</span>
+        <span>화면 · 플랫폼</span>
+        <span>담당자</span>
+        <span>우선순위</span>
+        <span />
+      </div>
+
+      {/* ===== 행 목록 ===== */}
+      {!loaded ? (
+        <div className="text-center text-ink-400 text-sm py-6">불러오는 중…</div>
+      ) : (
+        <div className="flex flex-col">
+          {visible.length === 0 ? (
+            <div className="text-center text-ink-400 text-sm py-6">
+              {filter === "ALL"
+                ? "아직 기록된 QA 항목이 없어요. 아래에서 바로 추가해 보세요."
+                : "해당 상태의 항목이 없어요."}
+            </div>
+          ) : (
+            visible.map((i) => (
+              <QaRow
+                key={i.id}
+                item={i}
+                members={members}
+                expanded={expandedId === i.id}
+                onToggleExpand={() =>
+                  setExpandedId((prev) => (prev === i.id ? null : i.id))
+                }
+                onPatch={(p) => patchItem(i.id, p)}
+                onDelete={() => removeItem(i.id, i.title)}
+                onAddAttachment={(files) => addAttachment(i.id, files)}
+                onRemoveAttachment={(attId) => removeAttachment(i.id, attId)}
+                uploading={uploadingFor === i.id}
+              />
+            ))
+          )}
+
+          {/* ===== 퀵 추가 행 — Notion 의 "+ 새로 만들기" 모방 ===== */}
+          <form
+            onSubmit={quickCreate}
+            className="flex items-center gap-2 px-2 py-2 border-t border-ink-100 hover:bg-ink-25 transition-colors"
+          >
+            <span className="text-ink-400" style={{ fontSize: 16, width: 16 }}>
+              +
+            </span>
+            <input
+              type="text"
+              className="flex-1 bg-transparent outline-none text-[13px] placeholder:text-ink-400 text-ink-900"
+              placeholder="새 QA 항목 추가 — 제목을 입력하고 Enter"
+              value={quickTitle}
+              onChange={(e) => setQuickTitle(e.target.value)}
+              maxLength={200}
+              disabled={creating}
+            />
+            {quickTitle.trim() && (
+              <button
+                type="submit"
+                className="chip chip-brand"
+                disabled={creating}
+              >
+                {creating ? "추가 중…" : "추가"}
+              </button>
+            )}
+          </form>
+        </div>
       )}
     </div>
   );
 }
 
-/**
- * 첨부 썸네일 — 이미지/영상은 인라인 미리보기, 그 외는 파일명 칩.
- * 클릭 시 새 탭에서 원본 열기. 오른쪽 × 로 제거.
- */
+/* ================================================================
+   개별 행 — 접혀있을 때는 Notion 테이블 한 줄, 펼치면 상세 편집 패널.
+================================================================ */
+function QaRow({
+  item,
+  members,
+  expanded,
+  onToggleExpand,
+  onPatch,
+  onDelete,
+  onAddAttachment,
+  onRemoveAttachment,
+  uploading,
+}: {
+  item: QaItem;
+  members: Member[];
+  expanded: boolean;
+  onToggleExpand: () => void;
+  onPatch: (patch: Partial<Pick<QaItem, "status" | "priority" | "title" | "note" | "screen" | "platform" | "assigneeId">>) => void;
+  onDelete: () => void;
+  onAddAttachment: (files: FileList | null) => void;
+  onRemoveAttachment: (attachmentId: string) => void;
+  uploading: boolean;
+}) {
+  // 제목/화면 등 텍스트 필드는 onBlur 에서만 서버에 반영해 키스트로크마다 네트워크를 때리지 않도록.
+  const [titleDraft, setTitleDraft] = useState(item.title);
+  const [screenDraft, setScreenDraft] = useState(item.screen ?? "");
+  const [noteDraft, setNoteDraft] = useState(item.note ?? "");
+
+  useEffect(() => setTitleDraft(item.title), [item.title]);
+  useEffect(() => setScreenDraft(item.screen ?? ""), [item.screen]);
+  useEffect(() => setNoteDraft(item.note ?? ""), [item.note]);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="group border-t border-ink-100">
+      {/* ---------- 접힌 행 ---------- */}
+      {/* 모바일: 제목줄만 grid 3칼럼 (dot | 제목 | 삭제), 속성은 아래에 flex-wrap */}
+      {/* 데스크톱: 풀 Notion 테이블 레이아웃 */}
+      <div
+        className="qa-row-grid items-center gap-2 px-2 py-2 hover:bg-ink-25 transition-colors cursor-pointer"
+        onClick={(e) => {
+          // 내부 인터랙티브 요소 클릭 시 토글이 덮어쓰지 않도록.
+          const t = e.target as HTMLElement;
+          if (t.closest("button,select,input,textarea,a,label")) return;
+          onToggleExpand();
+        }}
+      >
+        {/* status dot */}
+        <span
+          title={STATUS_LABEL[item.status]}
+          style={{
+            width: 10,
+            height: 10,
+            borderRadius: 999,
+            background: STATUS_DOT[item.status],
+            display: "inline-block",
+          }}
+        />
+
+        {/* 제목 — 인라인 편집 */}
+        <div className="min-w-0 flex items-center gap-2">
+          <input
+            className="flex-1 min-w-0 bg-transparent outline-none text-[13.5px] font-medium text-ink-900 truncate hover:bg-ink-25 rounded px-1 py-0.5 focus:bg-ink-25"
+            value={titleDraft}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onBlur={() => {
+              const v = titleDraft.trim();
+              if (v && v !== item.title) onPatch({ title: v });
+              else if (!v) setTitleDraft(item.title);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              else if (e.key === "Escape") {
+                setTitleDraft(item.title);
+                (e.target as HTMLInputElement).blur();
+              }
+            }}
+            maxLength={200}
+            onClick={(e) => e.stopPropagation()}
+          />
+          {/* 메모/첨부 개수 뱃지 — 있으면 행에서 바로 보이게 */}
+          {(item.note || item.attachments.length > 0) && (
+            <span className="shrink-0 flex items-center gap-1 text-[11px] text-ink-400">
+              {item.note && <span title="메모 있음">📝</span>}
+              {item.attachments.length > 0 && (
+                <span title={`첨부 ${item.attachments.length}개`}>
+                  📎 {item.attachments.length}
+                </span>
+              )}
+            </span>
+          )}
+        </div>
+
+        {/* 상태 — 모바일에서는 아래 카드 형태로 내려감 */}
+        <div className="hidden sm:block">
+          <StatusSelect value={item.status} onChange={(v) => onPatch({ status: v })} />
+        </div>
+
+        {/* 화면 · 플랫폼 */}
+        <div className="hidden sm:flex items-center gap-1.5 min-w-0">
+          {item.platform && (
+            <span className="chip chip-blue">
+              {PLATFORM_ICON[item.platform]} {PLATFORM_LABEL[item.platform]}
+            </span>
+          )}
+          {item.screen ? (
+            <span className="chip chip-gray truncate" title={item.screen}>
+              📍 {item.screen}
+            </span>
+          ) : !item.platform ? (
+            <span className="text-[12px] text-ink-400">—</span>
+          ) : null}
+        </div>
+
+        {/* 담당자 */}
+        <div className="hidden sm:block">
+          <AssigneeSelect
+            value={item.assigneeId}
+            members={members}
+            onChange={(v) => onPatch({ assigneeId: v })}
+          />
+        </div>
+
+        {/* 우선순위 */}
+        <div className="hidden sm:block">
+          <PrioritySelect value={item.priority} onChange={(v) => onPatch({ priority: v })} />
+        </div>
+
+        {/* 삭제 */}
+        <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            className="btn-icon text-ink-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity"
+            title="삭제"
+            aria-label="삭제"
+            onClick={onDelete}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 6h18" />
+              <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+              <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* 모바일에서는 칩 줄이 밑으로 내려감 (보기용) */}
+      <div
+        className="sm:hidden flex flex-wrap items-center gap-1.5 px-2 pb-2"
+        onClick={(e) => {
+          const t = e.target as HTMLElement;
+          if (t.closest("button,select,input,textarea,a,label")) return;
+          onToggleExpand();
+        }}
+      >
+        <StatusSelect value={item.status} onChange={(v) => onPatch({ status: v })} />
+        <PrioritySelect value={item.priority} onChange={(v) => onPatch({ priority: v })} />
+        {item.platform && (
+          <span className="chip chip-blue">
+            {PLATFORM_ICON[item.platform]} {PLATFORM_LABEL[item.platform]}
+          </span>
+        )}
+        {item.screen && (
+          <span className="chip chip-gray truncate" title={item.screen}>
+            📍 {item.screen}
+          </span>
+        )}
+        {item.assignee && (
+          <span className="chip chip-gray flex items-center gap-1">
+            <span
+              className="inline-flex items-center justify-center rounded-full text-white"
+              style={{
+                background: item.assignee.avatarColor,
+                width: 14, height: 14, fontSize: 9,
+              }}
+            >
+              {item.assignee.name[0]}
+            </span>
+            {item.assignee.name}
+          </span>
+        )}
+      </div>
+
+      {/* ---------- 펼친 상세 편집 ---------- */}
+      {expanded && (
+        <div className="px-3 sm:px-4 pb-4 pt-1 bg-ink-25 border-t border-ink-100 flex flex-col gap-3">
+          {/* 속성 그리드 — Notion 페이지 상단 Properties 영역 */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 pt-3">
+            <PropertyRow label="상태">
+              <StatusSelect value={item.status} onChange={(v) => onPatch({ status: v })} />
+            </PropertyRow>
+            <PropertyRow label="우선순위">
+              <PrioritySelect value={item.priority} onChange={(v) => onPatch({ priority: v })} />
+            </PropertyRow>
+            <PropertyRow label="플랫폼">
+              <select
+                className="input w-full text-[13px] py-1"
+                value={item.platform ?? ""}
+                onChange={(e) =>
+                  onPatch({ platform: (e.target.value || null) as Platform | null })
+                }
+              >
+                <option value="">미지정</option>
+                {PLATFORM_ORDER.map((p) => (
+                  <option key={p} value={p}>
+                    {PLATFORM_ICON[p]} {PLATFORM_LABEL[p]}
+                  </option>
+                ))}
+              </select>
+            </PropertyRow>
+            <PropertyRow label="담당자">
+              <AssigneeSelect
+                value={item.assigneeId}
+                members={members}
+                onChange={(v) => onPatch({ assigneeId: v })}
+              />
+            </PropertyRow>
+            <PropertyRow label="화면" wide>
+              <input
+                className="input w-full text-[13px] py-1"
+                placeholder="예: 설정 > 프로필 편집"
+                value={screenDraft}
+                onChange={(e) => setScreenDraft(e.target.value)}
+                onBlur={() => {
+                  const v = screenDraft.trim();
+                  if ((v || null) !== item.screen) onPatch({ screen: v || null });
+                }}
+                maxLength={200}
+              />
+            </PropertyRow>
+          </div>
+
+          {/* 메모 — Notion 페이지 본문 영역 */}
+          <div>
+            <div className="text-[11px] font-medium uppercase tracking-wider text-ink-400 mb-1">
+              메모
+            </div>
+            <textarea
+              className="input w-full min-h-[90px] resize-y text-[13px]"
+              placeholder="재현 스텝 · 기대 결과 · 비고"
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              onBlur={() => {
+                if ((noteDraft || null) !== item.note) onPatch({ note: noteDraft || null });
+              }}
+              maxLength={4000}
+            />
+          </div>
+
+          {/* 첨부 — 이미지/영상 프리뷰 */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-ink-400">
+                첨부 {item.attachments.length > 0 && <span>({item.attachments.length})</span>}
+              </div>
+              <label className="chip chip-gray cursor-pointer">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept="image/*,video/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    onAddAttachment(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+                {uploading ? "업로드 중…" : "📎 추가"}
+              </label>
+            </div>
+            {item.attachments.length === 0 ? (
+              <div className="text-[12px] text-ink-400 border border-dashed border-ink-100 rounded-lg py-4 text-center">
+                이미지/영상을 드래그하거나 "첨부 추가"로 올려주세요.
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {item.attachments.map((a) => (
+                  <AttachmentThumb
+                    key={a.id}
+                    att={a}
+                    onRemove={() => onRemoveAttachment(a.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 작성/해결 이력 */}
+          <div className="text-[11px] text-ink-400 flex flex-wrap gap-x-3 pt-2 border-t border-ink-100">
+            {item.createdBy && (
+              <span>
+                작성 · {item.createdBy.name} ·{" "}
+                {new Date(item.createdAt).toLocaleString("ko-KR", {
+                  month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+                })}
+              </span>
+            )}
+            {item.resolvedBy && item.resolvedAt && item.status !== "OPEN" && (
+              <span>
+                {STATUS_LABEL[item.status]} · {item.resolvedBy.name} ·{" "}
+                {new Date(item.resolvedAt).toLocaleString("ko-KR", {
+                  month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+                })}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ================================================================
+   공용 서브 컴포넌트
+================================================================ */
+
+function PropertyRow({
+  label,
+  wide,
+  children,
+}: {
+  label: string;
+  wide?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={["flex items-center gap-3", wide ? "sm:col-span-2" : ""].join(" ")}>
+      <div className="w-16 shrink-0 text-[12px] text-ink-500">{label}</div>
+      <div className="flex-1 min-w-0">{children}</div>
+    </div>
+  );
+}
+
+function StatusSelect({
+  value,
+  onChange,
+}: {
+  value: Status;
+  onChange: (v: Status) => void;
+}) {
+  return (
+    <label className={[STATUS_CHIP[value], "cursor-pointer relative"].join(" ")}>
+      <span className="inline-flex items-center gap-1">
+        <span
+          style={{
+            width: 7,
+            height: 7,
+            borderRadius: 999,
+            background: STATUS_DOT[value],
+            display: "inline-block",
+          }}
+        />
+        {STATUS_LABEL[value]}
+      </span>
+      <select
+        className="absolute inset-0 opacity-0 cursor-pointer"
+        value={value}
+        onChange={(e) => onChange(e.target.value as Status)}
+      >
+        {STATUS_ORDER.map((s) => (
+          <option key={s} value={s}>
+            {STATUS_LABEL[s]}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function PrioritySelect({
+  value,
+  onChange,
+}: {
+  value: Priority;
+  onChange: (v: Priority) => void;
+}) {
+  return (
+    <label className={[PRIORITY_CHIP[value], "cursor-pointer relative"].join(" ")}>
+      <span>{PRIORITY_LABEL[value]}</span>
+      <select
+        className="absolute inset-0 opacity-0 cursor-pointer"
+        value={value}
+        onChange={(e) => onChange(e.target.value as Priority)}
+      >
+        {PRIORITY_ORDER.map((p) => (
+          <option key={p} value={p}>
+            {PRIORITY_LABEL[p]}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function AssigneeSelect({
+  value,
+  members,
+  onChange,
+}: {
+  value: string | null;
+  members: Member[];
+  onChange: (v: string | null) => void;
+}) {
+  const current = value ? members.find((m) => m.id === value) : null;
+  return (
+    <label className="chip chip-gray cursor-pointer relative inline-flex items-center gap-1.5 min-w-0">
+      {current ? (
+        <>
+          <span
+            className="inline-flex items-center justify-center rounded-full text-white shrink-0"
+            style={{
+              background: current.avatarColor,
+              width: 14, height: 14, fontSize: 9,
+            }}
+          >
+            {current.name[0]}
+          </span>
+          <span className="truncate">{current.name}</span>
+        </>
+      ) : (
+        <span className="text-ink-500">담당자 없음</span>
+      )}
+      <select
+        className="absolute inset-0 opacity-0 cursor-pointer"
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value || null)}
+      >
+        <option value="">담당자 없음</option>
+        {members.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function AttachmentThumb({
   att,
   onRemove,
@@ -753,10 +918,10 @@ function AttachmentThumb({
   att: Attachment;
   onRemove?: () => void;
 }) {
-  const box = "relative group rounded-lg overflow-hidden border border-ink-100 bg-ink-25";
+  const box = "relative group/thumb rounded-lg overflow-hidden border border-ink-100 bg-ink-25";
   if (att.kind === "IMAGE") {
     return (
-      <div className={box} style={{ width: 96, height: 96 }}>
+      <div className={box} style={{ width: 112, height: 112 }}>
         <a href={att.url} target="_blank" rel="noreferrer" title={att.name}>
           <img
             src={att.url}
@@ -771,7 +936,7 @@ function AttachmentThumb({
   }
   if (att.kind === "VIDEO") {
     return (
-      <div className={box} style={{ width: 160, height: 96 }}>
+      <div className={box} style={{ width: 180, height: 112 }}>
         <video
           src={att.url}
           className="w-full h-full object-cover"
@@ -808,7 +973,7 @@ function RemoveDot({ onRemove }: { onRemove: () => void }) {
     <button
       type="button"
       onClick={onRemove}
-      className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-[11px] leading-none flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+      className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-[11px] leading-none flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity"
       aria-label="첨부 제거"
       title="제거"
     >
