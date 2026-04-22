@@ -859,7 +859,7 @@ html.dark .nav-active svg { stroke: var(--c-brand-soft-fg); }
 /* ============================================================ */
 /*   QA 체크리스트 — Notion 스타일 테이블 행 레이아웃            */
 /*   모바일: [dot | 제목 | 삭제] 3칼럼                           */
-/*   데스크톱(≥640): [dot | 제목 | 상태 | 화면·플랫폼 | 담당자 | 우선순위 | 삭제] */
+/*   데스크톱(≥640): [dot | 제목 | 우선순위 | 화면·플랫폼 | 담당자 | 상태 | 삭제] */
 /* ============================================================ */
 .qa-row-grid {
   display: grid;
@@ -867,6 +867,6 @@ html.dark .nav-active svg { stroke: var(--c-brand-soft-fg); }
 }
 @media (min-width: 640px) {
   .qa-row-grid {
-    grid-template-columns: 16px minmax(0, 2.2fr) 110px 1fr 150px 88px 28px;
+    grid-template-columns: 16px minmax(0, 2.2fr) 88px 1fr 150px 110px 28px;
   }
 }
