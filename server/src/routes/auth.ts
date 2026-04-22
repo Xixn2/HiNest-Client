@@ -147,7 +147,10 @@ router.post("/step-up", requireAuth, async (req, res) => {
   const u = (req as any).user;
   const user = await prisma.user.findUnique({ where: { id: u.id } });
   if (!user || !user.superAdmin) return res.status(403).json({ error: "forbidden" });
-  const password = String(req.body?.password ?? "");
+  // 로그인/가입 schema 와 동일한 128자 상한. 제한 없이 bcrypt.compare 에
+  // 넘기면 슬로우 해시 DoS 벡터.
+  const rawPw = String(req.body?.password ?? "");
+  const password = rawPw.length > 128 ? rawPw.slice(0, 128) : rawPw;
   if (!password) return res.status(400).json({ error: "비밀번호를 입력해주세요" });
 
   // 총관리자는 반드시 별도의 super 비밀번호가 설정되어 있어야 함 — 일반 비밀번호 fallback 금지
@@ -196,8 +199,13 @@ router.post("/desktop-biometric/enroll", requireAuth, requireSuperAdminStepUp, a
   const isDesktop = req.get("x-hinest-desktop") === "1";
   if (!isDesktop) return res.status(400).json({ error: "데스크톱 앱에서만 등록할 수 있어요" });
 
-  const deviceId = String(req.body?.deviceId ?? "").trim();
-  const deviceName = String(req.body?.deviceName ?? "").trim() || null;
+  // deviceId 는 Electron 에서 생성한 UUID (32~36자) — 128자면 여유 있음. 상한 없이 둘 경우
+  // DB 유니크 인덱스에 수 MB 값이 들어가 저장/조회 비용이 튀고, passkey.ts 와도 format
+  // 의도 일치.
+  const rawDevId = String(req.body?.deviceId ?? "").trim();
+  const deviceId = rawDevId.length > 128 ? rawDevId.slice(0, 128) : rawDevId;
+  const rawDevName = String(req.body?.deviceName ?? "").trim();
+  const deviceName = rawDevName ? (rawDevName.length > 80 ? rawDevName.slice(0, 80) : rawDevName) : null;
   if (!deviceId || deviceId.length < 8) return res.status(400).json({ error: "invalid deviceId" });
 
   const row = await prisma.desktopBiometric.upsert({
@@ -226,7 +234,8 @@ router.post("/desktop-biometric/stepup", requireAuth, async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: u.id } });
   if (!user || !user.superAdmin) return res.status(403).json({ error: "forbidden" });
 
-  const deviceId = String(req.body?.deviceId ?? "").trim();
+  const rawDevId = String(req.body?.deviceId ?? "").trim();
+  const deviceId = rawDevId.length > 128 ? rawDevId.slice(0, 128) : rawDevId;
   if (!deviceId) return res.status(400).json({ error: "invalid deviceId" });
 
   const row = await prisma.desktopBiometric.findUnique({
