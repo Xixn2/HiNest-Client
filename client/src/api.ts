@@ -59,12 +59,37 @@ function writeCache(path: string, data: unknown) {
   }
 }
 
-function readCache<T>(path: string, maxAgeMs = 10 * 60 * 1000): T | null {
+/**
+ * 경로별 캐시 TTL.
+ *
+ * 아바타/이름/팀처럼 다른 사람이 서버에서 바꿀 수 있고 UI 전반에 박히는
+ * 데이터가 들어있는 엔드포인트는 짧은 TTL 이 맞다. 10분 TTL 로 두면 내가
+ * 프로필을 바꿔도 다른 사람 탭이 오래 열려 있으면 그 탭의 sessionStorage
+ * 캐시가 옛 avatarUrl 을 계속 들고 있어서 "안 바뀌는 것처럼" 보임.
+ *
+ * 따라서 사용자 정보가 임베드되는 경로는 30초 TTL — SWR flash-less
+ * 렌더 이점은 유지하면서 타인의 프로필 변경이 길어야 30초 안에 반영.
+ */
+const SHORT_TTL_PREFIXES = [
+  "/api/users",
+  "/api/me",
+  "/api/chat",       // 메시지/룸에 sender.avatarUrl 임베드
+  "/api/project",    // 멤버 리스트에 avatarUrl 임베드
+  "/api/meeting",    // 작성자 avatar
+  "/api/notice",     // 작성자 avatar
+  "/api/notification",
+];
+function ttlForPath(path: string): number {
+  for (const p of SHORT_TTL_PREFIXES) if (path.startsWith(p)) return 30 * 1000;
+  return 10 * 60 * 1000;
+}
+
+function readCache<T>(path: string, maxAgeMs?: number): T | null {
   try {
     const raw = sessionStorage.getItem(cacheKey(path));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { t: number; data: T };
-    if (Date.now() - parsed.t > maxAgeMs) return null;
+    if (Date.now() - parsed.t > (maxAgeMs ?? ttlForPath(path))) return null;
     return parsed.data;
   } catch {
     return null;

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api } from "../api";
+import { api, invalidateCache } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
 import { useTheme, type ThemeMode } from "../theme";
@@ -62,6 +62,15 @@ export default function ProfilePage() {
         method: "PATCH",
         json: { name, avatarColor: color, avatarUrl: avatarUrl ?? "" },
       });
+      // 내 프로필을 바꾸면 사용자 이름/아바타가 박혀있는 거의 모든 엔드포인트 응답이
+      // 즉시 낡아진다. 내 탭의 sessionStorage 캐시부터 싹 비워서 다음 화면 진입 때
+      // 곧장 최신 본인 정보가 보이게. (다른 사용자 탭은 짧아진 TTL 로 30초 안에 revalidate.)
+      invalidateCache("/api/me");
+      invalidateCache("/api/users");
+      invalidateCache("/api/project");
+      invalidateCache("/api/chat");
+      invalidateCache("/api/meeting");
+      invalidateCache("/api/notice");
       await refresh();
       if (!aliveRef.current) return;
       setSavedMsg("저장되었습니다");
