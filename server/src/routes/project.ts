@@ -157,9 +157,15 @@ router.get("/:id/events", async (req, res) => {
 const eventSchemaBase = z.object({
   title: z.string().min(1).max(120),
   description: z.string().max(1000).optional().nullable(),
-  // ISO 8601 확장 포맷도 40자면 충분. 임의로 길게 들어오는 걸 막아 Date 파싱 비용 방어.
-  startAt: z.string().min(1).max(40),
-  endAt: z.string().min(1).max(40),
+  // ISO 8601 확장 포맷도 40자면 충분. 파싱 실패 시 Prisma 500 으로 흐르지 않도록 사전 검증.
+  startAt: z.string().min(1).max(40).refine(
+    (s) => !Number.isNaN(new Date(s).getTime()),
+    { message: "시작 시각 형식이 올바르지 않습니다" },
+  ),
+  endAt: z.string().min(1).max(40).refine(
+    (s) => !Number.isNaN(new Date(s).getTime()),
+    { message: "종료 시각 형식이 올바르지 않습니다" },
+  ),
   allDay: z.boolean().optional(),
   color: z.string().max(16).optional(),
   // 담당자 수 상한 — 한 이벤트에 50명 이상은 현실적으로 없고, 지나치면 assigneeIds

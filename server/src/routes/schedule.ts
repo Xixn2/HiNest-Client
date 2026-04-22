@@ -101,9 +101,15 @@ const eventSchema = z.object({
   team: z.string().max(80).optional().nullable(),
   category: z.enum(CATEGORIES).default("OTHER"),
   targetUserIds: z.array(z.string().max(50)).max(500).optional(),
-  // ISO 8601 확장 포맷도 40자면 충분.
-  startAt: z.string().min(1).max(40),
-  endAt: z.string().min(1).max(40),
+  // ISO 8601 확장 포맷도 40자면 충분. 개별 포맷 오류는 순서 refine 메시지에 묻히지 않도록 먼저 검증.
+  startAt: z.string().min(1).max(40).refine(
+    (s) => !Number.isNaN(new Date(s).getTime()),
+    { message: "시작 시각 형식이 올바르지 않습니다" },
+  ),
+  endAt: z.string().min(1).max(40).refine(
+    (s) => !Number.isNaN(new Date(s).getTime()),
+    { message: "종료 시각 형식이 올바르지 않습니다" },
+  ),
   color: z.string().max(16).optional(),
 }).refine(
   (d) => !d.startAt || !d.endAt || new Date(d.endAt).getTime() >= new Date(d.startAt).getTime(),
