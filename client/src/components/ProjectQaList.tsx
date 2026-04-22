@@ -456,7 +456,7 @@ export default function ProjectQaList({
       <div
         className="hidden sm:grid items-center gap-2 px-2 py-1.5 mt-2 text-[11px] font-medium uppercase tracking-wider text-ink-400"
         style={{
-          gridTemplateColumns: "16px minmax(0, 2.2fr) 88px 1fr 150px 110px 28px",
+          gridTemplateColumns: "16px minmax(0, 2.2fr) 88px 1fr 150px 110px 56px",
         }}
       >
         <span />
@@ -667,8 +667,37 @@ function QaRow({
           <StatusSelect value={item.status} onChange={(v) => onPatch({ status: v })} />
         </div>
 
-        {/* 삭제 */}
-        <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+        {/* 퀵 액션 — 행 hover 시 완료/되돌리기 + 삭제 */}
+        <div
+          className="flex justify-end items-center gap-0.5"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {item.status !== "DONE" ? (
+            <button
+              type="button"
+              className="btn-icon text-ink-400 hover:text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity"
+              title="완료로 표시"
+              aria-label="완료로 표시"
+              onClick={() => onPatch({ status: "DONE" })}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn-icon text-ink-400 hover:text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity"
+              title="다시 열기 (BUG 로 되돌림)"
+              aria-label="다시 열기"
+              onClick={() => onPatch({ status: "BUG" })}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 12a9 9 0 1 0 3-6.7" />
+                <path d="M3 4v5h5" />
+              </svg>
+            </button>
+          )}
           <button
             type="button"
             className="btn-icon text-ink-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity"
