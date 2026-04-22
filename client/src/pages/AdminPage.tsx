@@ -15,6 +15,7 @@ type UserRow = {
   position?: string | null;
   active: boolean;
   avatarColor?: string;
+  avatarUrl?: string | null;
   createdAt: string;
   // HR 상세
   hrCode?: string | null;
@@ -522,7 +523,7 @@ function UsersTab({
               <tr key={u.id}>
                 <td>
                   <div className="flex items-center gap-3">
-                    <UserAvatar name={u.name} color={u.avatarColor ?? "#3D54C4"} />
+                    <UserAvatar name={u.name} color={u.avatarColor ?? "#3D54C4"} imageUrl={u.avatarUrl ?? null} />
                     <div className="min-w-0">
                       <div className="text-[13px] font-bold text-ink-900 truncate">{u.name}</div>
                       <div className="text-[11px] text-ink-500 truncate tabular">{u.email}</div>
@@ -698,7 +699,7 @@ function UserDetailEditModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 pb-3 border-b border-ink-100">
-          <UserAvatar name={user.name} color={user.avatarColor ?? "#3D54C4"} />
+          <UserAvatar name={user.name} color={user.avatarColor ?? "#3D54C4"} imageUrl={user.avatarUrl ?? null} />
           <div className="min-w-0 flex-1">
             <div className="text-[15px] font-bold text-ink-900 truncate">{user.name} · 상세 정보</div>
             <div className="text-[11px] text-ink-500 tabular truncate">{user.email}</div>
@@ -1252,11 +1253,15 @@ function AttendanceEditModal({
   );
 }
 
-function UserAvatar({ name, color }: { name: string; color: string }) {
+function UserAvatar({ name, color, imageUrl }: { name: string; color: string; imageUrl?: string | null }) {
   return (
-    <div className="w-9 h-9 rounded-full grid place-items-center text-white text-[13px] font-extrabold flex-shrink-0"
-      style={{ background: color, letterSpacing: "-0.02em" }}>
-      {name?.[0] ?? "?"}
+    <div className="w-9 h-9 rounded-full grid place-items-center text-white text-[13px] font-extrabold flex-shrink-0 overflow-hidden"
+      style={{ background: imageUrl ? "transparent" : color, letterSpacing: "-0.02em" }}>
+      {imageUrl ? (
+        <img src={imageUrl} alt={name} className="w-full h-full object-cover" />
+      ) : (
+        name?.[0] ?? "?"
+      )}
     </div>
   );
 }

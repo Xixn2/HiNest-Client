@@ -10,6 +10,7 @@ type UserLite = {
   team: string | null;
   position: string | null;
   avatarColor: string;
+  avatarUrl?: string | null;
 };
 
 type Props = {
@@ -174,10 +175,14 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
                     className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border text-xs ${on ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 hover:bg-slate-50 text-slate-600"}`}
                   >
                     <span
-                      className="w-5 h-5 rounded-full grid place-items-center text-white text-[10px] font-bold"
-                      style={{ background: u.avatarColor }}
+                      className="w-5 h-5 rounded-full grid place-items-center text-white text-[10px] font-bold overflow-hidden"
+                      style={{ background: u.avatarUrl ? "transparent" : u.avatarColor }}
                     >
-                      {u.name[0]}
+                      {u.avatarUrl ? (
+                        <img src={u.avatarUrl} alt={u.name} className="w-full h-full object-cover" />
+                      ) : (
+                        u.name[0]
+                      )}
                     </span>
                     <span>{u.name}</span>
                     <span className="text-[10px] text-slate-400">

@@ -34,7 +34,7 @@ type Message = {
   deletedAt?: string | null;
   scheduledAt?: string | null;
   createdAt: string;
-  sender: { id: string; name: string; avatarColor: string };
+  sender: { id: string; name: string; avatarColor: string; avatarUrl?: string | null };
 };
 
 type Tab = "logs" | "chat";
@@ -331,9 +331,13 @@ function ChatAuditPanel() {
                     const scheduled = !!m.scheduledAt && new Date(m.scheduledAt).getTime() > Date.now();
                     return (
                       <div key={m.id} className="flex gap-2">
-                        <div className="w-7 h-7 rounded-full grid place-items-center text-white text-[11px] font-bold flex-shrink-0"
-                          style={{ background: m.sender.avatarColor }}>
-                          {m.sender.name[0]}
+                        <div className="w-7 h-7 rounded-full grid place-items-center text-white text-[11px] font-bold flex-shrink-0 overflow-hidden"
+                          style={{ background: m.sender.avatarUrl ? "transparent" : m.sender.avatarColor }}>
+                          {m.sender.avatarUrl ? (
+                            <img src={m.sender.avatarUrl} alt={m.sender.name} className="w-full h-full object-cover" />
+                          ) : (
+                            m.sender.name[0]
+                          )}
                         </div>
                         <div className="max-w-[72%]">
                           <div className="flex items-center gap-1.5 mb-0.5">

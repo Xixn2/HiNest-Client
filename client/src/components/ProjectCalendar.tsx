@@ -25,6 +25,7 @@ export type CalMember = {
   id: string;
   name: string;
   avatarColor: string;
+  avatarUrl?: string | null;
   position?: string | null;
   team?: string | null;
 };

@@ -13,7 +13,7 @@ type Member = {
   id: string;
   userId: string;
   role: "OWNER" | "MANAGER" | "MEMBER";
-  user: { id: string; name: string; email: string; team: string | null; position: string | null; avatarColor: string };
+  user: { id: string; name: string; email: string; team: string | null; position: string | null; avatarColor: string; avatarUrl?: string | null };
 };
 
 type Project = {
@@ -131,6 +131,7 @@ export default function ProjectPage() {
               id: m.user.id,
               name: m.user.name,
               avatarColor: m.user.avatarColor,
+              avatarUrl: m.user.avatarUrl ?? null,
               position: m.user.position,
               team: m.user.team,
             }))}
@@ -145,6 +146,7 @@ export default function ProjectPage() {
               id: m.user.id,
               name: m.user.name,
               avatarColor: m.user.avatarColor,
+              avatarUrl: m.user.avatarUrl ?? null,
             }))}
           />
         </div>
@@ -186,11 +188,15 @@ export default function ProjectPage() {
             {members.map((m) => (
               <div key={m.id} className="flex items-center gap-2.5 border border-slate-100 rounded-lg px-3 py-2">
                 <div
-                  className="avatar avatar-sm"
-                  style={{ background: m.user.avatarColor }}
+                  className="avatar avatar-sm overflow-hidden"
+                  style={{ background: m.user.avatarUrl ? "transparent" : m.user.avatarColor }}
                   title={m.user.name}
                 >
-                  {m.user.name[0]}
+                  {m.user.avatarUrl ? (
+                    <img src={m.user.avatarUrl} alt={m.user.name} className="w-full h-full object-cover" />
+                  ) : (
+                    m.user.name[0]
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-[13px] font-semibold truncate">{m.user.name}</div>

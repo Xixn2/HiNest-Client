@@ -13,6 +13,7 @@ type DirectoryUser = {
   team?: string | null;
   position?: string | null;
   avatarColor?: string;
+  avatarUrl?: string | null;
   presenceStatus?: PresenceStatus | null;
   presenceMessage?: string | null;
   workStatus?: WorkStatus;
@@ -242,10 +243,14 @@ function MyProfileHero({
       />
       <div className="relative flex items-center gap-5 p-5">
         <div
-          className="w-16 h-16 rounded-full grid place-items-center text-white text-[22px] font-extrabold flex-shrink-0 shadow-pop"
-          style={{ background: me.avatarColor ?? "#3D54C4", letterSpacing: "-0.03em" }}
+          className="w-16 h-16 rounded-full grid place-items-center text-white text-[22px] font-extrabold flex-shrink-0 shadow-pop overflow-hidden"
+          style={{ background: me.avatarUrl ? "transparent" : (me.avatarColor ?? "#3D54C4"), letterSpacing: "-0.03em" }}
         >
-          {me.name[0]}
+          {me.avatarUrl ? (
+            <img src={me.avatarUrl} alt={me.name} className="w-full h-full object-cover" />
+          ) : (
+            me.name[0]
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
@@ -298,9 +303,13 @@ function GridCard({
       >
         <div
           className="absolute bottom-0 left-4 translate-y-1/2 w-12 h-12 rounded-full grid place-items-center text-white text-[16px] font-extrabold shadow-pop"
-          style={{ background: u.avatarColor ?? "#3D54C4", letterSpacing: "-0.02em" }}
+          style={{ background: u.avatarUrl ? "transparent" : (u.avatarColor ?? "#3D54C4"), letterSpacing: "-0.02em" }}
         >
-          {u.name[0]}
+          {u.avatarUrl ? (
+            <img src={u.avatarUrl} alt={u.name} className="w-full h-full object-cover rounded-full" />
+          ) : (
+            u.name[0]
+          )}
           <PresenceDot u={u} size={14} ring={2} />
         </div>
       </div>
@@ -374,9 +383,13 @@ function ListRow({ u, onDM, divider, dmBusy }: { u: DirectoryUser; onDM: () => v
     >
       <div
         className="relative w-10 h-10 rounded-full grid place-items-center text-white text-[13px] font-extrabold flex-shrink-0"
-        style={{ background: u.avatarColor ?? "#3D54C4", letterSpacing: "-0.02em" }}
+        style={{ background: u.avatarUrl ? "transparent" : (u.avatarColor ?? "#3D54C4"), letterSpacing: "-0.02em" }}
       >
-        {u.name[0]}
+        {u.avatarUrl ? (
+          <img src={u.avatarUrl} alt={u.name} className="w-full h-full object-cover rounded-full" />
+        ) : (
+          u.name[0]
+        )}
         <PresenceDot u={u} size={12} ring={2} />
       </div>
       <div className="min-w-0 flex-1 md:w-[28%] md:flex-initial">

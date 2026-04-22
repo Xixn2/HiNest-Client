@@ -203,7 +203,7 @@ export default function SearchModal({ open, onClose }: { open: boolean; onClose:
                 <Section label="사람">
                   {results.people.map((p: any) => (
                     <Row key={`p-${p.id}`} onClick={() => openDirect(p.id)}
-                      icon={<Avatar name={p.name} color={p.avatarColor ?? "#3D54C4"} />}>
+                      icon={<Avatar name={p.name} color={p.avatarColor ?? "#3D54C4"} imageUrl={p.avatarUrl ?? null} />}>
                       <div className="text-[13px] font-bold text-ink-900">{p.name}</div>
                       <div className="text-[11px] text-ink-500">{p.position ?? "—"} {p.team && `· ${p.team}`} · {p.email}</div>
                     </Row>
@@ -253,7 +253,7 @@ export default function SearchModal({ open, onClose }: { open: boolean; onClose:
                       window.dispatchEvent(new CustomEvent("chat:open"));
                       window.dispatchEvent(new CustomEvent("chat:open-room", { detail: { roomId: m.room.id } }));
                     }}
-                      icon={<Avatar name={m.sender.name} color={m.sender.avatarColor} />}>
+                      icon={<Avatar name={m.sender.name} color={m.sender.avatarColor} imageUrl={m.sender.avatarUrl ?? null} />}>
                       <div className="text-[13px] font-bold text-ink-900 truncate">{m.sender.name} <span className="text-ink-500 font-medium">· {m.room.name}</span></div>
                       <div className="text-[11px] text-ink-500 line-clamp-1">{m.content}</div>
                     </Row>
@@ -289,10 +289,14 @@ function Row({ icon, onClick, children }: { icon: React.ReactNode; onClick: () =
   );
 }
 
-function Avatar({ name, color }: { name: string; color: string }) {
+function Avatar({ name, color, imageUrl }: { name: string; color: string; imageUrl?: string | null }) {
   return (
-    <div className="w-7 h-7 rounded-full grid place-items-center text-white text-[11px] font-bold" style={{ background: color, letterSpacing: "-0.02em" }}>
-      {name?.[0] ?? "?"}
+    <div className="w-7 h-7 rounded-full grid place-items-center text-white text-[11px] font-bold overflow-hidden" style={{ background: imageUrl ? "transparent" : color, letterSpacing: "-0.02em" }}>
+      {imageUrl ? (
+        <img src={imageUrl} alt={name} className="w-full h-full object-cover" />
+      ) : (
+        name?.[0] ?? "?"
+      )}
     </div>
   );
 }

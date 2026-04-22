@@ -7,7 +7,7 @@ type Priority = "LOW" | "NORMAL" | "HIGH";
 type Platform = "WEB" | "IOS" | "ANDROID" | "MAC_APP" | "WINDOWS_APP" | "OTHER";
 type AttachmentKind = "IMAGE" | "VIDEO" | "FILE";
 
-type QaUser = { id: string; name: string; avatarColor: string };
+type QaUser = { id: string; name: string; avatarColor: string; avatarUrl?: string | null };
 
 type Attachment = {
   id: string;
@@ -40,7 +40,7 @@ type QaItem = {
   attachments: Attachment[];
 };
 
-type Member = { id: string; name: string; avatarColor: string };
+type Member = { id: string; name: string; avatarColor: string; avatarUrl?: string | null };
 
 // 상태 순서 — 필터 탭/드롭다운에서 좌→우, 위→아래 순.
 // BUG(리포트) → IN_PROGRESS(수정 중) → DONE(완료) / ON_HOLD(보류).

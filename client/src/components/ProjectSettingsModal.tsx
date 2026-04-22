@@ -9,7 +9,7 @@ type Member = {
   id: string;
   userId: string;
   role: Role;
-  user: { id: string; name: string; email: string; team: string | null; position: string | null; avatarColor: string };
+  user: { id: string; name: string; email: string; team: string | null; position: string | null; avatarColor: string; avatarUrl?: string | null };
 };
 
 type Project = {
@@ -28,6 +28,7 @@ type UserLite = {
   team: string | null;
   position: string | null;
   avatarColor: string;
+  avatarUrl?: string | null;
 };
 
 type Props = {
@@ -420,10 +421,14 @@ function MembersTab({
               className="flex items-center gap-2.5 border border-slate-100 rounded-lg px-3 py-2"
             >
               <div
-                className="avatar avatar-sm"
-                style={{ background: m.user.avatarColor }}
+                className="avatar avatar-sm overflow-hidden"
+                style={{ background: m.user.avatarUrl ? "transparent" : m.user.avatarColor }}
               >
-                {m.user.name[0]}
+                {m.user.avatarUrl ? (
+                  <img src={m.user.avatarUrl} alt={m.user.name} className="w-full h-full object-cover" />
+                ) : (
+                  m.user.name[0]
+                )}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-[13px] font-semibold truncate">{m.user.name}</div>
@@ -489,10 +494,14 @@ function MembersTab({
                 className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-50 text-left"
               >
                 <span
-                  className="w-6 h-6 rounded-full grid place-items-center text-white text-[11px] font-bold"
-                  style={{ background: u.avatarColor }}
+                  className="w-6 h-6 rounded-full grid place-items-center text-white text-[11px] font-bold overflow-hidden"
+                  style={{ background: u.avatarUrl ? "transparent" : u.avatarColor }}
                 >
-                  {u.name[0]}
+                  {u.avatarUrl ? (
+                    <img src={u.avatarUrl} alt={u.name} className="w-full h-full object-cover" />
+                  ) : (
+                    u.name[0]
+                  )}
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="text-[13px] font-semibold truncate">{u.name}</div>
