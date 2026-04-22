@@ -708,11 +708,12 @@ function UserDetailEditModal({
 
         <div className="overflow-auto py-4 space-y-5 flex-1">
           <Section title="조직 정보">
-            <Field label="HR번호"><input className="input" value={form.hrCode} onChange={(e) => set("hrCode", e.target.value)} placeholder="daiso_worker46" /></Field>
-            <Field label="소속"><input className="input" value={form.affiliation} onChange={(e) => set("affiliation", e.target.value)} placeholder="다이소" /></Field>
-            <Field label="사번"><input className="input" value={form.employeeNo} onChange={(e) => set("employeeNo", e.target.value)} placeholder="AD6156258" /></Field>
-            <Field label="근무지"><input className="input" value={form.workplace} onChange={(e) => set("workplace", e.target.value)} placeholder="본사" /></Field>
-            <Field label="부서"><input className="input" value={form.department} onChange={(e) => set("department", e.target.value)} placeholder="서비스지원" /></Field>
+            {/* 서버 zod(admin.ts updateUserSchema) 상한 500자와 맞춤 — UI 피드백 목적. */}
+            <Field label="HR번호"><input className="input" value={form.hrCode} onChange={(e) => set("hrCode", e.target.value)} placeholder="daiso_worker46" maxLength={500} /></Field>
+            <Field label="소속"><input className="input" value={form.affiliation} onChange={(e) => set("affiliation", e.target.value)} placeholder="다이소" maxLength={500} /></Field>
+            <Field label="사번"><input className="input" value={form.employeeNo} onChange={(e) => set("employeeNo", e.target.value)} placeholder="AD6156258" maxLength={500} /></Field>
+            <Field label="근무지"><input className="input" value={form.workplace} onChange={(e) => set("workplace", e.target.value)} placeholder="본사" maxLength={500} /></Field>
+            <Field label="부서"><input className="input" value={form.department} onChange={(e) => set("department", e.target.value)} placeholder="서비스지원" maxLength={500} /></Field>
             <Field label="팀">
               <select className="input" value={form.team} onChange={(e) => set("team", e.target.value)}>
                 <option value="">(없음)</option>
@@ -731,7 +732,7 @@ function UserDetailEditModal({
                 )}
               </select>
             </Field>
-            <Field label="직무"><input className="input" value={form.jobDuty} onChange={(e) => set("jobDuty", e.target.value)} placeholder="예: QA" /></Field>
+            <Field label="직무"><input className="input" value={form.jobDuty} onChange={(e) => set("jobDuty", e.target.value)} placeholder="예: QA" maxLength={500} /></Field>
           </Section>
 
           <Section title="고용 정보">
@@ -744,13 +745,13 @@ function UserDetailEditModal({
                 <option>인턴</option>
               </select>
             </Field>
-            <Field label="고용유형"><input className="input" value={form.employmentCategory} onChange={(e) => set("employmentCategory", e.target.value)} placeholder="유기계약" /></Field>
-            <Field label="계약형태"><input className="input" value={form.contractType} onChange={(e) => set("contractType", e.target.value)} placeholder="기간제" /></Field>
+            <Field label="고용유형"><input className="input" value={form.employmentCategory} onChange={(e) => set("employmentCategory", e.target.value)} placeholder="유기계약" maxLength={500} /></Field>
+            <Field label="계약형태"><input className="input" value={form.contractType} onChange={(e) => set("contractType", e.target.value)} placeholder="기간제" maxLength={500} /></Field>
             <Field label="입사일"><input type="date" className="input" value={form.hireDate} onChange={(e) => set("hireDate", e.target.value)} /></Field>
           </Section>
 
           <Section title="개인 정보">
-            <Field label="이름"><input className="input" value={form.name} onChange={(e) => set("name", e.target.value)} /></Field>
+            <Field label="이름"><input className="input" value={form.name} onChange={(e) => set("name", e.target.value)} maxLength={200} /></Field>
             <Field label="생년월일"><input type="date" className="input" value={form.birthDate} onChange={(e) => set("birthDate", e.target.value)} /></Field>
             <Field label="성별">
               <select className="input" value={form.gender} onChange={(e) => set("gender", e.target.value)}>
@@ -759,8 +760,8 @@ function UserDetailEditModal({
                 <option>여</option>
               </select>
             </Field>
-            <Field label="전화번호"><input className="input" value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="010-0000-0000" /></Field>
-            <Field label="장애유형"><input className="input" value={form.disabilityType} onChange={(e) => set("disabilityType", e.target.value)} placeholder="예: 청각장애" /></Field>
+            <Field label="전화번호"><input className="input" value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="010-0000-0000" maxLength={40} /></Field>
+            <Field label="장애유형"><input className="input" value={form.disabilityType} onChange={(e) => set("disabilityType", e.target.value)} placeholder="예: 청각장애" maxLength={500} /></Field>
             <Field label="장애정도">
               <select className="input" value={form.disabilityLevel} onChange={(e) => set("disabilityLevel", e.target.value)}>
                 <option value="">(없음)</option>
@@ -1317,7 +1318,8 @@ function InvitesTab({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="field-label">이름</label>
-              <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="홍길동" />
+              {/* admin.ts inviteSchema name z.string().min(1).max(200) 과 맞춤. */}
+              <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="홍길동" maxLength={200} />
             </div>
             <div>
               <label className="field-label">권한</label>
@@ -1330,7 +1332,7 @@ function InvitesTab({
           </div>
           <div>
             <label className="field-label">이메일 / 사내 ID <span className="text-ink-500 font-normal">(선택 · 고정)</span></label>
-            <input className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="name@company.com" />
+            <input className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="name@company.com" maxLength={200} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -1499,7 +1501,8 @@ function TeamsTab({ teams, reload }: { teams: Team[]; reload: () => void }) {
         <form onSubmit={add} className="space-y-3">
           <div>
             <label className="field-label">팀 이름</label>
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 개발, 디자인, 경영지원" />
+            {/* admin.ts capName 80자 상한과 맞춤. */}
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 개발, 디자인, 경영지원" maxLength={80} />
           </div>
           <button className="btn-primary btn-lg w-full">팀 생성</button>
         </form>
@@ -1577,7 +1580,8 @@ function PositionsTab({ positions, reload }: { positions: Position[]; reload: ()
         <form onSubmit={add} className="space-y-3">
           <div>
             <label className="field-label">직급명</label>
-            <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="예: 사원, 대리, 과장, 팀장, 이사" />
+            {/* admin.ts capName 80자 상한과 맞춤. */}
+            <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="예: 사원, 대리, 과장, 팀장, 이사" maxLength={80} />
           </div>
           <div>
             <label className="field-label">순서값 <span className="text-ink-500 font-normal">(작을수록 상위)</span></label>
