@@ -181,7 +181,9 @@ export default function ExpensePage() {
           <div className="flex gap-2 items-center flex-wrap">
             <MonthPicker value={month} onChange={setMonth} />
             {isReviewer && (
-              <select className="input" value={scope} onChange={(e) => setScope(e.target.value as any)}>
+              // w-auto: .input { width:100% } 기본값 때문에 flex-wrap 컨테이너 안에서
+              // select 가 100% 를 차지하며 홀로 줄을 먹어 MonthPicker/버튼이 세로로 쌓이던 문제.
+              <select className="input w-auto" value={scope} onChange={(e) => setScope(e.target.value as any)}>
                 <option value="mine">내 사용내역</option>
                 <option value="all">전체</option>
               </select>
