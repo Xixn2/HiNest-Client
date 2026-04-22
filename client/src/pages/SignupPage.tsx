@@ -53,6 +53,7 @@ export default function SignupPage() {
                 value={form.inviteKey}
                 onChange={(e) => setForm((f) => ({ ...f, inviteKey: e.target.value.trim() }))}
                 required
+                maxLength={100}
               />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -64,6 +65,7 @@ export default function SignupPage() {
                   value={form.name}
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                   required
+                  maxLength={200}
                 />
               </div>
               <div>
@@ -75,6 +77,7 @@ export default function SignupPage() {
                   value={form.email}
                   onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
                   required
+                  maxLength={200}
                 />
               </div>
             </div>
@@ -88,6 +91,8 @@ export default function SignupPage() {
                 onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
                 required
                 minLength={8}
+                maxLength={128}
+                autoComplete="new-password"
               />
             </div>
             {err && (

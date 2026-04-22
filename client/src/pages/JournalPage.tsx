@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, apiSWR } from "../api";
 import PageHeader from "../components/PageHeader";
 import DateTimePicker from "../components/DateTimePicker";
@@ -39,20 +39,26 @@ export default function JournalPage() {
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
 
-  async function load() {
-    const res = await api<{ journals: Journal[] }>("/api/journal");
-    setList(res.journals);
-    if (res.journals.length && !selected) setSelected(res.journals[0]);
-  }
+  // save/remove 후 setState 가 또 돌고, 이때 사용자가 이탈하면 언마운트된 컴포넌트에
+  // setState 가 박히며 경고+누수. apiSWR 의 stale→fresh 콜백도 가드 대상.
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
 
   // SWR — 탭 안에서 재진입 시 즉시 리스트 렌더.
   useEffect(() => {
     apiSWR<{ journals: Journal[] }>("/api/journal", {
       onCached: (d) => {
+        if (!aliveRef.current) return;
         setList(d.journals);
         if (d.journals.length && !selected) setSelected(d.journals[0]);
       },
       onFresh: (d) => {
+        if (!aliveRef.current) return;
         setList(d.journals);
         if (d.journals.length && !selected) setSelected(d.journals[0]);
       },
@@ -85,12 +91,14 @@ export default function JournalPage() {
           method: "PATCH",
           json: form,
         });
+        if (!aliveRef.current) return;
         // 낙관적 업데이트 — 전체 load() 대신 응답값으로 리스트 내 해당 항목만 교체.
         // 서버 왕복 한 번 아끼고 스크롤 위치·선택 상태 유지.
         setList((arr) => arr.map((j) => (j.id === res.journal.id ? res.journal : j)));
         setSelected(res.journal);
       } else {
         const res = await api<{ journal: Journal }>("/api/journal", { method: "POST", json: form });
+        if (!aliveRef.current) return;
         // 새 일지를 리스트 맨 앞에 넣음 — 서버도 createdAt desc 로 정렬하므로 동일 순서.
         setList((arr) => [res.journal, ...arr.filter((j) => j.id !== res.journal.id)]);
         setSelected(res.journal);
@@ -98,9 +106,10 @@ export default function JournalPage() {
       setMode("view");
       setForm({ date: today(), title: "", content: "" });
     } catch (e: any) {
+      if (!aliveRef.current) return;
       setErr(e?.message ?? "저장 실패");
     } finally {
-      setSaving(false);
+      if (aliveRef.current) setSaving(false);
     }
   }
 
@@ -109,14 +118,17 @@ export default function JournalPage() {
     setRemovingId(id);
     try {
       await api(`/api/journal/${id}`, { method: "DELETE" });
+      if (!aliveRef.current) return;
       setList((arr) => arr.filter((j) => j.id !== id));
       if (selected?.id === id) setSelected(null);
       setMode("view");
     } catch (e: any) {
       alertAsync({ title: "삭제 실패", description: e?.message ?? "삭제에 실패했어요" });
     } finally {
-      setRemovingId(null);
-      setConfirmRemoveId(null);
+      if (aliveRef.current) {
+        setRemovingId(null);
+        setConfirmRemoveId(null);
+      }
     }
   }
 
