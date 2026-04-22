@@ -2,24 +2,35 @@ import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { C, FONT, formatBytes } from "./theme";
 import type { Attachment, Message, Reaction } from "./types";
 
-/* ===== 꾹 누르기 감지 래퍼 (터치 + 마우스 + 우클릭) ===== */
+/* ===== 꾹 누르기 + 두번 탭 감지 래퍼 (터치 + 마우스 + 우클릭) =====
+ *
+ * onLongPress  — 420ms 누르고 있으면 발동 (메시지 리액션 메뉴)
+ * onDoubleTap  — 짧게 연속 두번 탭 (300ms 이내). 상대방 메시지에 빠른 따봉 리액션.
+ *   · 터치: tapEnd 시점의 시간 간격으로 판정 (모바일)
+ *   · 마우스: 브라우저 네이티브 dblclick 으로 판정 (텍스트 선택과 충돌 방지)
+ */
 export function LongPress({
   children,
   onLongPress,
+  onDoubleTap,
   delay = 420,
   style,
 }: {
   children: React.ReactNode;
   onLongPress: () => void;
+  onDoubleTap?: () => void;
   delay?: number;
   style?: React.CSSProperties;
 }) {
   const timerRef = useRef<number | null>(null);
   const firedRef = useRef(false);
   const startPosRef = useRef<{ x: number; y: number } | null>(null);
+  const movedRef = useRef(false);
+  const lastTapRef = useRef(0);
 
   const start = (x: number, y: number) => {
     firedRef.current = false;
+    movedRef.current = false;
     startPosRef.current = { x, y };
     timerRef.current = window.setTimeout(() => {
       firedRef.current = true;
@@ -35,7 +46,28 @@ export function LongPress({
   const moveCheck = (x: number, y: number) => {
     const s = startPosRef.current;
     if (!s) return;
-    if (Math.abs(x - s.x) > 8 || Math.abs(y - s.y) > 8) cancel();
+    if (Math.abs(x - s.x) > 8 || Math.abs(y - s.y) > 8) {
+      movedRef.current = true;
+      cancel();
+    }
+  };
+
+  // 터치 종료 시점에 "짧은 탭" 이면 더블탭 창(300ms) 안쪽인지 검사.
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    cancel();
+    if (!onDoubleTap) return;
+    // 롱프레스가 이미 발동했거나 드래그로 취소된 경우엔 탭이 아님
+    if (firedRef.current || movedRef.current) return;
+    const now = Date.now();
+    if (lastTapRef.current && now - lastTapRef.current < 300) {
+      // 두 번째 탭 — 따봉 토글
+      lastTapRef.current = 0;
+      firedRef.current = true; // 따라오는 click 을 onClickCapture 에서 차단
+      e.preventDefault();
+      onDoubleTap();
+    } else {
+      lastTapRef.current = now;
+    }
   };
 
   return (
@@ -48,7 +80,7 @@ export function LongPress({
         const t = e.touches[0];
         moveCheck(t.clientX, t.clientY);
       }}
-      onTouchEnd={cancel}
+      onTouchEnd={handleTouchEnd}
       onTouchCancel={cancel}
       onMouseDown={(e) => {
         if (e.button === 0) start(e.clientX, e.clientY);
@@ -56,6 +88,14 @@ export function LongPress({
       onMouseMove={(e) => moveCheck(e.clientX, e.clientY)}
       onMouseUp={cancel}
       onMouseLeave={cancel}
+      onDoubleClick={(e) => {
+        // 데스크톱 더블클릭 — 네이티브 dblclick 이 가장 믿을 만함
+        if (!onDoubleTap) return;
+        e.preventDefault();
+        e.stopPropagation();
+        firedRef.current = true;
+        onDoubleTap();
+      }}
       onContextMenu={(e) => {
         // 우클릭도 리액션 메뉴로
         e.preventDefault();
@@ -63,7 +103,7 @@ export function LongPress({
         firedRef.current = true;
         onLongPress();
       }}
-      // 롱프레스가 발동된 직후 따라오는 click 은 자식(이미지 뷰어 등)으로 내려가지 않게 차단
+      // 롱프레스/더블탭이 발동된 직후 따라오는 click 은 자식(이미지 뷰어 등)으로 내려가지 않게 차단
       onClickCapture={(e) => {
         if (firedRef.current) {
           e.preventDefault();
