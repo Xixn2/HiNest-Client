@@ -658,13 +658,17 @@ function QaRow({
               {item.createdBy && (
                 <span className="inline-flex items-center gap-1 truncate">
                   <span
-                    className="inline-flex items-center justify-center rounded-full text-white shrink-0"
+                    className="inline-flex items-center justify-center rounded-full text-white shrink-0 overflow-hidden"
                     style={{
-                      background: item.createdBy.avatarColor,
+                      background: item.createdBy.avatarUrl ? "transparent" : item.createdBy.avatarColor,
                       width: 12, height: 12, fontSize: 8,
                     }}
                   >
-                    {item.createdBy.name[0]}
+                    {item.createdBy.avatarUrl ? (
+                      <img src={item.createdBy.avatarUrl} alt={item.createdBy.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : (
+                      item.createdBy.name[0]
+                    )}
                   </span>
                   <span className="truncate">{item.createdBy.name}</span>
                 </span>
@@ -785,13 +789,17 @@ function QaRow({
         {item.assignee && (
           <span className="chip chip-gray flex items-center gap-1">
             <span
-              className="inline-flex items-center justify-center rounded-full text-white"
+              className="inline-flex items-center justify-center rounded-full text-white overflow-hidden"
               style={{
-                background: item.assignee.avatarColor,
+                background: item.assignee.avatarUrl ? "transparent" : item.assignee.avatarColor,
                 width: 14, height: 14, fontSize: 9,
               }}
             >
-              {item.assignee.name[0]}
+              {item.assignee.avatarUrl ? (
+                <img src={item.assignee.avatarUrl} alt={item.assignee.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                item.assignee.name[0]
+              )}
             </span>
             {item.assignee.name}
           </span>
@@ -1024,13 +1032,17 @@ function AssigneeSelect({
       {current ? (
         <>
           <span
-            className="inline-flex items-center justify-center rounded-full text-white shrink-0"
+            className="inline-flex items-center justify-center rounded-full text-white shrink-0 overflow-hidden"
             style={{
-              background: current.avatarColor,
+              background: current.avatarUrl ? "transparent" : current.avatarColor,
               width: 14, height: 14, fontSize: 9,
             }}
           >
-            {current.name[0]}
+            {current.avatarUrl ? (
+              <img src={current.avatarUrl} alt={current.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            ) : (
+              current.name[0]
+            )}
           </span>
           <span className="truncate">{current.name}</span>
         </>

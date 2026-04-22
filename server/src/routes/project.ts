@@ -370,7 +370,7 @@ router.get("/:id/qa", async (req, res) => {
   const users = userIds.length
     ? await prisma.user.findMany({
         where: { id: { in: userIds } },
-        select: { id: true, name: true, avatarColor: true },
+        select: { id: true, name: true, avatarColor: true, avatarUrl: true },
       })
     : [];
   const userMap = new Map(users.map((x) => [x.id, x]));

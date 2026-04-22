@@ -335,25 +335,37 @@ export default function ProjectCalendar({
       {/* 담당자 필터 — 전체 / 내 일정 / 멤버별 */}
       <div className="flex items-center gap-1.5 flex-wrap mb-3">
         <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>전체</FilterChip>
-        {user?.id && (
-          <FilterChip active={filter === "mine"} onClick={() => setFilter("mine")}>
-            <span
-              className="inline-block w-4 h-4 rounded-full text-white text-[9px] font-bold grid place-items-center mr-1 align-middle"
-              style={{ background: memberMap.get(user.id)?.avatarColor ?? "#64748B" }}
-            >
-              {(memberMap.get(user.id)?.name ?? user.name ?? "나")[0]}
-            </span>
-            내 일정
-          </FilterChip>
-        )}
+        {user?.id && (() => {
+          const me = memberMap.get(user.id);
+          const meUrl = me?.avatarUrl;
+          return (
+            <FilterChip active={filter === "mine"} onClick={() => setFilter("mine")}>
+              <span
+                className="inline-block w-4 h-4 rounded-full text-white text-[9px] font-bold grid place-items-center mr-1 align-middle overflow-hidden"
+                style={{ background: meUrl ? "transparent" : (me?.avatarColor ?? "#64748B") }}
+              >
+                {meUrl ? (
+                  <img src={meUrl} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  (me?.name ?? user.name ?? "나")[0]
+                )}
+              </span>
+              내 일정
+            </FilterChip>
+          );
+        })()}
         <span className="mx-1 h-4 w-px bg-slate-200" />
         {members.map((m) => (
           <FilterChip key={m.id} active={filter === m.id} onClick={() => setFilter(m.id)}>
             <span
-              className="inline-block w-4 h-4 rounded-full text-white text-[9px] font-bold grid place-items-center mr-1 align-middle"
-              style={{ background: m.avatarColor }}
+              className="inline-block w-4 h-4 rounded-full text-white text-[9px] font-bold grid place-items-center mr-1 align-middle overflow-hidden"
+              style={{ background: m.avatarUrl ? "transparent" : m.avatarColor }}
             >
-              {m.name[0]}
+              {m.avatarUrl ? (
+                <img src={m.avatarUrl} alt={m.name} className="w-full h-full object-cover" />
+              ) : (
+                m.name[0]
+              )}
             </span>
             {m.name}
           </FilterChip>
@@ -424,10 +436,14 @@ export default function ProjectCalendar({
                           className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border text-xs ${on ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 hover:bg-slate-50 text-slate-600"}`}
                         >
                           <span
-                            className="w-4 h-4 rounded-full grid place-items-center text-white text-[9px] font-bold"
-                            style={{ background: m.avatarColor }}
+                            className="w-4 h-4 rounded-full grid place-items-center text-white text-[9px] font-bold overflow-hidden"
+                            style={{ background: m.avatarUrl ? "transparent" : m.avatarColor }}
                           >
-                            {m.name[0]}
+                            {m.avatarUrl ? (
+                              <img src={m.avatarUrl} alt={m.name} className="w-full h-full object-cover" />
+                            ) : (
+                              m.name[0]
+                            )}
                           </span>
                           {m.name}
                         </button>
@@ -486,10 +502,14 @@ export default function ProjectCalendar({
                         className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-slate-100 text-xs"
                       >
                         <span
-                          className="w-4 h-4 rounded-full grid place-items-center text-white text-[9px] font-bold"
-                          style={{ background: m.avatarColor }}
+                          className="w-4 h-4 rounded-full grid place-items-center text-white text-[9px] font-bold overflow-hidden"
+                          style={{ background: m.avatarUrl ? "transparent" : m.avatarColor }}
                         >
-                          {m.name[0]}
+                          {m.avatarUrl ? (
+                            <img src={m.avatarUrl} alt={m.name} className="w-full h-full object-cover" />
+                          ) : (
+                            m.name[0]
+                          )}
                         </span>
                         {m.name}
                       </span>
@@ -607,9 +627,9 @@ function AssigneeStack({
         return (
           <span
             key={uid}
-            className="rounded-full grid place-items-center text-white font-bold border-2 border-white"
+            className="rounded-full grid place-items-center text-white font-bold border-2 border-white overflow-hidden"
             style={{
-              background: m.avatarColor,
+              background: m.avatarUrl ? "transparent" : m.avatarColor,
               width: size,
               height: size,
               fontSize: Math.max(8, Math.floor(size * 0.5)),
@@ -617,7 +637,11 @@ function AssigneeStack({
             }}
             title={m.name}
           >
-            {m.name[0]}
+            {m.avatarUrl ? (
+              <img src={m.avatarUrl} alt={m.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            ) : (
+              m.name[0]
+            )}
           </span>
         );
       })}
