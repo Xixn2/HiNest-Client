@@ -476,12 +476,14 @@ export default function ProjectQaList({
           gridTemplateColumns: "16px minmax(0, 2.2fr) 88px 1fr 150px 110px 56px",
         }}
       >
+        {/* chip 내부 padding(0 10px) 만큼 헤더 라벨을 안쪽으로 들여써서
+            라벨 텍스트와 chip 안 텍스트의 좌측 시작 위치를 맞춤. */}
         <span />
-        <span>제목</span>
-        <span>우선순위</span>
-        <span>화면 · 플랫폼</span>
-        <span>담당자</span>
-        <span>상태</span>
+        <span className="pl-1">제목</span>
+        <span className="pl-2.5">우선순위</span>
+        <span className="pl-2.5">화면 · 플랫폼</span>
+        <span className="pl-2.5">담당자</span>
+        <span className="pl-2.5">상태</span>
         <span />
       </div>
 
