@@ -28,7 +28,7 @@ type Doc = {
   scopeUserIds?: string | null;
   createdAt: string;
   updatedAt: string;
-  author: { name: string; avatarColor: string };
+  author: { name: string; avatarColor: string; avatarUrl?: string | null };
   folder?: { name: string } | null;
 };
 
@@ -45,7 +45,7 @@ const SCOPE_LABEL: Record<DocScope, string> = {
   PRIVATE: "개인",
   CUSTOM: "사용자지정",
 };
-type DirUser = { id: string; name: string; team?: string | null; avatarColor?: string };
+type DirUser = { id: string; name: string; team?: string | null; avatarColor?: string; avatarUrl?: string | null };
 type ProjectChip = { id: string; name: string; color: string };
 
 type Props = {
@@ -758,7 +758,13 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
                   </td>
                   <td>
                     <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded grid place-items-center text-white text-[10px] font-bold" style={{ background: d.author.avatarColor }}>{d.author.name[0]}</div>
+                      <div className="w-6 h-6 rounded grid place-items-center text-white text-[10px] font-bold overflow-hidden" style={{ background: d.author.avatarUrl ? "transparent" : d.author.avatarColor }}>
+                        {d.author.avatarUrl ? (
+                          <img src={d.author.avatarUrl} alt={d.author.name} className="w-full h-full object-cover" />
+                        ) : (
+                          d.author.name[0]
+                        )}
+                      </div>
                       <div className="text-[12px]">{d.author.name}</div>
                     </div>
                   </td>
@@ -862,7 +868,13 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
                                   : [...p.scopeUserIds, u.id],
                               }))}
                             />
-                            <div className="w-6 h-6 rounded grid place-items-center text-white text-[10px] font-bold" style={{ background: u.avatarColor ?? "#6B7280" }}>{u.name[0]}</div>
+                            <div className="w-6 h-6 rounded grid place-items-center text-white text-[10px] font-bold overflow-hidden" style={{ background: u.avatarUrl ? "transparent" : (u.avatarColor ?? "#6B7280") }}>
+                              {u.avatarUrl ? (
+                                <img src={u.avatarUrl} alt={u.name} className="w-full h-full object-cover" />
+                              ) : (
+                                u.name[0]
+                              )}
+                            </div>
                             <div className="text-[12px] flex-1">{u.name}{u.team ? <span className="text-ink-400 ml-1">· {u.team}</span> : null}</div>
                           </label>
                         );
@@ -988,7 +1000,13 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
                                   : [...p.scopeUserIds, u.id],
                               }))}
                             />
-                            <div className="w-6 h-6 rounded grid place-items-center text-white text-[10px] font-bold" style={{ background: u.avatarColor ?? "#6B7280" }}>{u.name[0]}</div>
+                            <div className="w-6 h-6 rounded grid place-items-center text-white text-[10px] font-bold overflow-hidden" style={{ background: u.avatarUrl ? "transparent" : (u.avatarColor ?? "#6B7280") }}>
+                              {u.avatarUrl ? (
+                                <img src={u.avatarUrl} alt={u.name} className="w-full h-full object-cover" />
+                              ) : (
+                                u.name[0]
+                              )}
+                            </div>
                             <div className="text-[12px] flex-1">{u.name}{u.team ? <span className="text-ink-400 ml-1">· {u.team}</span> : null}</div>
                           </label>
                         );

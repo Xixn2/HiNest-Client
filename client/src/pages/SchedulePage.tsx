@@ -608,7 +608,7 @@ type EventForm = {
   color: string;
 };
 
-type DirUser = { id: string; name: string; email: string; team?: string | null; avatarColor?: string; position?: string | null };
+type DirUser = { id: string; name: string; email: string; team?: string | null; avatarColor?: string; avatarUrl?: string | null; position?: string | null };
 
 function EventModal({
   onClose,
@@ -843,10 +843,14 @@ function EventModal({
                           className="inline-flex items-center gap-1.5 pl-1 pr-1 py-0.5 rounded-full bg-brand-50 border border-brand-200 text-brand-700"
                         >
                           <span
-                            className="w-5 h-5 rounded-full grid place-items-center text-white text-[10px] font-bold"
-                            style={{ background: u.avatarColor ?? "#3B5CF0" }}
+                            className="w-5 h-5 rounded-full grid place-items-center text-white text-[10px] font-bold overflow-hidden"
+                            style={{ background: u.avatarUrl ? "transparent" : (u.avatarColor ?? "#3B5CF0") }}
                           >
-                            {u.name[0]}
+                            {u.avatarUrl ? (
+                              <img src={u.avatarUrl} alt={u.name} className="w-full h-full object-cover" />
+                            ) : (
+                              u.name[0]
+                            )}
                           </span>
                           <span className="text-[12px] font-bold">{u.name}</span>
                           <button
@@ -896,10 +900,14 @@ function EventModal({
                             )}
                           </span>
                           <div
-                            className="w-7 h-7 rounded-full grid place-items-center text-white text-[11px] font-bold flex-shrink-0"
-                            style={{ background: u.avatarColor ?? "#3B5CF0" }}
+                            className="w-7 h-7 rounded-full grid place-items-center text-white text-[11px] font-bold flex-shrink-0 overflow-hidden"
+                            style={{ background: u.avatarUrl ? "transparent" : (u.avatarColor ?? "#3B5CF0") }}
                           >
-                            {u.name[0]}
+                            {u.avatarUrl ? (
+                              <img src={u.avatarUrl} alt={u.name} className="w-full h-full object-cover" />
+                            ) : (
+                              u.name[0]
+                            )}
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="text-[13px] font-bold text-ink-900 truncate">{u.name}</div>
