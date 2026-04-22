@@ -122,14 +122,17 @@ function humanSize(bytes: number) {
  */
 export default function ProjectQaList({
   projectId,
+  currentUserId,
   members,
 }: {
   projectId: string;
+  currentUserId?: string | null;
   members: Member[];
 }) {
   const [items, setItems] = useState<QaItem[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [filter, setFilter] = useState<Filter>("ALL");
+  const [mineOnly, setMineOnly] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [quickTitle, setQuickTitle] = useState("");
   const [creating, setCreating] = useState(false);
@@ -336,8 +339,42 @@ export default function ProjectQaList({
     }
   }
 
+  // ESC — 펼쳐진 상세 패널 닫기 단축키.
+  useEffect(() => {
+    if (!expandedId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      // 입력 포커스 중 ESC 는 input 자체의 blur/cancel 동작을 우선.
+      const t = e.target as HTMLElement | null;
+      if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+      setExpandedId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [expandedId]);
+
   // ---------- 뷰 ----------
-  const visible = filter === "ALL" ? items : items.filter((i) => i.status === filter);
+  // 상태 필터 + "내 담당" 토글을 조합.
+  // 정렬: ALL 뷰에서는 해결되지 않은(= BUG/IN_PROGRESS) 항목을 위로 띄워서
+  //       작업 중인 것에 시선이 먼저 가도록. 같은 그룹 안에서는 서버가 준 순서 유지.
+  const filtered = items.filter((i) => {
+    if (filter !== "ALL" && i.status !== filter) return false;
+    if (mineOnly && currentUserId && i.assigneeId !== currentUserId) return false;
+    return true;
+  });
+  const openWeight: Record<Status, number> = {
+    BUG: 0,
+    IN_PROGRESS: 1,
+    ON_HOLD: 2,
+    DONE: 3,
+  };
+  const visible =
+    filter === "ALL"
+      ? [...filtered].sort((a, b) => openWeight[a.status] - openWeight[b.status])
+      : filtered;
+  const mineCount = currentUserId
+    ? items.filter((i) => i.assigneeId === currentUserId).length
+    : 0;
   const counts = {
     ALL: items.length,
     BUG: items.filter((i) => i.status === "BUG").length,
@@ -361,7 +398,7 @@ export default function ProjectQaList({
         </div>
 
         {/* 필터 탭 — Notion "그룹 보기" 느낌의 탭 스타일 */}
-        <div className="flex flex-wrap items-center gap-x-1 gap-y-1 mt-1 border-b border-ink-100">
+        <div className="flex flex-wrap items-center gap-x-1 gap-y-1 mt-1 border-b border-ink-100 relative">
           {(["ALL", ...STATUS_ORDER] as const).map((k) => {
             const active = filter === k;
             return (
@@ -391,6 +428,27 @@ export default function ProjectQaList({
               </button>
             );
           })}
+          {/* "내 담당" 토글 — 현재 로그인 사용자가 assignee 로 지정된 항목만.
+              로그인 정보가 없거나 멤버 수 0 이면 의미 없음 → 숨김. */}
+          {currentUserId && (
+            <button
+              type="button"
+              onClick={() => setMineOnly((v) => !v)}
+              className={[
+                "ml-auto mb-[-1px] px-2.5 py-1.5 text-[12.5px] font-medium rounded-md transition-colors",
+                mineOnly
+                  ? "bg-brand-50 text-brand-700"
+                  : "text-ink-500 hover:text-ink-700 hover:bg-ink-50",
+              ].join(" ")}
+              title="내가 담당자로 지정된 항목만 보기"
+              aria-pressed={mineOnly}
+            >
+              👤 내 담당
+              <span className="ml-1 text-ink-400" style={{ fontSize: 11 }}>
+                {mineCount}
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -508,8 +566,11 @@ function QaRow({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 해결된 항목(완료/보류) 은 전체 행을 시각적으로 희미하게 처리해 현재 작업중인 것과 구분.
+  const resolved = item.status === "DONE" || item.status === "ON_HOLD";
+
   return (
-    <div className="group border-t border-ink-100">
+    <div className={["group border-t border-ink-100", resolved ? "opacity-70" : ""].join(" ")}>
       {/* ---------- 접힌 행 ---------- */}
       {/* 모바일: 제목줄만 grid 3칼럼 (dot | 제목 | 삭제), 속성은 아래에 flex-wrap */}
       {/* 데스크톱: 풀 Notion 테이블 레이아웃 */}
@@ -537,7 +598,10 @@ function QaRow({
         {/* 제목 — 인라인 편집 */}
         <div className="min-w-0 flex items-center gap-2">
           <input
-            className="flex-1 min-w-0 bg-transparent outline-none text-[13.5px] font-medium text-ink-900 truncate hover:bg-ink-25 rounded px-1 py-0.5 focus:bg-ink-25"
+            className={[
+              "flex-1 min-w-0 bg-transparent outline-none text-[13.5px] font-medium text-ink-900 truncate hover:bg-ink-25 rounded px-1 py-0.5 focus:bg-ink-25",
+              item.status === "DONE" ? "line-through decoration-ink-400" : "",
+            ].join(" ")}
             value={titleDraft}
             onChange={(e) => setTitleDraft(e.target.value)}
             onBlur={() => {
