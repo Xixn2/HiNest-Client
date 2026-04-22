@@ -143,9 +143,10 @@ export default function AttendancePage() {
         title="근태 · 월차"
         description="월별 출퇴근 기록과 휴가 신청을 관리합니다."
         right={
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center">
             <MonthPicker value={month} onChange={setMonth} />
-            <button className="btn-primary" onClick={() => setOpen(true)}>
+            {/* MonthPicker(=.input, h=44px, radius=10px) 와 높이/둥글기 맞추려면 btn-lg 필요 */}
+            <button className="btn-primary btn-lg" onClick={() => setOpen(true)}>
               + 휴가 신청
             </button>
           </div>
