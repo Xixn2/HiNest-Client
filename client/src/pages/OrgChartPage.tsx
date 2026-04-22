@@ -543,7 +543,7 @@ function TreeStyles() {
         display: flex;
         justify-content: center;
         gap: 16px;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         position: relative;
         padding-top: 18px;
         margin-top: 2px;
