@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, apiSWR } from "../api";
 import { confirmAsync, alertAsync, promptAsync } from "./ConfirmHost";
 
@@ -61,12 +61,23 @@ export default function ProjectWebhooks({ projectId }: { projectId: string }) {
     // eslint-disable-next-line
   }, [projectId]);
 
+  // 채널을 빠르게 전환하거나 30초 주기 fetch 가 느린 네트워크에서 늦게 도착할 때,
+  // 이전 요청 응답이 새 선택의 이벤트를 덮어쓰는 걸 막기 위한 토큰.
+  const eventsTokenRef = useRef(0);
   async function loadEvents(ch: Channel) {
-    const r = await api<{ events: WebhookEvent[] }>(`/api/project/${projectId}/webhook/${ch.id}/events`);
-    setEvents(r.events);
+    const my = ++eventsTokenRef.current;
+    try {
+      const r = await api<{ events: WebhookEvent[] }>(`/api/project/${projectId}/webhook/${ch.id}/events`);
+      if (my !== eventsTokenRef.current) return;
+      setEvents(r.events);
+    } catch {
+      /* 30초마다 재시도되므로 일시적 오류는 조용히 넘어감 */
+    }
   }
   useEffect(() => {
     if (!selected) return;
+    // 채널이 바뀌면 이전 이벤트 리스트를 즉시 비워 잠깐이라도 오인 표시되지 않게.
+    setEvents([]);
     loadEvents(selected);
     // 30초마다 새 이벤트 자동 조회
     const t = setInterval(() => loadEvents(selected), 30_000);
