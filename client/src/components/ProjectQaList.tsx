@@ -101,6 +101,23 @@ const PLATFORM_ICON: Record<Platform, string> = {
 
 type Filter = "ALL" | Status;
 
+/** "방금 전 / N분 전 / N시간 전 / N일 전 / YYYY-MM-DD" — 행 좁은 공간용 */
+function formatRelative(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (!then) return "";
+  const diff = Date.now() - then;
+  if (diff < 0) return "방금";
+  const m = Math.floor(diff / 60_000);
+  if (m < 1) return "방금";
+  if (m < 60) return `${m}분 전`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}시간 전`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}일 전`;
+  const dt = new Date(then);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}
+
 function humanSize(bytes: number) {
   if (!bytes) return "0 B";
   if (bytes < 1024) return `${bytes} B`;
@@ -595,40 +612,68 @@ function QaRow({
           }}
         />
 
-        {/* 제목 — 인라인 편집 */}
-        <div className="min-w-0 flex items-center gap-2">
-          <input
-            className={[
-              "flex-1 min-w-0 bg-transparent outline-none text-[13.5px] font-medium text-ink-900 truncate hover:bg-ink-25 rounded px-1 py-0.5 focus:bg-ink-25",
-              item.status === "DONE" ? "line-through decoration-ink-400" : "",
-            ].join(" ")}
-            value={titleDraft}
-            onChange={(e) => setTitleDraft(e.target.value)}
-            onBlur={() => {
-              const v = titleDraft.trim();
-              if (v && v !== item.title) onPatch({ title: v });
-              else if (!v) setTitleDraft(item.title);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-              else if (e.key === "Escape") {
-                setTitleDraft(item.title);
-                (e.target as HTMLInputElement).blur();
-              }
-            }}
-            maxLength={200}
-            onClick={(e) => e.stopPropagation()}
-          />
-          {/* 메모/첨부 개수 뱃지 — 있으면 행에서 바로 보이게 */}
-          {(item.note || item.attachments.length > 0) && (
-            <span className="shrink-0 flex items-center gap-1 text-[11px] text-ink-400">
-              {item.note && <span title="메모 있음">📝</span>}
-              {item.attachments.length > 0 && (
-                <span title={`첨부 ${item.attachments.length}개`}>
-                  📎 {item.attachments.length}
+        {/* 제목 — 인라인 편집 + 작성자·작성시간 메타 */}
+        <div className="min-w-0 flex flex-col">
+          <div className="flex items-center gap-2">
+            <input
+              className={[
+                "flex-1 min-w-0 bg-transparent outline-none text-[13.5px] font-medium text-ink-900 truncate hover:bg-ink-25 rounded px-1 py-0.5 focus:bg-ink-25",
+                item.status === "DONE" ? "line-through decoration-ink-400" : "",
+              ].join(" ")}
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={() => {
+                const v = titleDraft.trim();
+                if (v && v !== item.title) onPatch({ title: v });
+                else if (!v) setTitleDraft(item.title);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                else if (e.key === "Escape") {
+                  setTitleDraft(item.title);
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+              maxLength={200}
+              onClick={(e) => e.stopPropagation()}
+            />
+            {/* 메모/첨부 개수 뱃지 — 있으면 행에서 바로 보이게 */}
+            {(item.note || item.attachments.length > 0) && (
+              <span className="shrink-0 flex items-center gap-1 text-[11px] text-ink-400">
+                {item.note && <span title="메모 있음">📝</span>}
+                {item.attachments.length > 0 && (
+                  <span title={`첨부 ${item.attachments.length}개`}>
+                    📎 {item.attachments.length}
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
+          {/* 작성자 · 작성 시간 — 본문 한 줄 아래에 작게 보조 정보로 노출.
+              접힌 행에서도 작성 맥락이 바로 보이도록 (펼친 상세 패널에도 동일 정보 있음). */}
+          {(item.createdBy || item.createdAt) && (
+            <div className="px-1 mt-0.5 flex items-center gap-1.5 text-[11px] text-ink-400 truncate">
+              {item.createdBy && (
+                <span className="inline-flex items-center gap-1 truncate">
+                  <span
+                    className="inline-flex items-center justify-center rounded-full text-white shrink-0"
+                    style={{
+                      background: item.createdBy.avatarColor,
+                      width: 12, height: 12, fontSize: 8,
+                    }}
+                  >
+                    {item.createdBy.name[0]}
+                  </span>
+                  <span className="truncate">{item.createdBy.name}</span>
                 </span>
               )}
-            </span>
+              {item.createdBy && item.createdAt && <span>·</span>}
+              {item.createdAt && (
+                <span className="shrink-0" title={new Date(item.createdAt).toLocaleString("ko-KR")}>
+                  {formatRelative(item.createdAt)}
+                </span>
+              )}
+            </div>
           )}
         </div>
 
