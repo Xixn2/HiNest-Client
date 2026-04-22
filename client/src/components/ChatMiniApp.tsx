@@ -1810,6 +1810,30 @@ function RoomView({
                     onSend();
                   }
                 }}
+                onPaste={(e) => {
+                  // 클립보드에서 이미지/영상 붙여넣기 지원 (macOS/Windows 브라우저, 모바일 공통).
+                  // 텍스트가 같이 있으면 텍스트는 기본 동작에 맡기고 파일만 낚아챔.
+                  const items = e.clipboardData?.items;
+                  if (!items || items.length === 0) return;
+                  const files: File[] = [];
+                  for (const it of Array.from(items)) {
+                    if (it.kind !== "file") continue;
+                    const f = it.getAsFile();
+                    if (!f) continue;
+                    // 스크린샷 등 일부 브라우저는 name 이 비어있음 → MIME 로 확장자 추정해 채워넣음.
+                    let file = f;
+                    if (!file.name || file.name === "image.png") {
+                      const ext = (file.type.split("/")[1] || "bin").split(";")[0];
+                      const ts = new Date().toISOString().replace(/[:.]/g, "-");
+                      file = new File([f], `pasted-${ts}.${ext}`, { type: f.type });
+                    }
+                    files.push(file);
+                  }
+                  if (files.length === 0) return;
+                  // 파일이 붙어있으면 기본 paste(텍스트 삽입) 를 막고 업로드로 라우팅.
+                  e.preventDefault();
+                  for (const f of files) onPickFile(f);
+                }}
                 placeholder="메시지를 입력하세요"
                 name="chat-message"
                 autoComplete="off"
