@@ -272,6 +272,7 @@ export default function ChatMiniApp({
         | { kind: "edit" | "pin"; message: Message }
         | { kind: "delete"; messageId: string }
         | { kind: "reactions"; messageId: string; reactions: Message["reactions"] }
+        | { kind: "read"; roomId: string; userId: string; lastReadAt: string }
         | undefined;
       if (!detail) return;
       if (detail.kind === "edit" || detail.kind === "pin") {
@@ -282,6 +283,16 @@ export default function ChatMiniApp({
         setMessages((prev) => prev.map((m) => (m.id === detail.messageId ? { ...m, deletedAt: new Date().toISOString() } : m)));
       } else if (detail.kind === "reactions") {
         setMessages((prev) => prev.map((m) => (m.id === detail.messageId ? { ...m, reactions: detail.reactions ?? [] } : m)));
+      } else if (detail.kind === "read") {
+        // 상대방이 읽음 처리 → 열려있는 방의 readStates 를 즉시 갱신해 파란 "1" 뱃지 제거.
+        if (detail.roomId !== activeId) return;
+        setReadStates((prev) => {
+          const idx = prev.findIndex((r) => r.userId === detail.userId);
+          if (idx < 0) return [...prev, { userId: detail.userId, lastReadAt: detail.lastReadAt }];
+          const next = prev.slice();
+          next[idx] = { userId: detail.userId, lastReadAt: detail.lastReadAt };
+          return next;
+        });
       }
     };
     const onRoom = () => { loadRooms(); };

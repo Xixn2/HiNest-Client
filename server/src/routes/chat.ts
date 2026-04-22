@@ -341,9 +341,18 @@ router.post("/rooms/:id/read", async (req, res) => {
     where: { roomId: req.params.id, userId: u.id },
   });
   if (!member) return res.json({ ok: true });
+  const now = new Date();
   await prisma.roomMember.update({
     where: { id: member.id },
-    data: { lastReadAt: new Date() },
+    data: { lastReadAt: now },
+  });
+  // 상대방(다른 멤버)들에게 "내가 읽었음" 을 즉시 브로드캐스트.
+  // 이게 없으면 상대 클라는 30s 폴링 주기가 돌아올 때까지 파란 "1" 뱃지가 남아있음.
+  broadcastToRoom(req.params.id, "chat:update", {
+    kind: "read",
+    roomId: req.params.id,
+    userId: u.id,
+    lastReadAt: now.toISOString(),
   });
   res.json({ ok: true });
 });
