@@ -32,7 +32,7 @@ export default function OrgChartPage() {
       const v = localStorage.getItem(VIEW_LS_KEY);
       if (v === "tree" || v === "rank" || v === "list") return v;
     } catch {}
-    return "tree";
+    return "rank";
   });
 
   useEffect(() => {
@@ -81,11 +81,16 @@ export default function OrgChartPage() {
     };
   }, [positions]);
 
+  // 조직도는 "팀에 소속된" 사람만 대상으로 함. 팀이 없는 계정(임시/미배치)은
+  // 조직도 계층에 넣으면 '소속 없음' 같은 가짜 팀이 트리에 박혀서 구조가 흐트러짐.
+  // 이런 계정들은 팀원 페이지(Directory) 에서만 보이게 두고 조직도에서는 감춤.
+  const orgUsers = useMemo(() => users.filter((u) => !!u.team && u.team.trim() !== ""), [users]);
+
   // 팀별 그룹 + 직급순 정렬
   const grouped = useMemo(() => {
     const map = new Map<string, DirUser[]>();
-    for (const u of users) {
-      const t = u.team ?? "소속 없음";
+    for (const u of orgUsers) {
+      const t = u.team!;
       if (!map.has(t)) map.set(t, []);
       map.get(t)!.push(u);
     }
@@ -93,13 +98,13 @@ export default function OrgChartPage() {
       arr.sort((a, b) => rank(a.position) - rank(b.position) || a.name.localeCompare(b.name, "ko"));
     }
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b, "ko"));
-  }, [users, rank]);
+  }, [orgUsers, rank]);
 
   // 직급 기준 그룹 — 전사 전체를 직급 레벨별로 묶음.
   // 라벨은 "직급명" 이 같은 사람끼리 한 노드로 — 직급명이 없는 사람은 "직급 미지정" 으로.
   const byRank = useMemo(() => {
     const map = new Map<string, DirUser[]>();
-    for (const u of users) {
+    for (const u of orgUsers) {
       const key = u.position ?? "직급 미지정";
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(u);
@@ -108,12 +113,12 @@ export default function OrgChartPage() {
       arr.sort((a, b) => a.name.localeCompare(b.name, "ko"));
     }
     return Array.from(map.entries()).sort(([a, aArr], [b, bArr]) => {
-      // 등록된 직급 rank 우선, 같은 rank 면 이름순
+      // 등록된 직급 rank 우선 (낮을수록 상위) — 대표/이사 같은 최상위가 제일 위로.
       const ra = rank(aArr[0]?.position);
       const rb = rank(bArr[0]?.position);
       return ra - rb || a.localeCompare(b, "ko");
     });
-  }, [users, rank]);
+  }, [orgUsers, rank]);
 
   async function startDM(target: DirUser) {
     if (target.id === user?.id) return;
@@ -135,10 +140,10 @@ export default function OrgChartPage() {
 
   const totalDesc =
     view === "list"
-      ? `총 ${users.length}명 · ${grouped.length}개 팀 · 직급순 배열`
+      ? `총 ${orgUsers.length}명 · ${grouped.length}개 팀 · 직급순 배열`
       : view === "tree"
-      ? `총 ${users.length}명 · ${grouped.length}개 팀 트리 (팀 → 직급 → 인원)`
-      : `총 ${users.length}명 · ${byRank.length}개 직급 계층 (팀 무관)`;
+      ? `총 ${orgUsers.length}명 · ${grouped.length}개 팀 트리 (팀 → 직급 → 인원)`
+      : `총 ${orgUsers.length}명 · ${byRank.length}개 직급 계층 (팀 무관)`;
 
   return (
     <div>
@@ -150,8 +155,8 @@ export default function OrgChartPage() {
 
       {/* 뷰 전환 탭 */}
       <div className="flex items-center gap-1 p-1 bg-ink-100 dark:bg-ink-50 rounded-lg mb-4 w-fit">
-        <ViewTab active={view === "tree"} onClick={() => setView("tree")} label="팀 트리" hint="팀 단위 계층도" />
         <ViewTab active={view === "rank"} onClick={() => setView("rank")} label="직급 트리" hint="직급 기준(팀 무관)" />
+        <ViewTab active={view === "tree"} onClick={() => setView("tree")} label="팀 트리" hint="팀 단위 계층도" />
         <ViewTab active={view === "list"} onClick={() => setView("list")} label="팀 카드" hint="팀별 카드 리스트" />
       </div>
 
@@ -159,7 +164,7 @@ export default function OrgChartPage() {
         <ListView grouped={grouped} meId={user?.id ?? null} dmBusyId={dmBusyId} onDM={startDM} />
       )}
       {view === "tree" && (
-        <TeamTreeView grouped={grouped} rank={rank} meId={user?.id ?? null} dmBusyId={dmBusyId} onDM={startDM} />
+        <TeamTreeView grouped={grouped} rank={rank} meId={user?.id ?? null} dmBusyId={dmBusyId} onDM={startDM} totalCount={orgUsers.length} />
       )}
       {view === "rank" && (
         <RankTreeView byRank={byRank} meId={user?.id ?? null} dmBusyId={dmBusyId} onDM={startDM} />
@@ -260,15 +265,10 @@ function MemberRow({
   );
 }
 
-/* ===================== Team Tree View ===================== */
-/**
- * 팀 단위 계층 트리 — 각 팀을 독립적인 mini tree 로 렌더.
- *  - 루트: 팀
- *  - 2단계: 직급 레벨 그룹 (한 직급에 여러 명이면 해당 그룹의 가로 묶음)
- *  - 3단계: 개별 멤버 카드
- *
- * SVG 로 연결선을 그리지 않고 순수 CSS `border` 로 그리기 —
- * DOM 만으로 조직도를 렌더하면 반응형/스크롤/검색 모두 자연스럽게 동작.
+/* ===================== Team Tree View =====================
+ * 한 패널 안에 "전사" 를 루트로 두고, 그 아래로 각 팀을 세로 체인으로 배치.
+ * 각 팀 섹션 내부는 직급 순 세로 체인 (위 → 아래) 으로 직급이 뻗어 내려감.
+ * 같은 직급 내 여러 명은 해당 직급 밑에 가로로 펼쳐짐.
  */
 function TeamTreeView({
   grouped,
@@ -276,54 +276,61 @@ function TeamTreeView({
   meId,
   dmBusyId,
   onDM,
+  totalCount,
 }: {
   grouped: [string, DirUser[]][];
   rank: (name?: string | null) => number;
   meId: string | null;
   dmBusyId: string | null;
   onDM: (u: DirUser) => void;
+  totalCount: number;
 }) {
   return (
-    <div className="space-y-6">
-      {grouped.map(([team, members]) => {
-        // 팀 내부를 직급 레벨별로 묶기
-        const byLevel = new Map<string, DirUser[]>();
-        for (const m of members) {
-          const key = m.position ?? "직급 미지정";
-          if (!byLevel.has(key)) byLevel.set(key, []);
-          byLevel.get(key)!.push(m);
-        }
-        const levels = Array.from(byLevel.entries()).sort(
-          ([a, aArr], [b, bArr]) => rank(aArr[0]?.position) - rank(bArr[0]?.position) || a.localeCompare(b, "ko"),
-        );
-        return (
-          <div key={team} className="panel p-5 overflow-x-auto">
-            <div className="org-tree-scroll min-w-fit">
-              <TeamNode team={team} count={members.length} />
-              <div className="org-tree-children">
-                {levels.map(([level, ms]) => (
-                  <div key={level} className="org-tree-branch">
-                    <LevelNode level={level} count={ms.length} />
-                    <div className="org-tree-children">
-                      {ms.map((u) => (
-                        <div key={u.id} className="org-tree-branch">
-                          <PersonNode u={u} meId={meId} dmBusyId={dmBusyId} onDM={onDM} />
-                        </div>
-                      ))}
+    <div className="panel p-5 overflow-x-auto">
+      <div className="org-vtree">
+        <RootNode label="전사" count={totalCount} />
+        <div className="org-vtree-spine">
+          {grouped.map(([team, members]) => {
+            const byLevel = new Map<string, DirUser[]>();
+            for (const m of members) {
+              const key = m.position ?? "직급 미지정";
+              if (!byLevel.has(key)) byLevel.set(key, []);
+              byLevel.get(key)!.push(m);
+            }
+            const levels = Array.from(byLevel.entries()).sort(
+              ([a, aArr], [b, bArr]) => rank(aArr[0]?.position) - rank(bArr[0]?.position) || a.localeCompare(b, "ko"),
+            );
+            return (
+              <div key={team} className="org-vtree-section">
+                <div className="org-vtree-node"><TeamNode team={team} count={members.length} /></div>
+                <div className="org-vtree-spine org-vtree-spine-inner">
+                  {levels.map(([level, ms]) => (
+                    <div key={level} className="org-vtree-row">
+                      <div className="org-vtree-node"><LevelNode level={level} count={ms.length} /></div>
+                      <div className="org-vtree-members">
+                        {ms.map((u) => (
+                          <div key={u.id} className="org-vtree-member">
+                            <PersonNode u={u} meId={meId} dmBusyId={dmBusyId} onDM={onDM} />
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          </div>
-        );
-      })}
+            );
+          })}
+        </div>
+      </div>
       <TreeStyles />
     </div>
   );
 }
 
-/* ===================== Rank Tree View ===================== */
+/* ===================== Rank Tree View =====================
+ * 세로 체인으로 직급이 위→아래로 뻗어나감.
+ * 같은 직급 내 여러 명은 해당 직급 밑에 가로로 펼쳐짐.
+ */
 function RankTreeView({
   byRank,
   meId,
@@ -335,17 +342,18 @@ function RankTreeView({
   dmBusyId: string | null;
   onDM: (u: DirUser) => void;
 }) {
+  const total = byRank.reduce((a, [, arr]) => a + arr.length, 0);
   return (
     <div className="panel p-5 overflow-x-auto">
-      <div className="org-tree-scroll min-w-fit">
-        <RootNode label="전사 직급 계층" count={byRank.reduce((a, [, arr]) => a + arr.length, 0)} />
-        <div className="org-tree-children">
+      <div className="org-vtree">
+        <RootNode label="전사 직급 계층" count={total} />
+        <div className="org-vtree-spine">
           {byRank.map(([level, members]) => (
-            <div key={level} className="org-tree-branch">
-              <LevelNode level={level} count={members.length} />
-              <div className="org-tree-children">
+            <div key={level} className="org-vtree-row">
+              <div className="org-vtree-node"><LevelNode level={level} count={members.length} /></div>
+              <div className="org-vtree-members">
                 {members.map((u) => (
-                  <div key={u.id} className="org-tree-branch">
+                  <div key={u.id} className="org-vtree-member">
                     <PersonNode u={u} meId={meId} dmBusyId={dmBusyId} onDM={onDM} showTeam />
                   </div>
                 ))}
@@ -362,7 +370,7 @@ function RankTreeView({
 /* ===================== Nodes ===================== */
 function RootNode({ label, count }: { label: string; count: number }) {
   return (
-    <div className="org-tree-root-wrap">
+    <div className="org-vtree-root">
       <div className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 text-white shadow-pop">
         <div className="w-8 h-8 rounded-lg bg-white/20 grid place-items-center">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -380,15 +388,13 @@ function RootNode({ label, count }: { label: string; count: number }) {
 
 function TeamNode({ team, count }: { team: string; count: number }) {
   return (
-    <div className="org-tree-root-wrap">
-      <div className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-brand-500 text-white shadow-pop">
-        <div className="w-8 h-8 rounded-lg bg-white/20 grid place-items-center text-[13px] font-extrabold">
-          {team[0]}
-        </div>
-        <div>
-          <div className="text-[13px] font-extrabold tracking-tight">{team}</div>
-          <div className="text-[10px] opacity-80 tabular">{count}명</div>
-        </div>
+    <div className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-brand-500 text-white shadow-pop">
+      <div className="w-8 h-8 rounded-lg bg-white/20 grid place-items-center text-[13px] font-extrabold">
+        {team[0]}
+      </div>
+      <div>
+        <div className="text-[13px] font-extrabold tracking-tight">{team}</div>
+        <div className="text-[10px] opacity-80 tabular">{count}명</div>
       </div>
     </div>
   );
@@ -409,13 +415,14 @@ function PersonNode({
   u: DirUser; meId: string | null; dmBusyId: string | null; onDM: (u: DirUser) => void; showTeam?: boolean;
 }) {
   const isMe = u.id === meId;
+  // width 를 "고정" 해서 '나' 칩 유무와 관계없이 모든 카드 크기가 동일하도록 함.
   return (
-    <div className="group inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-ink-150 bg-white dark:bg-ink-50 hover:border-brand-300 hover:shadow-pop transition min-w-[140px]">
+    <div className="group flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-ink-150 bg-white dark:bg-ink-50 hover:border-brand-300 hover:shadow-pop transition w-[180px]">
       <UserAvatar u={u} size={28} />
       <div className="flex-1 min-w-0">
-        <div className="text-[12px] font-bold text-ink-900 truncate">
-          {u.name}
-          {isMe && <span className="chip-gray ml-1.5 !text-[9px]">나</span>}
+        <div className="flex items-center gap-1 min-w-0">
+          <span className="text-[12px] font-bold text-ink-900 truncate">{u.name}</span>
+          {isMe && <span className="chip-gray !text-[9px] flex-shrink-0">나</span>}
         </div>
         <div className="text-[10px] text-ink-500 truncate">
           {showTeam ? (u.team ?? "—") : (u.position ?? "—")}
@@ -425,7 +432,7 @@ function PersonNode({
         <button
           onClick={() => onDM(u)}
           disabled={dmBusyId === u.id}
-          className="md:opacity-0 md:group-hover:opacity-100 btn-icon !w-6 !h-6 disabled:opacity-60"
+          className="md:opacity-0 md:group-hover:opacity-100 btn-icon !w-6 !h-6 disabled:opacity-60 flex-shrink-0"
           title="1:1 대화"
         >
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -457,108 +464,169 @@ function UserAvatar({ u, size }: { u: DirUser; size: number }) {
   );
 }
 
-/* ===================== CSS Tree (순수 border 로 연결선) ===================== */
+/* ===================== CSS Tree (순수 border 로 연결선) =====================
+ * 세로 방향 트리 — 루트가 맨 위, 하위 노드가 아래로 뻗어나감.
+ *
+ * DOM:
+ *   .org-vtree
+ *     .org-vtree-root               (루트 노드 — 중앙 정렬)
+ *     .org-vtree-spine              (세로 척추 — 각 row 사이를 수직선으로 연결)
+ *       .org-vtree-row              (한 직급 row — Level 노드 + 멤버 가로 나열)
+ *         .org-vtree-node           (Level / Team 노드 감싸는 중앙 정렬 래퍼)
+ *         .org-vtree-members        (해당 직급 소속 멤버 가로 나열)
+ *           .org-vtree-member
+ *
+ * 연결선:
+ *   - 루트와 첫 row 사이: .org-vtree-spine::before 가 top 으로 뻗어 루트에 닿음.
+ *   - row 들 사이: row 마다 ::before 가 위쪽 16px 세로선을 그림.
+ *   - members 가 여러 명일 때: members 컨테이너가 가로로 펼쳐지며 각자 위로 세로선
+ *     + members::before 가 가로로 이어지는 수평 커넥터.
+ */
 function TreeStyles() {
-  // 같은 페이지에 여러 번 mount 돼도 style 이 중복되지 않도록 data attribute guard.
   return (
     <style>{`
-      .org-tree-scroll { padding: 8px 4px 4px; }
-      .org-tree-root-wrap { text-align: center; padding-bottom: 16px; }
-      .org-tree-children {
+      .org-vtree { display: flex; flex-direction: column; align-items: center; min-width: fit-content; padding: 4px; }
+      .org-vtree-root { padding-bottom: 0; }
+      .org-vtree-spine {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        position: relative;
+        width: 100%;
+      }
+      .org-vtree-row {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        position: relative;
+        padding-top: 20px;
+        min-width: fit-content;
+      }
+      .org-vtree-row::before {
+        content: "";
+        position: absolute;
+        top: 0; left: 50%;
+        width: 2px; height: 20px;
+        background: var(--c-ink-200, #E5E7EB);
+        transform: translateX(-1px);
+      }
+      .org-vtree-section {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        position: relative;
+        padding-top: 20px;
+        min-width: fit-content;
+      }
+      .org-vtree-section::before {
+        content: "";
+        position: absolute;
+        top: 0; left: 50%;
+        width: 2px; height: 20px;
+        background: var(--c-ink-200, #E5E7EB);
+        transform: translateX(-1px);
+      }
+      .org-vtree-spine-inner {
+        padding-top: 0;
+        gap: 0;
+      }
+      .org-vtree-node {
+        position: relative;
         display: flex;
         justify-content: center;
-        gap: 18px;
+      }
+      .org-vtree-members {
+        display: flex;
+        justify-content: center;
+        gap: 16px;
         flex-wrap: wrap;
         position: relative;
-        padding-top: 16px;
+        padding-top: 18px;
+        margin-top: 2px;
       }
-      .org-tree-children::before {
+      /* Level 노드에서 내려가는 세로선 */
+      .org-vtree-members::after {
         content: "";
         position: absolute;
-        top: 0;
-        left: 50%;
-        width: 2px;
-        height: 16px;
+        top: 0; left: 50%;
+        width: 2px; height: 10px;
         background: var(--c-ink-200, #E5E7EB);
+        transform: translateX(-1px);
       }
-      .org-tree-branch {
+      .org-vtree-member {
         position: relative;
-        padding-top: 16px;
+        padding-top: 8px;
       }
-      .org-tree-branch::before {
+      /* 각 멤버 위 세로 tick */
+      .org-vtree-member::before {
         content: "";
         position: absolute;
-        top: 0;
-        left: 50%;
-        width: 2px;
-        height: 16px;
+        top: 0; left: 50%;
+        width: 2px; height: 8px;
         background: var(--c-ink-200, #E5E7EB);
+        transform: translateX(-1px);
       }
-      .org-tree-branch::after {
+      /* 멤버 사이 가로 연결선 — gap:16px 을 덮도록 좌우 -8px */
+      .org-vtree-member::after {
         content: "";
         position: absolute;
         top: 0;
-        left: 0;
-        right: 0;
+        left: -8px;
+        right: -8px;
         height: 2px;
         background: var(--c-ink-200, #E5E7EB);
       }
-      .org-tree-branch:first-child::after { left: 50%; }
-      .org-tree-branch:last-child::after { right: 50%; }
-      .org-tree-branch:only-child::after { display: none; }
-      .org-tree-branch .org-tree-children {
-        padding-top: 16px;
-      }
-      .dark .org-tree-children::before,
-      .dark .org-tree-branch::before,
-      .dark .org-tree-branch::after {
-        background: rgba(255,255,255,0.12);
+      .org-vtree-member:first-child::after { left: 50%; right: -8px; }
+      .org-vtree-member:last-child::after { left: -8px; right: 50%; }
+      .org-vtree-member:only-child::after { display: none; }
+
+      .dark .org-vtree-row::before,
+      .dark .org-vtree-section::before,
+      .dark .org-vtree-members::after,
+      .dark .org-vtree-member::before,
+      .dark .org-vtree-member::after {
+        background: rgba(255,255,255,0.14);
       }
 
-      /* 모바일: 가로 트리는 화면 폭에 눌려 연결선이 깨지므로
-         좌측 들여쓰기 세로 트리로 전환. 같은 DOM 구조를 CSS 만으로 재배치. */
+      /* 모바일: 멤버 가로 배열은 좁은 폭에서 깨지므로 세로로 변환. */
       @media (max-width: 640px) {
-        .org-tree-root-wrap { text-align: left; padding-bottom: 8px; padding-left: 4px; }
-        .org-tree-children {
+        .org-vtree-members {
           flex-direction: column;
           align-items: stretch;
-          justify-content: flex-start;
           gap: 6px;
-          padding-top: 4px;
+          padding-top: 10px;
           padding-left: 22px;
         }
-        .org-tree-children::before {
-          /* 좌측 수직 라인 */
+        .org-vtree-members::after {
           left: 10px;
           top: 0;
           bottom: 10px;
           height: auto;
-          width: 2px;
+          transform: none;
         }
-        .org-tree-branch {
+        .org-vtree-member {
           padding-top: 0;
           padding-left: 14px;
         }
-        .org-tree-branch::before {
-          /* 브랜치의 수직선은 제거 — 상위 컨테이너의 수직선으로 충분 */
-          display: none;
-        }
-        .org-tree-branch::after {
-          /* 좌측 수평 tick — 세로 라인에서 노드로 이어지는 L 자 */
+        .org-vtree-member::before { display: none; }
+        .org-vtree-member::after {
           top: 18px;
           left: -12px;
           right: auto;
           width: 12px;
           height: 2px;
         }
-        /* 노드 자체는 full-width 로 펼침 — inline-flex 는 display:flex 로 바꿔야 width:100% 가 적용됨 */
-        .org-tree-root-wrap > .inline-flex,
-        .org-tree-branch > .inline-flex {
-          display: flex;
-          width: 100%;
-          justify-content: flex-start;
+        .org-vtree-member:first-child::after,
+        .org-vtree-member:last-child::after {
+          top: 18px;
+          left: -12px;
+          right: auto;
+          width: 12px;
         }
-        .org-tree-branch > .group { min-width: 0; }
+        .org-vtree-member > div {
+          display: flex !important;
+          width: 100% !important;
+        }
       }
     `}</style>
   );
