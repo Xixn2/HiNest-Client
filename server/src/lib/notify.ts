@@ -31,18 +31,24 @@ export async function notify(input: NotifyInput) {
 export async function notifyMany(inputs: NotifyInput[]) {
   if (!inputs.length) return;
   try {
+    // createMany 는 ID를 반환 안 하므로 시간 범위로 방금 만든 레코드만 골라온다.
+    // take: inputs.length 로 top-N 을 쓰면, 고빈도 알림 상황에서 동시에 발생한 다른 배치가
+    // 창(window)을 밀어내 해당 유저의 SSE push 가 누락되는 레이스가 있었음. 1 ms 여유를 빼서
+    // createdAt 의 초단위 절단/클럭 드리프트를 보정.
+    const since = new Date(Date.now() - 1);
     await prisma.notification.createMany({ data: inputs });
-    // createMany 는 ID를 반환 안 하므로, userId 별 최신 한 건씩 가져와서 푸시
     const byUser = new Map<string, NotifyInput>();
     for (const i of inputs) byUser.set(i.userId, i);
-    const latest = await prisma.notification.findMany({
-      where: { userId: { in: Array.from(byUser.keys()) } },
+    const fresh = await prisma.notification.findMany({
+      where: {
+        userId: { in: Array.from(byUser.keys()) },
+        createdAt: { gte: since },
+      },
       orderBy: { createdAt: "desc" },
-      take: inputs.length,
     });
-    // user별로 최신 1건만 푸시 (createMany 배치 안의 것 = 방금 생성된 것일 확률 높음)
-    const picked = new Map<string, (typeof latest)[number]>();
-    for (const n of latest) {
+    // user별로 가장 최근 1건만 푸시.
+    const picked = new Map<string, (typeof fresh)[number]>();
+    for (const n of fresh) {
       if (!picked.has(n.userId)) picked.set(n.userId, n);
     }
     for (const [uid, n] of picked) publish(uid, "notification", n);
