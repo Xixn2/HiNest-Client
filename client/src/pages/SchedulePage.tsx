@@ -213,7 +213,7 @@ export default function SchedulePage() {
               <div
                 key={i}
                 className={`min-h-[64px] sm:min-h-[110px] border-b border-r border-ink-100 p-1 sm:p-2 ${
-                  holiday ? "bg-rose-50/40" : ""
+                  holiday ? "bg-rose-50/40 dark:bg-rose-500/10" : ""
                 } ${d ? "cursor-pointer sm:cursor-default hover:bg-ink-25 sm:hover:bg-transparent" : ""}`}
                 onClick={() => {
                   // 모바일에서는 셀 탭으로 해당 날짜 상세 열기
@@ -236,7 +236,7 @@ export default function SchedulePage() {
                       </div>
                       {holiday && (
                         <div
-                          className="text-[9px] sm:text-[10px] font-bold text-rose-600 truncate hidden sm:block"
+                          className="text-[9px] sm:text-[10px] font-bold text-rose-600 dark:text-rose-300 truncate hidden sm:block"
                           title={holiday.name + (holiday.substitute ? " (대체공휴일)" : "")}
                         >
                           {holiday.name.replace(" 대체공휴일", "*")}
