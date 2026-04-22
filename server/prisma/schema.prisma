@@ -104,6 +104,12 @@ model ProjectQaItem {
   title        String
   /// 상세 메모 — 재현 스텝/기대 결과/비고 등 자유 서식
   note         String?
+  /// 문제가 발생한 화면/위치 라벨 (예: "로그인 페이지", "모바일 > 설정 > 프로필")
+  screen       String?
+  /// 재현 플랫폼 — WEB | IOS | ANDROID | MAC_APP | WINDOWS_APP | OTHER
+  platform     String?
+  /// 이 이슈를 수정/담당할 사람 (프로젝트 멤버 중 선택). 해지는 null.
+  assigneeId   String?
   /// OPEN | PASSED | FAILED | SKIPPED
   status       String    @default("OPEN")
   /// LOW | NORMAL | HIGH
@@ -117,8 +123,32 @@ model ProjectQaItem {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
+  attachments  ProjectQaAttachment[]
+
   @@index([projectId, status])
   @@index([projectId, sortOrder])
+  @@index([projectId, assigneeId])
+}
+
+/// QA 항목에 첨부된 이미지/영상/파일. 업로드는 공용 `/api/upload` 를 거쳐
+/// 반환된 url/metadata 를 그대로 이 레코드에 저장해둠.
+model ProjectQaAttachment {
+  id         String   @id @default(cuid())
+  qaItemId   String
+  qaItem    ProjectQaItem @relation(fields: [qaItemId], references: [id], onDelete: Cascade)
+  /// 업로드 후 내려받을 수 있는 URL (`/uploads/<key>` 형식)
+  url        String
+  /// 원본 파일명 (한글 포함)
+  name       String
+  /// MIME 타입 — 썸네일/재생 분기에 쓰임
+  mimeType   String
+  sizeBytes  Int
+  /// IMAGE | VIDEO | FILE — 클라이언트 렌더 분기 편의를 위해 사전 계산해 저장
+  kind       String
+  uploadedById String
+  createdAt  DateTime @default(now())
+
+  @@index([qaItemId, createdAt])
 }
 
 /// 외부 서비스에서 들어오는 웹훅 이벤트를 받아 프로젝트 안 "채널"로 묶어 노출.

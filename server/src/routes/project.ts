@@ -340,6 +340,8 @@ router.get("/:id/webhook/:channelId/events", async (req, res) => {
 
 const QA_STATUS = ["OPEN", "PASSED", "FAILED", "SKIPPED"] as const;
 const QA_PRIORITY = ["LOW", "NORMAL", "HIGH"] as const;
+const QA_PLATFORM = ["WEB", "IOS", "ANDROID", "MAC_APP", "WINDOWS_APP", "OTHER"] as const;
+const QA_ATTACHMENT_KIND = ["IMAGE", "VIDEO", "FILE"] as const;
 
 /** 프로젝트의 QA 항목 목록. 생성 순서 + sortOrder 기준 정렬. */
 router.get("/:id/qa", async (req, res) => {
@@ -350,10 +352,19 @@ router.get("/:id/qa", async (req, res) => {
     where: { projectId: req.params.id },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     take: 1000,
+    include: {
+      attachments: {
+        orderBy: { createdAt: "asc" },
+      },
+    },
   });
-  // 작성자/해결자 이름은 목록 쿼리를 가볍게 유지하려고 별도 조회 후 map.
+  // 작성자/해결자/담당자 이름은 목록 쿼리를 가볍게 유지하려고 별도 조회 후 map.
   const userIds = Array.from(
-    new Set(items.flatMap((i) => [i.createdById, i.resolvedById].filter(Boolean) as string[])),
+    new Set(
+      items.flatMap((i) =>
+        [i.createdById, i.resolvedById, i.assigneeId].filter(Boolean) as string[],
+      ),
+    ),
   );
   const users = userIds.length
     ? await prisma.user.findMany({
@@ -367,16 +378,44 @@ router.get("/:id/qa", async (req, res) => {
       ...i,
       createdBy: userMap.get(i.createdById) ?? null,
       resolvedBy: i.resolvedById ? userMap.get(i.resolvedById) ?? null : null,
+      assignee: i.assigneeId ? userMap.get(i.assigneeId) ?? null : null,
     })),
   });
+});
+
+const qaAttachmentInput = z.object({
+  url: z.string().min(1).max(500),
+  name: z.string().min(1).max(200),
+  mimeType: z.string().min(1).max(100),
+  sizeBytes: z.number().int().min(0).max(1_000_000_000),
+  kind: z.enum(QA_ATTACHMENT_KIND),
 });
 
 const qaCreateSchema = z.object({
   title: z.string().min(1).max(200),
   note: z.string().max(4000).optional().nullable(),
+  screen: z.string().max(200).optional().nullable(),
+  platform: z.enum(QA_PLATFORM).optional().nullable(),
+  assigneeId: z.string().max(50).optional().nullable(),
   priority: z.enum(QA_PRIORITY).optional(),
   status: z.enum(QA_STATUS).optional(),
+  attachments: z.array(qaAttachmentInput).max(20).optional(),
 });
+
+// 담당자가 실제로 프로젝트 멤버인지 검증 — 없는 유저/다른 프로젝트 유저가 담당자로
+// 잘못 꽂히는 것을 막는다. null 은 "담당자 해지" 로 해석.
+async function resolveAssigneeIdOrThrow(
+  projectId: string,
+  assigneeId: string | null | undefined,
+): Promise<string | null | undefined> {
+  if (assigneeId === undefined) return undefined;
+  if (!assigneeId) return null;
+  const m = await prisma.projectMember.findUnique({
+    where: { projectId_userId: { projectId, userId: assigneeId } },
+  });
+  if (!m) throw new Error("ASSIGNEE_NOT_MEMBER");
+  return assigneeId;
+}
 
 router.post("/:id/qa", async (req, res) => {
   const u = (req as any).user;
@@ -385,6 +424,14 @@ router.post("/:id/qa", async (req, res) => {
   const parsed = qaCreateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid input" });
   const d = parsed.data;
+
+  let assigneeId: string | null | undefined;
+  try {
+    assigneeId = await resolveAssigneeIdOrThrow(req.params.id, d.assigneeId);
+  } catch {
+    return res.status(400).json({ error: "담당자는 이 프로젝트 멤버여야 합니다" });
+  }
+
   // sortOrder 기본값은 현재 최댓값 + 1 — 새 항목이 기본 맨 아래에 붙도록.
   const last = await prisma.projectQaItem.findFirst({
     where: { projectId: req.params.id },
@@ -402,12 +449,30 @@ router.post("/:id/qa", async (req, res) => {
       projectId: req.params.id,
       title: d.title,
       note: d.note ?? null,
+      screen: d.screen ?? null,
+      platform: d.platform ?? null,
+      assigneeId: assigneeId ?? null,
       status,
       priority: d.priority ?? "NORMAL",
       sortOrder: nextOrder,
       createdById: u.id,
       ...resolvedPatch,
+      ...(d.attachments && d.attachments.length
+        ? {
+            attachments: {
+              create: d.attachments.map((a) => ({
+                url: a.url,
+                name: a.name,
+                mimeType: a.mimeType,
+                sizeBytes: a.sizeBytes,
+                kind: a.kind,
+                uploadedById: u.id,
+              })),
+            },
+          }
+        : {}),
     },
+    include: { attachments: { orderBy: { createdAt: "asc" } } },
   });
   await writeLog(u.id, "PROJECT_QA_CREATE", item.id, d.title);
   res.json({ item });
@@ -416,6 +481,9 @@ router.post("/:id/qa", async (req, res) => {
 const qaPatchSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   note: z.string().max(4000).optional().nullable(),
+  screen: z.string().max(200).optional().nullable(),
+  platform: z.enum(QA_PLATFORM).optional().nullable(),
+  assigneeId: z.string().max(50).optional().nullable(),
   priority: z.enum(QA_PRIORITY).optional(),
   status: z.enum(QA_STATUS).optional(),
   sortOrder: z.number().int().min(0).max(1_000_000).optional(),
@@ -433,6 +501,17 @@ router.patch("/:id/qa/:itemId", async (req, res) => {
   });
   if (!existing || existing.projectId !== req.params.id)
     return res.status(404).json({ error: "not found" });
+
+  let assigneePatch: { assigneeId: string | null } | {} = {};
+  if ("assigneeId" in d) {
+    try {
+      const resolved = await resolveAssigneeIdOrThrow(req.params.id, d.assigneeId);
+      // undefined 는 미지정(노-op), null 은 해지.
+      if (resolved !== undefined) assigneePatch = { assigneeId: resolved };
+    } catch {
+      return res.status(400).json({ error: "담당자는 이 프로젝트 멤버여야 합니다" });
+    }
+  }
 
   // 상태 전환 시 resolved 이력 스탬프 자동 관리.
   //  - OPEN → PASSED/FAILED/SKIPPED : 현재 유저/시각 기록
@@ -452,12 +531,58 @@ router.patch("/:id/qa/:itemId", async (req, res) => {
     data: {
       ...("title" in d ? { title: d.title! } : {}),
       ...("note" in d ? { note: d.note ?? null } : {}),
+      ...("screen" in d ? { screen: d.screen ?? null } : {}),
+      ...("platform" in d ? { platform: d.platform ?? null } : {}),
       ...("priority" in d ? { priority: d.priority! } : {}),
       ...("sortOrder" in d ? { sortOrder: d.sortOrder! } : {}),
+      ...assigneePatch,
       ...statusPatch,
     },
+    include: { attachments: { orderBy: { createdAt: "asc" } } },
   });
   res.json({ item });
+});
+
+/** QA 항목에 첨부 추가 — 이미 업로드 완료된 파일의 메타데이터를 받아 레코드만 생성. */
+router.post("/:id/qa/:itemId/attachment", async (req, res) => {
+  const u = (req as any).user;
+  const ok = await assertProjectMember(req.params.id, u.id, u.role);
+  if (!ok) return res.status(403).json({ error: "forbidden" });
+  const parsed = qaAttachmentInput.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid input" });
+  const existing = await prisma.projectQaItem.findUnique({
+    where: { id: req.params.itemId },
+    select: { id: true, projectId: true },
+  });
+  if (!existing || existing.projectId !== req.params.id)
+    return res.status(404).json({ error: "not found" });
+
+  const att = await prisma.projectQaAttachment.create({
+    data: {
+      qaItemId: existing.id,
+      url: parsed.data.url,
+      name: parsed.data.name,
+      mimeType: parsed.data.mimeType,
+      sizeBytes: parsed.data.sizeBytes,
+      kind: parsed.data.kind,
+      uploadedById: u.id,
+    },
+  });
+  res.json({ attachment: att });
+});
+
+router.delete("/:id/qa/:itemId/attachment/:attachmentId", async (req, res) => {
+  const u = (req as any).user;
+  const ok = await assertProjectMember(req.params.id, u.id, u.role);
+  if (!ok) return res.status(403).json({ error: "forbidden" });
+  const att = await prisma.projectQaAttachment.findUnique({
+    where: { id: req.params.attachmentId },
+    include: { qaItem: { select: { projectId: true, id: true } } },
+  });
+  if (!att || att.qaItemId !== req.params.itemId || att.qaItem.projectId !== req.params.id)
+    return res.status(404).json({ error: "not found" });
+  await prisma.projectQaAttachment.delete({ where: { id: att.id } });
+  res.json({ ok: true });
 });
 
 router.delete("/:id/qa/:itemId", async (req, res) => {
