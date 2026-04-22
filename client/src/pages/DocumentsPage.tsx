@@ -467,9 +467,9 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
         </div>
       )}
 
-      {/* 툴바 */}
-      <div className="flex items-center gap-2 mb-4">
-        <div className="flex items-center gap-1 text-[13px] flex-1 min-w-0">
+      {/* 툴바 — 좁은 화면에서는 breadcrumb / 검색 을 세로로 쌓아 겹침 방지 */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
+        <div className="flex flex-wrap items-center gap-1 text-[13px] flex-1 min-w-0">
           <button
             className={`px-2 py-1 rounded transition ${
               dragOverKey === "root" ? "bg-brand-100 ring-2 ring-brand-400" : "hover:bg-ink-100"
