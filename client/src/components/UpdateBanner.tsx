@@ -54,9 +54,10 @@ export default function UpdateBanner() {
     const waiting = reg.waiting;
     if (waiting) {
       waiting.postMessage("SKIP_WAITING");
-      // 혹시 controllerchange 가 오지 않는 환경을 위해 안전장치
+      // 혹시 controllerchange 가 오지 않는 환경(특정 브라우저/SW 버그)을 위한 안전장치.
+      // 이전 버전은 stale closure 로 applying 이 항상 false 캡처 → reload 가 실행되지 않았음.
+      // 안전망은 조건 없이 무조건 1.5초 뒤 reload (그 사이 controllerchange 가 이미 reload 했으면 no-op).
       setTimeout(() => {
-        if (!applying) return;
         window.location.reload();
       }, 1500);
     } else {
