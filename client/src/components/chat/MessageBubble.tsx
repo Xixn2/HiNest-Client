@@ -83,6 +83,275 @@ export function LongPress({
   );
 }
 
+/* ===== 채팅 비디오 플레이어 =====
+ * Chrome 기본 <video controls> 의 3점 메뉴는 좁은 채팅 영역에서 UI 가 부스럭거려서
+ * controlsList 로 숨기고, 우리가 직접 styled 한 메뉴로 갈음.
+ *
+ * 기능은 전부 유지:
+ *  - 전체화면: HTMLVideoElement.requestFullscreen
+ *  - 다운로드: <a download> 트리거 (동일 오리진 /uploads 만 대상이라 CORS 문제 없음)
+ *  - 재생 속도: 0.5 / 1 / 1.25 / 1.5 / 2x — 서브메뉴
+ *  - PIP 모드: requestPictureInPicture (지원 안 하는 브라우저는 숨김)
+ */
+const RATE_OPTIONS = [0.5, 1, 1.25, 1.5, 2] as const;
+function ChatVideoPlayer({ src, fileName }: { src: string; fileName: string | null }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [rateOpen, setRateOpen] = useState(false);
+  const [rate, setRate] = useState(1);
+  const supportsPIP = typeof document !== "undefined" && !!(document as any).pictureInPictureEnabled;
+
+  // 바깥 클릭 / ESC 로 닫기
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) {
+        setMenuOpen(false);
+        setRateOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setMenuOpen(false); setRateOpen(false); }
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+
+  const close = () => { setMenuOpen(false); setRateOpen(false); };
+
+  const fullscreen = async () => {
+    try { await videoRef.current?.requestFullscreen?.(); } catch {}
+    close();
+  };
+  const download = () => {
+    const url = src + (src.includes("?") ? "&" : "?") + "download=1"
+      + (fileName ? `&name=${encodeURIComponent(fileName)}` : "");
+    const a = document.createElement("a");
+    a.href = url;
+    a.rel = "noopener";
+    if (fileName) a.setAttribute("download", fileName);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    close();
+  };
+  const pip = async () => {
+    try { await (videoRef.current as any)?.requestPictureInPicture?.(); } catch {}
+    close();
+  };
+  const pickRate = (r: number) => {
+    setRate(r);
+    if (videoRef.current) videoRef.current.playbackRate = r;
+    close();
+  };
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative", display: "inline-block" }}>
+      <video
+        ref={videoRef}
+        src={src}
+        controls
+        // 기본 메뉴 항목 전부 숨김 → 3점 메뉴 자체가 사라짐.
+        controlsList="nodownload noplaybackrate nofullscreen noremoteplayback"
+        disableRemotePlayback
+        playsInline
+        preload="metadata"
+        onContextMenu={(e) => e.preventDefault()}
+        style={{
+          display: "block",
+          maxWidth: 180,
+          maxHeight: 200,
+          borderRadius: 16,
+          background: "#000",
+        }}
+      />
+      <button
+        type="button"
+        aria-label="영상 옵션"
+        title="영상 옵션"
+        onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); setRateOpen(false); }}
+        style={{
+          position: "absolute", top: 6, right: 6,
+          width: 26, height: 26, borderRadius: 999,
+          background: "rgba(0,0,0,0.55)",
+          border: 0, color: "#fff",
+          cursor: "pointer",
+          display: "grid", placeItems: "center",
+          backdropFilter: "blur(6px)",
+          WebkitBackdropFilter: "blur(6px)",
+          opacity: 0.9,
+          transition: "opacity .15s ease, background .15s ease",
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.75)"; e.currentTarget.style.opacity = "1"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.55)"; e.currentTarget.style.opacity = "0.9"; }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="5" cy="12" r="1.8" />
+          <circle cx="12" cy="12" r="1.8" />
+          <circle cx="19" cy="12" r="1.8" />
+        </svg>
+      </button>
+
+      {menuOpen && (
+        <div
+          role="menu"
+          style={{
+            position: "absolute", top: 38, right: 6,
+            minWidth: 172,
+            background: "rgba(24,24,28,0.94)",
+            color: "#fff",
+            border: "1px solid rgba(255,255,255,0.08)",
+            borderRadius: 12,
+            padding: 4,
+            boxShadow: "0 16px 48px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.25)",
+            backdropFilter: "blur(14px)",
+            WebkitBackdropFilter: "blur(14px)",
+            zIndex: 50,
+            fontFamily: FONT,
+          }}
+        >
+          <VideoMenuItem
+            label="전체화면"
+            onClick={fullscreen}
+            icon={
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4" />
+              </svg>
+            }
+          />
+          <VideoMenuItem
+            label="다운로드"
+            onClick={download}
+            icon={
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+            }
+          />
+          <div style={{ position: "relative" }}>
+            <VideoMenuItem
+              label="재생 속도"
+              rightText={rate === 1 ? "보통" : `${rate}x`}
+              onClick={() => setRateOpen((v) => !v)}
+              icon={
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="9" />
+                  <polyline points="12 7 12 12 15.5 14" />
+                </svg>
+              }
+            />
+            {rateOpen && (
+              <div
+                style={{
+                  position: "absolute", top: 0, right: "calc(100% + 6px)",
+                  minWidth: 96,
+                  background: "rgba(24,24,28,0.96)",
+                  color: "#fff",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: 10,
+                  padding: 4,
+                  boxShadow: "0 16px 48px rgba(0,0,0,0.45)",
+                  backdropFilter: "blur(14px)",
+                  WebkitBackdropFilter: "blur(14px)",
+                }}
+              >
+                {RATE_OPTIONS.map((r) => {
+                  const active = r === rate;
+                  return (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => pickRate(r)}
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        width: "100%",
+                        padding: "7px 10px",
+                        border: 0,
+                        background: active ? "rgba(255,255,255,0.1)" : "transparent",
+                        color: "#fff",
+                        fontSize: 12.5, fontWeight: 600,
+                        fontFamily: FONT,
+                        letterSpacing: "-0.01em",
+                        borderRadius: 7,
+                        cursor: "pointer",
+                        textAlign: "left",
+                      }}
+                      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+                      onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}
+                    >
+                      <span>{r === 1 ? "보통" : `${r}x`}</span>
+                      {active && (
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          {supportsPIP && (
+            <VideoMenuItem
+              label="PIP 모드"
+              onClick={pip}
+              icon={
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="4" width="20" height="16" rx="2" />
+                  <rect x="12" y="12" width="8" height="6" rx="1" fill="currentColor" stroke="none" />
+                </svg>
+              }
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VideoMenuItem({
+  label, onClick, icon, rightText,
+}: { label: string; onClick: () => void; icon: React.ReactNode; rightText?: string }) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      style={{
+        display: "flex", alignItems: "center", gap: 10,
+        width: "100%",
+        padding: "9px 10px",
+        border: 0,
+        background: "transparent",
+        color: "#fff",
+        fontSize: 13, fontWeight: 600,
+        fontFamily: FONT,
+        letterSpacing: "-0.01em",
+        borderRadius: 8,
+        cursor: "pointer",
+        textAlign: "left",
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+    >
+      <span style={{ display: "grid", placeItems: "center", width: 18, height: 18, opacity: 0.85, flexShrink: 0 }}>
+        {icon}
+      </span>
+      <span style={{ flex: 1 }}>{label}</span>
+      {rightText && <span style={{ fontSize: 11.5, opacity: 0.6, fontWeight: 500 }}>{rightText}</span>}
+    </button>
+  );
+}
+
 /* ===== 이미지 썸네일 + 라이트박스 (뷰포트 안에 contain) ===== */
 function ImageThumb({ src, alt }: { src: string; alt: string }) {
   const [open, setOpen] = useState(false);
@@ -527,27 +796,10 @@ function MessageBubbleInner({ msg, mine }: { msg: Message; mine: boolean }) {
           gap: 4,
         }}
       >
-        {/* 좁은 챗 미니앱 영역에선 Chrome 의 기본 3점 메뉴(전체화면/다운로드/재생 속도/PIP)
-            가 비디오보다 훨씬 커져서 UI 가 잘리는 문제. 영상은 작은 미리보기 용도이므로
-            불필요한 옵션(다운로드/PIP/원격재생) 을 controlsList 로 숨기고, 우클릭도 막음.
-            진짜 크게 보고 싶을 땐 버블을 클릭해 새 탭에서 원본을 열도록 유도. */}
-        <video
-          src={fileUrl!}
-          controls
-          controlsList="nodownload noplaybackrate nofullscreen noremoteplayback"
-          disablePictureInPicture
-          disableRemotePlayback
-          preload="metadata"
-          playsInline
-          onContextMenu={(e) => e.preventDefault()}
-          style={{
-            display: "block",
-            maxWidth: 180,
-            maxHeight: 200,
-            borderRadius: 16,
-            background: "#000",
-          }}
-        />
+        {/* 기능(전체화면·다운로드·재생속도·PIP) 은 유지하되 Chrome 기본 3점 메뉴는
+            너무 크고 좁은 채팅 패널에서 잘려서 UI 가 구림 → controlsList 로 기본 메뉴
+            항목 전부 숨기고, 우리가 직접 styled 한 커스텀 오버플로 메뉴로 대체. */}
+        <ChatVideoPlayer src={fileUrl!} fileName={msg.fileName ?? null} />
         {hasText && <TextBubble content={msg.content} mine={mine} />}
       </div>
     );
