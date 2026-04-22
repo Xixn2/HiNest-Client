@@ -384,8 +384,15 @@ router.post("/rooms/:id/messages", async (req, res) => {
   if (!member) return res.status(403).json({ error: "멤버만 메시지를 보낼 수 있습니다" });
 
   const scheduledAt = d.scheduledAt ? new Date(d.scheduledAt) : null;
-  if (scheduledAt && scheduledAt.getTime() <= Date.now() + 5000) {
-    return res.status(400).json({ error: "예약 시간은 최소 5초 이후여야 합니다" });
+  if (scheduledAt) {
+    // Invalid Date 는 getTime() 이 NaN → `NaN <= X` 가 false 라 기존 가드를 통과해
+    // Prisma 쓰기에서 500 이 났다. 사전에 400 으로 차단.
+    if (Number.isNaN(scheduledAt.getTime())) {
+      return res.status(400).json({ error: "예약 시간 형식이 올바르지 않습니다" });
+    }
+    if (scheduledAt.getTime() <= Date.now() + 5000) {
+      return res.status(400).json({ error: "예약 시간은 최소 5초 이후여야 합니다" });
+    }
   }
 
   const mentions = (d.mentions ?? []).filter((id) => id && id !== u.id);
@@ -511,9 +518,18 @@ router.patch("/messages/:id", async (req, res) => {
   const content = rawContent !== undefined && rawContent.length > 8000 ? rawContent.slice(0, 8000) : rawContent;
   // scheduledAt 문자열이 40자 넘으면 new Date() 가 Invalid Date 를 반환 — 사전에 잘라냄.
   const rawScheduledAt = req.body?.scheduledAt;
-  const scheduledAt = rawScheduledAt !== undefined
-    ? (rawScheduledAt ? new Date(String(rawScheduledAt).slice(0, 40)) : null)
-    : undefined;
+  let scheduledAt: Date | null | undefined;
+  if (rawScheduledAt === undefined) {
+    scheduledAt = undefined;
+  } else if (!rawScheduledAt) {
+    scheduledAt = null;
+  } else {
+    const parsed = new Date(String(rawScheduledAt).slice(0, 40));
+    if (Number.isNaN(parsed.getTime())) {
+      return res.status(400).json({ error: "예약 시간 형식이 올바르지 않습니다" });
+    }
+    scheduledAt = parsed;
+  }
 
   const msg = await prisma.chatMessage.findUnique({ where: { id: req.params.id } });
   if (!msg) return res.status(404).json({ error: "not found" });
