@@ -19,7 +19,11 @@ const receiptUrlSchema = z
 
 const schema = z.object({
   // ISO 8601 확장 포맷도 40자면 충분. 길게 들어오는 걸 막아 Date 파싱 비용 방어.
-  usedAt: z.string().min(1).max(40),
+  // 추가로 실제 파싱 가능한 날짜인지 refine — Invalid Date 가 Prisma 까지 흘러가 500 이 나던 경로 차단.
+  usedAt: z.string().min(1).max(40).refine(
+    (s) => !Number.isNaN(new Date(s).getTime()),
+    { message: "날짜 형식이 올바르지 않습니다" },
+  ),
   merchant: z.string().min(1).max(200),
   category: z.string().min(1).max(40),
   amount: z.number().int().nonnegative().max(100_000_000),
