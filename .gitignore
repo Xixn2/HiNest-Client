@@ -25,3 +25,4 @@ server/prisma/*.db-journal
 # 주의: migrations/ 는 Postgres 전환 후부터 반드시 커밋함.
 # 예전 SQLite 시절 migration 디렉토리는 이미 제외된 상태 — 첫 Postgres
 # 마이그레이션을 새로 생성해서 그 이후의 히스토리를 추적.
+.claude/
