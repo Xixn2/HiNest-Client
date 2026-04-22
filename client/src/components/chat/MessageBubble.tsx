@@ -204,24 +204,24 @@ function ChatVideoPlayer({ src, fileName }: { src: string; fileName: string | nu
           role="menu"
           style={{
             position: "absolute", top: 38, right: 6,
-            minWidth: 172,
-            background: "rgba(24,24,28,0.94)",
-            color: "#fff",
-            border: "1px solid rgba(255,255,255,0.08)",
-            borderRadius: 12,
+            minWidth: 184,
+            background: C.surface,
+            color: C.ink,
+            border: `1px solid ${C.gray200}`,
+            borderRadius: 14,
             padding: 4,
-            boxShadow: "0 16px 48px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.25)",
-            backdropFilter: "blur(14px)",
-            WebkitBackdropFilter: "blur(14px)",
+            boxShadow:
+              "0 10px 28px rgba(25, 31, 40, .16), 0 2px 6px rgba(25, 31, 40, .06)",
             zIndex: 50,
             fontFamily: FONT,
+            overflow: "visible",
           }}
         >
           <VideoMenuItem
             label="전체화면"
             onClick={fullscreen}
             icon={
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4" />
               </svg>
             }
@@ -229,8 +229,9 @@ function ChatVideoPlayer({ src, fileName }: { src: string; fileName: string | nu
           <VideoMenuItem
             label="다운로드"
             onClick={download}
+            topBorder
             icon={
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
@@ -242,8 +243,9 @@ function ChatVideoPlayer({ src, fileName }: { src: string; fileName: string | nu
               label="재생 속도"
               rightText={rate === 1 ? "보통" : `${rate}x`}
               onClick={() => setRateOpen((v) => !v)}
+              topBorder
               icon={
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="9" />
                   <polyline points="12 7 12 12 15.5 14" />
                 </svg>
@@ -253,15 +255,15 @@ function ChatVideoPlayer({ src, fileName }: { src: string; fileName: string | nu
               <div
                 style={{
                   position: "absolute", top: 0, right: "calc(100% + 6px)",
-                  minWidth: 96,
-                  background: "rgba(24,24,28,0.96)",
-                  color: "#fff",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: 10,
+                  minWidth: 112,
+                  background: C.surface,
+                  color: C.ink,
+                  border: `1px solid ${C.gray200}`,
+                  borderRadius: 12,
                   padding: 4,
-                  boxShadow: "0 16px 48px rgba(0,0,0,0.45)",
-                  backdropFilter: "blur(14px)",
-                  WebkitBackdropFilter: "blur(14px)",
+                  boxShadow:
+                    "0 10px 28px rgba(25, 31, 40, .16), 0 2px 6px rgba(25, 31, 40, .06)",
+                  fontFamily: FONT,
                 }}
               >
                 {RATE_OPTIONS.map((r) => {
@@ -274,23 +276,24 @@ function ChatVideoPlayer({ src, fileName }: { src: string; fileName: string | nu
                       style={{
                         display: "flex", alignItems: "center", justifyContent: "space-between",
                         width: "100%",
-                        padding: "7px 10px",
+                        padding: "8px 10px",
                         border: 0,
-                        background: active ? "rgba(255,255,255,0.1)" : "transparent",
-                        color: "#fff",
-                        fontSize: 12.5, fontWeight: 600,
+                        background: active ? C.gray100 : "transparent",
+                        color: active ? C.blue : C.ink,
+                        fontSize: 13, fontWeight: 600,
                         fontFamily: FONT,
                         letterSpacing: "-0.01em",
-                        borderRadius: 7,
+                        borderRadius: 8,
                         cursor: "pointer",
                         textAlign: "left",
+                        transition: "background .12s ease",
                       }}
-                      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+                      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = C.gray100; }}
                       onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}
                     >
                       <span>{r === 1 ? "보통" : `${r}x`}</span>
                       {active && (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
                       )}
@@ -304,8 +307,9 @@ function ChatVideoPlayer({ src, fileName }: { src: string; fileName: string | nu
             <VideoMenuItem
               label="PIP 모드"
               onClick={pip}
+              topBorder
               icon={
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="2" y="4" width="20" height="16" rx="2" />
                   <rect x="12" y="12" width="8" height="6" rx="1" fill="currentColor" stroke="none" />
                 </svg>
@@ -319,35 +323,37 @@ function ChatVideoPlayer({ src, fileName }: { src: string; fileName: string | nu
 }
 
 function VideoMenuItem({
-  label, onClick, icon, rightText,
-}: { label: string; onClick: () => void; icon: React.ReactNode; rightText?: string }) {
+  label, onClick, icon, rightText, topBorder,
+}: { label: string; onClick: () => void; icon: React.ReactNode; rightText?: string; topBorder?: boolean }) {
   return (
     <button
       type="button"
       role="menuitem"
       onClick={onClick}
       style={{
-        display: "flex", alignItems: "center", gap: 10,
+        display: "flex", alignItems: "center", gap: 12,
         width: "100%",
-        padding: "9px 10px",
+        padding: "10px 12px",
         border: 0,
+        borderTop: topBorder ? `1px solid ${C.gray100}` : "none",
         background: "transparent",
-        color: "#fff",
-        fontSize: 13, fontWeight: 600,
+        color: C.ink,
+        fontSize: 14, fontWeight: 600,
         fontFamily: FONT,
         letterSpacing: "-0.01em",
-        borderRadius: 8,
+        borderRadius: topBorder ? 0 : 8,
         cursor: "pointer",
         textAlign: "left",
+        transition: "background .12s ease",
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = C.gray100; }}
       onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
     >
-      <span style={{ display: "grid", placeItems: "center", width: 18, height: 18, opacity: 0.85, flexShrink: 0 }}>
+      <span style={{ display: "grid", placeItems: "center", width: 18, height: 18, color: C.gray600, flexShrink: 0 }}>
         {icon}
       </span>
       <span style={{ flex: 1 }}>{label}</span>
-      {rightText && <span style={{ fontSize: 11.5, opacity: 0.6, fontWeight: 500 }}>{rightText}</span>}
+      {rightText && <span style={{ fontSize: 12, color: C.gray500, fontWeight: 500 }}>{rightText}</span>}
     </button>
   );
 }
