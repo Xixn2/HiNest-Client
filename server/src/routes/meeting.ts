@@ -35,6 +35,19 @@ const updateSchema = z.object({
   viewerIds: z.array(z.string().max(50)).max(200).optional(),
 });
 
+// content 는 TipTap JSON 이라 길이가 천차만별. 이미지 다수/긴 표 섞여도 보통 수백 KB
+// 안쪽이라 512KB 면 충분. 전역 json limit(2MB) 보다 타이트하게 컷해야 Postgres JSONB
+// 파싱/인덱싱 비용이 튀지 않고, 단일 문서 열람 속도도 예측 가능.
+const MEETING_CONTENT_MAX = 512_000;
+function sizeOfJson(v: unknown): number {
+  try {
+    return JSON.stringify(v ?? "").length;
+  } catch {
+    // 순환 참조 등은 어차피 prisma 쪽에서도 터지니 큰 값으로 밀어 버림.
+    return Number.MAX_SAFE_INTEGER;
+  }
+}
+
 /** 내가 읽을 수 있는 회의록 목록. */
 router.get("/", async (req, res) => {
   const u = (req as any).user;
@@ -125,6 +138,10 @@ router.post("/", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: "invalid input" });
   const d = parsed.data;
 
+  if (sizeOfJson(d.content) > MEETING_CONTENT_MAX) {
+    return res.status(413).json({ error: "회의록 본문이 너무 깁니다 (512KB 초과)" });
+  }
+
   // PROJECT 범위면 해당 프로젝트에 내가 속해있거나 ADMIN 이어야 함.
   if (d.visibility === "PROJECT") {
     if (!d.projectId) return res.status(400).json({ error: "projectId required for PROJECT visibility" });
@@ -167,6 +184,9 @@ router.patch("/:id", async (req, res) => {
     return res.status(403).json({ error: "forbidden" });
   }
   const d = parsed.data;
+  if (d.content !== undefined && sizeOfJson(d.content) > MEETING_CONTENT_MAX) {
+    return res.status(413).json({ error: "회의록 본문이 너무 깁니다 (512KB 초과)" });
+  }
 
   // visibility=SPECIFIC 으로 바뀌거나 이미 SPECIFIC 인데 viewerIds 를 다시 주면 교체.
   const replaceViewers =
