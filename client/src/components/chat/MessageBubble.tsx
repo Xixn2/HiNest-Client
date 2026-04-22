@@ -527,9 +527,19 @@ function MessageBubbleInner({ msg, mine }: { msg: Message; mine: boolean }) {
           gap: 4,
         }}
       >
+        {/* 좁은 챗 미니앱 영역에선 Chrome 의 기본 3점 메뉴(전체화면/다운로드/재생 속도/PIP)
+            가 비디오보다 훨씬 커져서 UI 가 잘리는 문제. 영상은 작은 미리보기 용도이므로
+            불필요한 옵션(다운로드/PIP/원격재생) 을 controlsList 로 숨기고, 우클릭도 막음.
+            진짜 크게 보고 싶을 땐 버블을 클릭해 새 탭에서 원본을 열도록 유도. */}
         <video
           src={fileUrl!}
           controls
+          controlsList="nodownload noplaybackrate nofullscreen noremoteplayback"
+          disablePictureInPicture
+          disableRemotePlayback
+          preload="metadata"
+          playsInline
+          onContextMenu={(e) => e.preventDefault()}
           style={{
             display: "block",
             maxWidth: 180,
