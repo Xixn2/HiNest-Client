@@ -325,6 +325,7 @@ html.dark .chip-blue  { background: rgba(120,150,255,.2);  color: #B8C6FF; }
   border-radius: 9999px;
   letter-spacing: -0.02em;
 }
+.avatar-xs { width: 20px; height: 20px; font-size: 10px; }
 .avatar-sm { width: 28px; height: 28px; font-size: 11px; }
 .avatar-md { width: 36px; height: 36px; font-size: 13px; }
 .avatar-lg { width: 44px; height: 44px; font-size: 16px; }
