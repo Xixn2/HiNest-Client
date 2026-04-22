@@ -370,6 +370,21 @@ table.pro.pro-grid tbody td:last-child {
   border-right: 0;
 }
 
+/* 고정폭 상세 테이블 — 긴 직급/이름 값이 옆 칸으로 겹쳐 보이지 않도록 강제 클리핑.
+   table-layout:fixed 와 함께 동작해 컬럼 너비를 엄격하게 지키고 셀 overflow 는 ellipsis 처리. */
+table.pro.pro-grid-fixed tbody td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+table.pro.pro-grid-fixed tbody td > input,
+table.pro.pro-grid-fixed tbody td > select,
+table.pro.pro-grid-fixed tbody td > .date-picker-trigger,
+table.pro.pro-grid-fixed tbody td > div > input,
+table.pro.pro-grid-fixed tbody td > div > select {
+  max-width: 100%;
+  text-overflow: ellipsis;
+}
+
 
 /* ============================================================ */
 /*                         HEADINGS                              */

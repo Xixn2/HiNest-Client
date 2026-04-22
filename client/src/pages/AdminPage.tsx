@@ -1047,8 +1047,8 @@ function DetailUserTable({
     { key: "workplace", label: "근무지", width: 90 },
     { key: "department", label: "부서", width: 110 },
     { key: "jobDuty", label: "직무", width: 110 },
-    { key: "name", label: "이름", width: 90 },
-    { key: "position", label: "직급", width: 110 },
+    { key: "name", label: "이름", width: 110 },
+    { key: "position", label: "직급", width: 140 },
     { key: "employmentType", label: "고용형태", width: 120 },
     { key: "employmentCategory", label: "고용유형", width: 120 },
     { key: "contractType", label: "계약형태", width: 130 },
@@ -1068,14 +1068,14 @@ function DetailUserTable({
     //   2) overflow-x-auto 로 테이블만 가로 스크롤
     //   3) -webkit-overflow-scrolling: touch 로 모바일 관성 스크롤
     <div className="w-full max-w-full overflow-x-auto overflow-y-visible" style={{ WebkitOverflowScrolling: "touch" }}>
-      <table className="pro pro-grid" style={{ minWidth: 2000 }}>
+      <table className="pro pro-grid pro-grid-fixed" style={{ minWidth: 2000, tableLayout: "fixed" }}>
         <thead>
           <tr>
             {fields.slice(0, 6).map((f) => (
               <th key={f.key as string} style={{ width: f.width, minWidth: f.width }}>{f.label}</th>
             ))}
-            <th style={{ width: 90, minWidth: 90 }}>이름</th>
-            <th style={{ width: 110, minWidth: 110 }}>직급</th>
+            <th style={{ width: 110, minWidth: 110 }}>이름</th>
+            <th style={{ width: 140, minWidth: 140 }}>직급</th>
             {fields.slice(8, 12).map((f) => (
               <th key={f.key as string} style={{ width: f.width, minWidth: f.width }}>{f.label}</th>
             ))}
@@ -1228,9 +1228,9 @@ function SelectCell({
     );
   }
   return (
-    <td className="p-0">
+    <td className="p-0" title={raw || undefined}>
       <select
-        className="w-full min-w-0 bg-transparent border-0 focus:bg-[color:var(--c-surface)] text-[color:var(--c-text)] focus:outline-none focus:ring-1 focus:ring-brand-400 rounded text-[12px] px-1 py-1.5"
+        className="w-full min-w-0 bg-transparent border-0 focus:bg-[color:var(--c-surface)] text-[color:var(--c-text)] focus:outline-none focus:ring-1 focus:ring-brand-400 rounded text-[12px] px-1 py-1.5 truncate"
         value={raw}
         onChange={(e) => onSelectChange(e.target.value)}
       >
@@ -1261,7 +1261,7 @@ function DetailCell({
   useEffect(() => { setV(String(raw)); }, [raw]);
 
   return (
-    <td className="p-0">
+    <td className="p-0" title={raw || undefined}>
       <input
         type={type ?? "text"}
         // padding 을 최소화해 좁은 컬럼에서도 10자 날짜가 잘리지 않도록.
