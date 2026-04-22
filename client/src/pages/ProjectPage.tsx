@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
 import ProjectCalendar from "../components/ProjectCalendar";
 import ProjectWebhooks from "../components/ProjectWebhooks";
+import ProjectQaList from "../components/ProjectQaList";
 import ProjectSettingsModal from "../components/ProjectSettingsModal";
 import DocumentsPage from "./DocumentsPage";
 
@@ -134,6 +135,10 @@ export default function ProjectPage() {
               team: m.user.team,
             }))}
           />
+        </div>
+
+        <div className="card">
+          <ProjectQaList projectId={id} />
         </div>
 
         <div className="card">

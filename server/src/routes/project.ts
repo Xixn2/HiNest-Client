@@ -336,6 +336,144 @@ router.get("/:id/webhook/:channelId/events", async (req, res) => {
   res.json({ events });
 });
 
+/* ---------------- QA 체크리스트 ---------------- */
+
+const QA_STATUS = ["OPEN", "PASSED", "FAILED", "SKIPPED"] as const;
+const QA_PRIORITY = ["LOW", "NORMAL", "HIGH"] as const;
+
+/** 프로젝트의 QA 항목 목록. 생성 순서 + sortOrder 기준 정렬. */
+router.get("/:id/qa", async (req, res) => {
+  const u = (req as any).user;
+  const ok = await assertProjectMember(req.params.id, u.id, u.role);
+  if (!ok) return res.status(403).json({ error: "forbidden" });
+  const items = await prisma.projectQaItem.findMany({
+    where: { projectId: req.params.id },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    take: 1000,
+  });
+  // 작성자/해결자 이름은 목록 쿼리를 가볍게 유지하려고 별도 조회 후 map.
+  const userIds = Array.from(
+    new Set(items.flatMap((i) => [i.createdById, i.resolvedById].filter(Boolean) as string[])),
+  );
+  const users = userIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, name: true, avatarColor: true },
+      })
+    : [];
+  const userMap = new Map(users.map((x) => [x.id, x]));
+  res.json({
+    items: items.map((i) => ({
+      ...i,
+      createdBy: userMap.get(i.createdById) ?? null,
+      resolvedBy: i.resolvedById ? userMap.get(i.resolvedById) ?? null : null,
+    })),
+  });
+});
+
+const qaCreateSchema = z.object({
+  title: z.string().min(1).max(200),
+  note: z.string().max(4000).optional().nullable(),
+  priority: z.enum(QA_PRIORITY).optional(),
+  status: z.enum(QA_STATUS).optional(),
+});
+
+router.post("/:id/qa", async (req, res) => {
+  const u = (req as any).user;
+  const ok = await assertProjectMember(req.params.id, u.id, u.role);
+  if (!ok) return res.status(403).json({ error: "forbidden" });
+  const parsed = qaCreateSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid input" });
+  const d = parsed.data;
+  // sortOrder 기본값은 현재 최댓값 + 1 — 새 항목이 기본 맨 아래에 붙도록.
+  const last = await prisma.projectQaItem.findFirst({
+    where: { projectId: req.params.id },
+    orderBy: { sortOrder: "desc" },
+    select: { sortOrder: true },
+  });
+  const nextOrder = (last?.sortOrder ?? 0) + 1;
+  const status = d.status ?? "OPEN";
+  const resolvedPatch =
+    status !== "OPEN"
+      ? { resolvedById: u.id, resolvedAt: new Date() }
+      : {};
+  const item = await prisma.projectQaItem.create({
+    data: {
+      projectId: req.params.id,
+      title: d.title,
+      note: d.note ?? null,
+      status,
+      priority: d.priority ?? "NORMAL",
+      sortOrder: nextOrder,
+      createdById: u.id,
+      ...resolvedPatch,
+    },
+  });
+  await writeLog(u.id, "PROJECT_QA_CREATE", item.id, d.title);
+  res.json({ item });
+});
+
+const qaPatchSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  note: z.string().max(4000).optional().nullable(),
+  priority: z.enum(QA_PRIORITY).optional(),
+  status: z.enum(QA_STATUS).optional(),
+  sortOrder: z.number().int().min(0).max(1_000_000).optional(),
+});
+
+router.patch("/:id/qa/:itemId", async (req, res) => {
+  const u = (req as any).user;
+  const ok = await assertProjectMember(req.params.id, u.id, u.role);
+  if (!ok) return res.status(403).json({ error: "forbidden" });
+  const parsed = qaPatchSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid input" });
+  const d = parsed.data;
+  const existing = await prisma.projectQaItem.findUnique({
+    where: { id: req.params.itemId },
+  });
+  if (!existing || existing.projectId !== req.params.id)
+    return res.status(404).json({ error: "not found" });
+
+  // 상태 전환 시 resolved 이력 스탬프 자동 관리.
+  //  - OPEN → PASSED/FAILED/SKIPPED : 현재 유저/시각 기록
+  //  - * → OPEN                      : 기록 초기화
+  //  - 같은 non-OPEN 상태로 재지정     : 이력 유지 (이미 누가 한 번 처리한 기록을 지우지 않음)
+  const statusPatch =
+    "status" in d
+      ? d.status === "OPEN"
+        ? { status: "OPEN", resolvedById: null, resolvedAt: null }
+        : existing.status === "OPEN"
+        ? { status: d.status!, resolvedById: u.id, resolvedAt: new Date() }
+        : { status: d.status! }
+      : {};
+
+  const item = await prisma.projectQaItem.update({
+    where: { id: req.params.itemId },
+    data: {
+      ...("title" in d ? { title: d.title! } : {}),
+      ...("note" in d ? { note: d.note ?? null } : {}),
+      ...("priority" in d ? { priority: d.priority! } : {}),
+      ...("sortOrder" in d ? { sortOrder: d.sortOrder! } : {}),
+      ...statusPatch,
+    },
+  });
+  res.json({ item });
+});
+
+router.delete("/:id/qa/:itemId", async (req, res) => {
+  const u = (req as any).user;
+  const ok = await assertProjectMember(req.params.id, u.id, u.role);
+  if (!ok) return res.status(403).json({ error: "forbidden" });
+  const existing = await prisma.projectQaItem.findUnique({
+    where: { id: req.params.itemId },
+  });
+  if (!existing || existing.projectId !== req.params.id)
+    return res.status(404).json({ error: "not found" });
+  await prisma.projectQaItem.delete({ where: { id: req.params.itemId } });
+  await writeLog(u.id, "PROJECT_QA_DELETE", req.params.itemId);
+  res.json({ ok: true });
+});
+
 /** 멤버 추가 — OWNER/MANAGER 만. OWNER 승격은 기존 OWNER 또는 ADMIN 만 가능. */
 router.post("/:id/member", async (req, res) => {
   const u = (req as any).user;

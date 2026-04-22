@@ -92,6 +92,33 @@ model Project {
   meetings    Meeting[]
   documents   Document[]
   folders     Folder[]
+  qaItems     ProjectQaItem[]
+}
+
+/// 프로젝트별 QA(테스트) 체크리스트 — "무엇을 검증했고 결과가 어땠는지" 남기는 용도.
+/// 기능 배포 전 점검 · 버그 재현/픽스 이력 · 수기 테스트 기록에 쓰임.
+model ProjectQaItem {
+  id           String    @id @default(cuid())
+  projectId    String
+  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title        String
+  /// 상세 메모 — 재현 스텝/기대 결과/비고 등 자유 서식
+  note         String?
+  /// OPEN | PASSED | FAILED | SKIPPED
+  status       String    @default("OPEN")
+  /// LOW | NORMAL | HIGH
+  priority     String    @default("NORMAL")
+  /// 리스트 수동 정렬용 — 값이 같으면 createdAt 기준.
+  sortOrder    Int       @default(0)
+  createdById  String
+  /// 상태를 OPEN → PASSED/FAILED/SKIPPED 로 바꾼 사람/시각 (감사 이력).
+  resolvedById String?
+  resolvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([projectId, status])
+  @@index([projectId, sortOrder])
 }
 
 /// 외부 서비스에서 들어오는 웹훅 이벤트를 받아 프로젝트 안 "채널"로 묶어 노출.
