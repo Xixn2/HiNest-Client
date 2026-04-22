@@ -254,6 +254,57 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
     }
   }
 
+  /**
+   * 드래그 앤 드롭으로 떨어진 파일을 곧장 업로드하고 문서로 등록한다.
+   * 모달을 여는 업로드 버튼 흐름과 달리 제목·설명·태그 없이 파일명 그대로 생성.
+   * scope 는 현재 보고 있는 공개범위 탭을 따르고(ALL/TEAM/PRIVATE), CUSTOM 은
+   * 사용자 선택이 필요하므로 드롭 업로드에선 ALL 로 내린다.
+   */
+  async function uploadAndCreate(file: File) {
+    if (file.size > 500 * 1024 * 1024) {
+      await alertAsync({ title: "파일 크기 초과", description: "파일은 500MB 이하만 업로드 가능해요" });
+      return;
+    }
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch("/api/upload/document", { method: "POST", body: form, credentials: "include" });
+    if (!res.ok) throw new Error((await res.json()).error);
+    const up = await res.json();
+    const fallbackScope: DocScope =
+      scopeTab === "team" ? "TEAM" : scopeTab === "private" ? "PRIVATE" : "ALL";
+    await api("/api/document", {
+      method: "POST",
+      json: {
+        title: file.name.replace(/\.[^.]+$/, ""),
+        description: "",
+        tags: "",
+        fileUrl: up.url,
+        fileName: up.name,
+        fileType: up.type,
+        fileSize: up.size,
+        folderId: currentFolder === "root" ? null : currentFolder,
+        scope: inProject ? undefined : fallbackScope,
+        projectId: activeProjectId ?? undefined,
+      },
+    });
+  }
+
+  const [dropActive, setDropActive] = useState(false);
+  async function handleFilesDropped(files: FileList) {
+    if (!files.length) return;
+    setUploading(true);
+    try {
+      const list = Array.from(files);
+      for (const f of list) {
+        try { await uploadAndCreate(f); }
+        catch (e: any) { await alertAsync({ title: `${f.name} 업로드 실패`, description: e?.message ?? "" }); }
+      }
+      await load();
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function createDoc(e: React.FormEvent) {
     e.preventDefault();
     if (submitting) return;
@@ -595,8 +646,34 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
         </div>
       )}
 
-      {/* 문서 리스트 */}
+      {/* 문서 리스트 — 파일을 이 영역에 드래그 앤 드롭하면 바로 현재 폴더/범위로 업로드. */}
       <div className="mb-2 text-[11px] font-extrabold text-ink-500 uppercase tracking-[0.08em]">문서</div>
+      <div
+        onDragOver={(e) => {
+          // 파일 드래그일 때만 반응 — 문서 row 재정렬 드래그는 제외.
+          if (!e.dataTransfer.types.includes("Files")) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+          if (!dropActive) setDropActive(true);
+        }}
+        onDragLeave={(e) => {
+          // 자식 요소로 넘어가는 이벤트 무시 — relatedTarget 이 컨테이너 내부면 유지.
+          if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+          setDropActive(false);
+        }}
+        onDrop={(e) => {
+          if (!e.dataTransfer.types.includes("Files")) return;
+          e.preventDefault();
+          setDropActive(false);
+          if (e.dataTransfer.files?.length) void handleFilesDropped(e.dataTransfer.files);
+        }}
+        className={`relative rounded-2xl transition ${dropActive ? "ring-2 ring-brand-400 ring-offset-2 ring-offset-[color:var(--c-bg)]" : ""}`}
+      >
+        {dropActive && (
+          <div className="pointer-events-none absolute inset-0 z-10 rounded-2xl bg-brand-500/10 border-2 border-dashed border-brand-400 grid place-items-center">
+            <div className="text-[13px] font-bold text-brand-700">여기에 놓으면 업로드돼요</div>
+          </div>
+        )}
       {docs.length === 0 ? (
         <div className="panel py-14 text-center">
           <div className="mx-auto w-12 h-12 rounded-2xl bg-ink-100 grid place-items-center mb-3">
@@ -605,7 +682,7 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
             </svg>
           </div>
           <div className="text-[13px] font-bold text-ink-800">문서가 없어요</div>
-          <div className="text-[12px] text-ink-500 mt-1">우측 상단 "문서 업로드" 버튼으로 첫 문서를 추가해보세요.</div>
+          <div className="text-[12px] text-ink-500 mt-1">우측 상단 "문서 업로드" 버튼을 누르거나 파일을 이 영역으로 끌어다 놓아보세요.</div>
         </div>
       ) : (
         <div className="panel p-0 overflow-hidden overflow-x-auto">
@@ -704,6 +781,7 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
           </table>
         </div>
       )}
+      </div>
 
       {creating === "folder" && (
         <div className="fixed inset-0 bg-ink-900/40 grid place-items-center p-4 z-50" onClick={() => setCreating(null)}>
