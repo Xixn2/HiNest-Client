@@ -33,6 +33,7 @@ type ActiveRoomInfo = {
   title: string;
   subtitle: string;
   color: string;
+  imageUrl?: string | null;
   onBack: () => void;
   onTitleClick?: () => void;
   isSettings?: boolean;
@@ -428,13 +429,18 @@ function RoomHeader({ info }: { info: ActiveRoomInfo }) {
         <div
           style={{
             width: 38, height: 38, borderRadius: "50%",
-            background: info.color, color: "#fff",
-            display: "grid", placeItems: "center",
-            fontSize: 15, fontWeight: 700, flexShrink: 0,
-            letterSpacing: "-0.02em",
+            background: info.imageUrl ? "transparent" : info.color,
+            color: "#fff", position: "relative", overflow: "hidden",
+            flexShrink: 0,
           }}
         >
-          {info.title?.[0] ?? "?"}
+          {info.imageUrl ? (
+            <img src={info.imageUrl} alt={info.title} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+          ) : (
+            <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em" }}>
+              {info.title?.[0] ?? "?"}
+            </div>
+          )}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div

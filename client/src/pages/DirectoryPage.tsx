@@ -242,14 +242,13 @@ function MyProfileHero({
         style={{ background: `linear-gradient(90deg, ${me.avatarColor ?? "#3D54C4"}, ${me.avatarColor ?? "#3D54C4"}80)` }}
       />
       <div className="relative flex items-center gap-5 p-5">
-        <div
-          className="w-16 h-16 rounded-full grid place-items-center text-white text-[22px] font-extrabold flex-shrink-0 shadow-pop overflow-hidden"
-          style={{ background: me.avatarUrl ? "transparent" : (me.avatarColor ?? "#3D54C4"), letterSpacing: "-0.03em" }}
-        >
+        <div className="w-16 h-16 rounded-full flex-shrink-0 shadow-pop overflow-hidden relative" style={{ background: me.avatarUrl ? "transparent" : (me.avatarColor ?? "#3D54C4") }}>
           {me.avatarUrl ? (
-            <img src={me.avatarUrl} alt={me.name} className="w-full h-full object-cover" />
+            <img src={me.avatarUrl} alt={me.name} className="absolute inset-0 w-full h-full object-cover" />
           ) : (
-            me.name[0]
+            <div className="absolute inset-0 grid place-items-center text-white text-[22px] font-extrabold" style={{ letterSpacing: "-0.03em" }}>
+              {me.name[0]}
+            </div>
           )}
         </div>
         <div className="flex-1 min-w-0">
@@ -301,15 +300,16 @@ function GridCard({
         className="h-14 relative"
         style={{ background: `linear-gradient(135deg, ${u.avatarColor ?? "#3D54C4"}22, ${u.avatarColor ?? "#3D54C4"}0a)` }}
       >
-        <div
-          className="absolute bottom-0 left-4 translate-y-1/2 w-12 h-12 rounded-full grid place-items-center text-white text-[16px] font-extrabold shadow-pop"
-          style={{ background: u.avatarUrl ? "transparent" : (u.avatarColor ?? "#3D54C4"), letterSpacing: "-0.02em" }}
-        >
-          {u.avatarUrl ? (
-            <img src={u.avatarUrl} alt={u.name} className="w-full h-full object-cover rounded-full" />
-          ) : (
-            u.name[0]
-          )}
+        <div className="absolute bottom-0 left-4 translate-y-1/2 w-12 h-12 shadow-pop">
+          <div className="absolute inset-0 rounded-full overflow-hidden" style={{ background: u.avatarUrl ? "transparent" : (u.avatarColor ?? "#3D54C4") }}>
+            {u.avatarUrl ? (
+              <img src={u.avatarUrl} alt={u.name} className="absolute inset-0 w-full h-full object-cover" />
+            ) : (
+              <div className="absolute inset-0 grid place-items-center text-white text-[16px] font-extrabold" style={{ letterSpacing: "-0.02em" }}>
+                {u.name[0]}
+              </div>
+            )}
+          </div>
           <PresenceDot u={u} size={14} ring={2} />
         </div>
       </div>
@@ -381,15 +381,16 @@ function ListRow({ u, onDM, divider, dmBusy }: { u: DirectoryUser; onDM: () => v
         divider ? "border-b border-ink-100" : ""
       }`}
     >
-      <div
-        className="relative w-10 h-10 rounded-full grid place-items-center text-white text-[13px] font-extrabold flex-shrink-0"
-        style={{ background: u.avatarUrl ? "transparent" : (u.avatarColor ?? "#3D54C4"), letterSpacing: "-0.02em" }}
-      >
-        {u.avatarUrl ? (
-          <img src={u.avatarUrl} alt={u.name} className="w-full h-full object-cover rounded-full" />
-        ) : (
-          u.name[0]
-        )}
+      <div className="relative w-10 h-10 flex-shrink-0">
+        <div className="absolute inset-0 rounded-full overflow-hidden" style={{ background: u.avatarUrl ? "transparent" : (u.avatarColor ?? "#3D54C4") }}>
+          {u.avatarUrl ? (
+            <img src={u.avatarUrl} alt={u.name} className="absolute inset-0 w-full h-full object-cover" />
+          ) : (
+            <div className="absolute inset-0 grid place-items-center text-white text-[13px] font-extrabold" style={{ letterSpacing: "-0.02em" }}>
+              {u.name[0]}
+            </div>
+          )}
+        </div>
         <PresenceDot u={u} size={12} ring={2} />
       </div>
       <div className="min-w-0 flex-1 md:w-[28%] md:flex-initial">
