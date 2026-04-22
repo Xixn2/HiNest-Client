@@ -86,7 +86,13 @@ export default function SuperStepUpGate({ children }: { children: React.ReactNod
   }, [session?.active, session?.expiresAt]);
 
   useEffect(() => {
-    if (!checking && !session?.active) setTimeout(() => pwRef.current?.focus(), 80);
+    if (checking || session?.active) return;
+    // 80ms 지연은 모달이 마운트되며 슬라이드-인 하는 동안 포커스 이동이 동시에 일어나
+    // iOS Safari 에서 키보드가 올라오다 말고 취소되는 현상 회피용.
+    // 언마운트/세션변화로 effect 가 다시 돌 때 이전 타이머를 정리하지 않으면
+    // 포커스가 사라진 input 에 .focus() 를 호출해 조용히 실패함.
+    const t = setTimeout(() => pwRef.current?.focus(), 80);
+    return () => clearTimeout(t);
   }, [checking, session?.active]);
 
   async function submitPassword(e: React.FormEvent) {
@@ -595,6 +601,7 @@ function PasskeyPanel({
               placeholder="기기 이름 (예: 내 맥북)"
               value={deviceName}
               onChange={(e) => setDeviceName(e.target.value)}
+              maxLength={40}
             />
             <button className="btn-primary" onClick={register} disabled={loading}>
               {loading ? "등록 중…" : "이 기기 등록"}
