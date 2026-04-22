@@ -76,12 +76,21 @@ router.post("/", async (req, res) => {
   const reviewers = Array.from(new Set(d.reviewerIds.filter((id) => id !== u.id)));
   if (!reviewers.length) return res.status(400).json({ error: "결재자를 1명 이상 선택해주세요" });
 
+  // d.data 는 z.any() 라 서버에서 다시 한 번 크기 제한. 결재 양식별 폼 JSON
+  // (출장 지역/경비 등) 이 들어가는 자리라 수 KB 면 충분. 전역 json limit(2mb)
+  // 안이라도 DB 단에서 수 MB 레코드는 쓰기/조회 비용을 부풀리므로 16KB 로 컷.
+  let dataJson: string | null = null;
+  if (d.data !== undefined && d.data !== null) {
+    const serialized = JSON.stringify(d.data);
+    dataJson = serialized.length > 16_000 ? serialized.slice(0, 16_000) : serialized;
+  }
+
   const approval = await prisma.approval.create({
     data: {
       type: d.type,
       title: d.title,
       content: d.content,
-      data: d.data ? JSON.stringify(d.data) : null,
+      data: dataJson,
       startDate: d.startDate ? new Date(d.startDate) : null,
       endDate: d.endDate ? new Date(d.endDate) : null,
       amount: d.amount,
