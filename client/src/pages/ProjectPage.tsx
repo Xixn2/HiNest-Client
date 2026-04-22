@@ -140,6 +140,7 @@ export default function ProjectPage() {
         <div className="card">
           <ProjectQaList
             projectId={id}
+            currentUserId={user?.id ?? null}
             members={members.map((m) => ({
               id: m.user.id,
               name: m.user.name,
