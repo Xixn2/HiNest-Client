@@ -3,7 +3,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { useNotifications } from "../notifications";
 import { resolvePresence } from "../lib/presence";
-import { alertAsync } from "./ConfirmHost";
+import { alertAsync, confirmAsync } from "./ConfirmHost";
 import {
   C,
   FONT,
@@ -455,6 +455,34 @@ export default function ChatMiniApp({
     }
   }
 
+  /**
+   * 메시지 삭제(소프트). 본인이 보낸 메시지만.
+   * 확인 → 낙관적으로 deletedAt 설정 → DELETE 호출.
+   * 서버는 chat:update(kind:"delete") 로 나머지 멤버에 브로드캐스트 → 모두 "삭제된 메시지" 로 대체.
+   */
+  async function deleteMessage(messageId: string) {
+    const ok = await confirmAsync({
+      title: "메시지 삭제",
+      description: "이 메시지를 삭제할까요?\n삭제하면 '삭제된 메시지' 로 표시됩니다.",
+      confirmLabel: "삭제",
+      cancelLabel: "취소",
+      tone: "danger",
+    });
+    if (!ok) return;
+
+    // 낙관적 — deletedAt 을 즉시 세팅해 UI 를 "삭제된 메시지" 로 교체.
+    const now = new Date().toISOString();
+    setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, deletedAt: now } : m)));
+    try {
+      await api(`/api/chat/messages/${messageId}`, { method: "DELETE" });
+      // SSE chat:update(kind:"delete") 로 다른 탭/유저 동기화.
+    } catch (e: any) {
+      // 실패 시 서버 상태로 복구
+      if (activeId) loadMessages(activeId, { full: true });
+      await alertAsync({ title: "삭제 실패", description: e?.message || "메시지를 삭제하지 못했습니다." });
+    }
+  }
+
   async function send() {
     if (!activeId || sending) return;
     const content = input.trim();
@@ -586,6 +614,7 @@ export default function ChatMiniApp({
           onRemoveAttachment={removeAttachmentAt}
           onReact={reactToMessage}
           onPin={pinMessage}
+          onDelete={deleteMessage}
           readStates={readStates}
           presenceMap={presenceMap}
         />
@@ -1298,8 +1327,13 @@ function SettingsView({
   );
 }
 
-/* 메시지 컨텍스트 메뉴 액션 빌드 — 복사 / 다운로드(파일) / 고정(토글) */
-function buildMessageActions(m: Message, onPin: (id: string) => void): MessageAction[] {
+/* 메시지 컨텍스트 메뉴 액션 빌드 — 복사 / 다운로드(파일) / 고정(토글) / 삭제(본인만) */
+function buildMessageActions(
+  m: Message,
+  mine: boolean,
+  onPin: (id: string) => void,
+  onDelete: (id: string) => void,
+): MessageAction[] {
   const actions: MessageAction[] = [];
 
   // 복사 — 텍스트는 본문, 파일은 파일명을 복사(없으면 본문)
@@ -1340,13 +1374,24 @@ function buildMessageActions(m: Message, onPin: (id: string) => void): MessageAc
     onSelect: () => onPin(m.id),
   });
 
+  // 삭제 — 본인이 보낸 메시지 한정. 삭제 시 "삭제된 메시지" 자리표시로 대체.
+  if (mine) {
+    actions.push({
+      key: "delete",
+      label: "삭제",
+      icon: ActionIcons.trash,
+      danger: true,
+      onSelect: () => onDelete(m.id),
+    });
+  }
+
   return actions;
 }
 
 /* ======================= 대화방 ======================= */
 function RoomView({
   room, messages, meId, onBack, input, setInput, onSend, sending, scrollRef,
-  attachments, uploading, onPickFile, onRemoveAttachment, onReact, onPin, readStates, presenceMap,
+  attachments, uploading, onPickFile, onRemoveAttachment, onReact, onPin, onDelete, readStates, presenceMap,
 }: {
   room: Room; messages: Message[]; meId: string; onBack: () => void;
   input: string; setInput: (v: string) => void; onSend: () => void; sending: boolean;
@@ -1355,6 +1400,7 @@ function RoomView({
   onPickFile: (file: File) => void; onRemoveAttachment: (index: number) => void;
   onReact: (messageId: string, emoji: string) => void;
   onPin: (messageId: string) => void;
+  onDelete: (messageId: string) => void;
   readStates: { userId: string; lastReadAt: string | null }[];
   presenceMap: Record<string, { presenceStatus: string | null; workStatus: string | null; presenceMessage: string | null }>;
 }) {
@@ -1708,7 +1754,7 @@ function RoomView({
                       onPick={(e) => { onReact(m.id, e); setReactingId(null); }}
                       onDismiss={() => setReactingId(null)}
                       header={formatDetailed(new Date(m.createdAt))}
-                      actions={buildMessageActions(m, onPin)}
+                      actions={buildMessageActions(m, mine, onPin, onDelete)}
                     />
                   </div>
                 )}
