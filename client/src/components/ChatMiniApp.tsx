@@ -55,6 +55,7 @@ export default function ChatMiniApp({
     title: string;
     subtitle: string;
     color: string;
+    imageUrl?: string | null;
     onBack: () => void;
     onTitleClick?: () => void;
     isSettings?: boolean;
@@ -331,6 +332,7 @@ export default function ChatMiniApp({
         title,
         subtitle,
         color: roomColor(activeRoomObj, user?.id ?? ""),
+        imageUrl: roomImageUrl(activeRoomObj, user?.id ?? ""),
         onBack: showSettings
           ? () => setShowSettings(false)
           : () => { setActiveId(null); setMessages([]); setShowSettings(false); },

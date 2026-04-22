@@ -128,12 +128,14 @@ export default function OrgChartPage() {
             <div className="divide-y divide-ink-100">
               {members.map((u) => (
                 <div key={u.id} className="group flex items-center gap-3 px-4 py-2.5 hover:bg-ink-25">
-                  <div className="w-9 h-9 rounded-full grid place-items-center text-white text-[13px] font-extrabold flex-shrink-0 overflow-hidden"
-                    style={{ background: u.avatarUrl ? "transparent" : (u.avatarColor ?? "#3D54C4"), letterSpacing: "-0.02em" }}>
+                  <div className="w-9 h-9 rounded-full overflow-hidden relative flex-shrink-0"
+                    style={{ background: u.avatarUrl ? "transparent" : (u.avatarColor ?? "#3D54C4") }}>
                     {u.avatarUrl ? (
-                      <img src={u.avatarUrl} alt={u.name} className="w-full h-full object-cover" />
+                      <img src={u.avatarUrl} alt={u.name} className="absolute inset-0 w-full h-full object-cover" />
                     ) : (
-                      u.name[0]
+                      <div className="absolute inset-0 grid place-items-center text-white text-[13px] font-extrabold" style={{ letterSpacing: "-0.02em" }}>
+                        {u.name[0]}
+                      </div>
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
