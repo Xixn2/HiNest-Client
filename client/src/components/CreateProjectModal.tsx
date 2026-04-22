@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 
@@ -103,9 +104,12 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
     }
   }
 
-  return (
+  // 모달은 document.body 에 포털로 띄움. 사이드바(aside) 가 transition-transform 으로
+      // 자체 containing block 을 만들면서, 그 안에서 fixed 가 뷰포트가 아닌 사이드바(232px)
+      // 에 고정되어 모바일에서 모달이 사이드바 폭 안으로 찌그러지는 버그가 있었음.
+  return createPortal(
     <div
-      className="fixed inset-0 bg-slate-900/40 grid place-items-center p-4 z-50"
+      className="fixed inset-0 bg-slate-900/40 grid place-items-center p-4 z-[100]"
       onClick={onClose}
     >
       <div
@@ -203,6 +207,7 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
