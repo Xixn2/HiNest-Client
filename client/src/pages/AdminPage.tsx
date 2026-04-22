@@ -424,8 +424,8 @@ function UsersTab({
               </button>
             ))}
           </div>
+          {/* 엑셀 일괄 업로드 — 내부 검토중이라 일단 비노출. 다시 열 땐 이 블록 주석 해제.
           <span className="mx-1 h-4 w-px bg-ink-200" />
-          {/* 엑셀 업로드 — 숨겨진 file input + 트리거 */}
           <label
             className="btn-ghost !h-[32px] !px-3 text-[12px] cursor-pointer"
             title="엑셀(.xlsx) 파일로 HR 정보 일괄 업데이트 (email/사번/HR번호 기준 매칭)"
@@ -438,6 +438,7 @@ function UsersTab({
               onChange={(e) => handleImport(e, reload)}
             />
           </label>
+          */}
           <span className="mx-1 h-4 w-px bg-ink-200" />
           {/* 현재 필터/검색 결과 기준으로 내보내기 — 권한/상태는 앱 UI 전용이므로 제외. */}
           <button
