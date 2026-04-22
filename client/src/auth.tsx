@@ -52,6 +52,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       method: "POST",
       json: { email, password },
     });
+    // 토큰 만료 후 logout 을 거치지 않고 다른 계정으로 재로그인할 때 이전 사용자 캐시가
+    // 섬광처럼 보이는 것을 방지. logout 에서와 동일하게 세션 캐시를 싹 비움.
+    clearApiCache();
     setUser(res.user);
   };
 
@@ -60,6 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       method: "POST",
       json: d,
     });
+    clearApiCache();
     setUser(res.user);
   };
 
