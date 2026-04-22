@@ -747,12 +747,12 @@ function UserDetailEditModal({
             </Field>
             <Field label="고용유형"><input className="input" value={form.employmentCategory} onChange={(e) => set("employmentCategory", e.target.value)} placeholder="유기계약" maxLength={500} /></Field>
             <Field label="계약형태"><input className="input" value={form.contractType} onChange={(e) => set("contractType", e.target.value)} placeholder="기간제" maxLength={500} /></Field>
-            <Field label="입사일"><input type="date" className="input" value={form.hireDate} onChange={(e) => set("hireDate", e.target.value)} /></Field>
+            <Field label="입사일"><DatePicker value={form.hireDate} onChange={(v) => set("hireDate", v)} /></Field>
           </Section>
 
           <Section title="개인 정보">
             <Field label="이름"><input className="input" value={form.name} onChange={(e) => set("name", e.target.value)} maxLength={200} /></Field>
-            <Field label="생년월일"><input type="date" className="input" value={form.birthDate} onChange={(e) => set("birthDate", e.target.value)} /></Field>
+            <Field label="생년월일"><DatePicker value={form.birthDate} onChange={(v) => set("birthDate", v)} /></Field>
             <Field label="성별">
               <select className="input" value={form.gender} onChange={(e) => set("gender", e.target.value)}>
                 <option value="">(없음)</option>
@@ -1224,7 +1224,7 @@ function AttendanceEditModal({
         <div className="space-y-3">
           <div>
             <label className="field-label">날짜</label>
-            <input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} />
+            <DatePicker value={date} onChange={(v) => setDate(v)} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
