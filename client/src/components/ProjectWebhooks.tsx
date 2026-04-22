@@ -44,10 +44,15 @@ export default function ProjectWebhooks({ projectId }: { projectId: string }) {
       onFresh: (r) => {
         setChannels(r.channels);
         setLoaded(true);
-        if (selected) {
-          const still = r.channels.find((c) => c.id === selected.id);
-          if (!still) setSelected(null);
-        }
+        // 이전 구현은 클로저 캡처된 `selected` 를 참조해, 사용자가 load() 중에
+        // 다른 채널을 클릭하면 엉뚱한 채널 기준으로 유효성 체크를 함.
+        // 함수형 업데이트로 항상 최신 selected 를 사용하고, 채널이 리네임/토큰재발급
+        // 등으로 바뀌었으면 fresh 레코드로 교체(스태일 데이터 방지).
+        setSelected((cur) => {
+          if (!cur) return cur;
+          const fresh = r.channels.find((c) => c.id === cur.id);
+          return fresh ?? null;
+        });
       },
     });
   }
@@ -258,6 +263,7 @@ export default function ProjectWebhooks({ projectId }: { projectId: string }) {
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="예: GitHub 배포 알림"
+                  maxLength={60}
                   required
                 />
               </div>
@@ -268,6 +274,7 @@ export default function ProjectWebhooks({ projectId }: { projectId: string }) {
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   placeholder="이 채널이 어떤 이벤트를 받는지 메모"
+                  maxLength={200}
                 />
               </div>
               <div>
