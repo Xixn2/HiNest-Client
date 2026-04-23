@@ -7,99 +7,107 @@ datasource db {
   provider = "postgresql"
   // RDS 로 이전한 뒤부터는 pgBouncer 가 없어서 런타임/마이그레이션 모두 동일 URL 사용.
   // 과거 Supabase 때는 directUrl 로 pgBouncer 우회 포트(5432) 를 따로 지정했었음.
-  url = env("DATABASE_URL")
+  url      = env("DATABASE_URL")
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String
-  passwordHash String
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  name               String
+  passwordHash       String
   // 총관리자 전용 step-up 비밀번호 (일반 로그인 비밀번호와 분리).
   // null 이면 일반 비밀번호로 fallback (초기 설정용).
-  superPasswordHash String?
-  role         String   @default("MEMBER") // ADMIN | MANAGER | MEMBER
-  superAdmin   Boolean  @default(false)    // 최상위 관리자 - DM/팀 채팅 감사 권한 보유
-  position     String?  // 사원/대리/과장/팀장/이사 등
-  team         String?
-  active       Boolean  @default(true)
+  superPasswordHash  String?
+  role               String    @default("MEMBER") // ADMIN | MANAGER | MEMBER
+  superAdmin         Boolean   @default(false) // 최상위 관리자 - DM/팀 채팅 감사 권한 보유
+  position           String? // 사원/대리/과장/팀장/이사 등
+  team               String?
+  active             Boolean   @default(true)
   // 퇴사일 — 관리자가 "퇴사 처리" 하면 set. 동시에 active=false 로 로그인 차단.
   // null 이면 재직 중. 날짜(YYYY-MM-DD) 가 아니라 DateTime 으로 두어 정렬/기간 조회 편의성 확보.
-  resignedAt   DateTime?
-  avatarColor  String   @default("#36D7B7")
+  resignedAt         DateTime?
+  avatarColor        String    @default("#36D7B7")
   /// 업로드된 프로필 이미지 URL. null 이면 avatarColor + 이니셜 fallback.
-  avatarUrl    String?
+  avatarUrl          String?
   // HR 상세 (엑셀 업/다운로드용) — 모두 선택값.
-  hrCode             String?  // HR번호 (daiso_worker46 등)
-  affiliation        String?  // 소속 (예: 다이소)
-  employeeNo         String?  // 사번 (AD6156258 등)
-  workplace          String?  // 근무지 (본사/지점 등)
-  department         String?  // 부서 (team 과 별개로 유지)
-  jobDuty            String?  // 직무
-  employmentType     String?  // 고용형태 (정규직/계약직)
-  employmentCategory String?  // 고용유형 (유기계약 등)
-  contractType       String?  // 계약형태 (기간제 등)
-  birthDate          String?  // 생년월일 YYYY-MM-DD
-  gender             String?  // 남/여
-  disabilityType     String?  // 장애유형
-  disabilityLevel    String?  // 장애정도 (중증/경증)
-  hireDate           String?  // 입사일 YYYY-MM-DD
-  phone              String?  // 전화번호
-  note               String?  // 비고
+  hrCode             String? // HR번호 (daiso_worker46 등)
+  affiliation        String? // 소속 (예: 다이소)
+  employeeNo         String? // 사번 (AD6156258 등)
+  workplace          String? // 근무지 (본사/지점 등)
+  department         String? // 부서 (team 과 별개로 유지)
+  jobDuty            String? // 직무
+  employmentType     String? // 고용형태 (정규직/계약직)
+  employmentCategory String? // 고용유형 (유기계약 등)
+  contractType       String? // 계약형태 (기간제 등)
+  birthDate          String? // 생년월일 YYYY-MM-DD
+  gender             String? // 남/여
+  disabilityType     String? // 장애유형
+  disabilityLevel    String? // 장애정도 (중증/경증)
+  hireDate           String? // 입사일 YYYY-MM-DD
+  phone              String? // 전화번호
+  note               String? // 비고
   // 자동 퇴근 시간 ("HH:mm", Asia/Seoul 기준).
   // 설정돼있으면 매일 이 시간이 됐을 때 오늘 출근 기록(checkIn 존재, checkOut null)에 대해
   // 서버 스케줄러가 checkOut 을 그 시각으로 기록한다. null 이면 자동 퇴근 없음.
   autoClockOutTime   String?
   // 사용자 업무 상태 — AVAILABLE(근무중) | MEETING | MEAL | OUT | OFFLINE | AWAY
   // null 이면 attendance 기준으로 "출근/퇴근/미출근" 자동 판정
-  presenceStatus    String?
-  presenceMessage   String?
-  presenceUpdatedAt DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  presenceStatus     String?
+  presenceMessage    String?
+  presenceUpdatedAt  DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  inviteKey    InviteKey? @relation("UsedKey")
-  events       Event[]
-  leaves       Leave[]
-  attendances  Attendance[]
-  journals     Journal[]
-  notices      Notice[]
-  messagesSent ChatMessage[]    @relation("Sender")
-  memberships  RoomMember[]
-  logs         AuditLog[]
-  cardExpenses CardExpense[]
-  notifications Notification[]
-  documents    Document[]       @relation("DocumentAuthor")
-  approvalsRequested Approval[] @relation("ApprovalRequester")
-  approvalReviews    ApprovalStep[] @relation("ApprovalReviewer")
-  passkeys     Passkey[]
-  desktopBios  DesktopBiometric[]
-  reactions    MessageReaction[]
-  projects     ProjectMember[]
-  projectsCreated Project[] @relation("ProjectCreator")
-  meetings     Meeting[]        @relation("MeetingAuthor")
-  meetingViews MeetingViewer[]
+  inviteKey             InviteKey?             @relation("UsedKey")
+  events                Event[]
+  leaves                Leave[]
+  attendances           Attendance[]
+  journals              Journal[]
+  notices               Notice[]
+  messagesSent          ChatMessage[]          @relation("Sender")
+  memberships           RoomMember[]
+  logs                  AuditLog[]
+  cardExpenses          CardExpense[]
+  notifications         Notification[]
+  documents             Document[]             @relation("DocumentAuthor")
+  approvalsRequested    Approval[]             @relation("ApprovalRequester")
+  approvalReviews       ApprovalStep[]         @relation("ApprovalReviewer")
+  passkeys              Passkey[]
+  desktopBios           DesktopBiometric[]
+  reactions             MessageReaction[]
+  projects              ProjectMember[]
+  projectsCreated       Project[]              @relation("ProjectCreator")
+  meetings              Meeting[]              @relation("MeetingAuthor")
+  meetingViews          MeetingViewer[]
+  noticeReactions       NoticeReaction[]
+  pins                  Pin[]
+  notifPref             NotificationPref?
+  approvalLineFavorites ApprovalLineFavorite[]
+  approvalComments      ApprovalComment[]
+  meetingRevisions      MeetingRevision[]
+  documentRevisions     DocumentRevision[]
+  shareLinksCreated     DocumentShareLink[]    @relation("ShareLinkCreator")
 }
 
 /// 팀/프로젝트 — 사이드바 "팀" 카테고리 아래에 자신이 참여중인 프로젝트가 표시됨.
 /// 멤버는 ProjectMember 로 연결, 생성자는 자동으로 OWNER 로 들어감.
 model Project {
-  id          String           @id @default(cuid())
-  name        String
-  description String?
-  color       String           @default("#3B5CF0")
-  status      String           @default("ACTIVE") // ACTIVE | ARCHIVED
-  createdById String
-  createdBy   User             @relation("ProjectCreator", fields: [createdById], references: [id], onDelete: Cascade)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  members     ProjectMember[]
-  events      ProjectEvent[]
-  webhooks    WebhookChannel[]
-  meetings    Meeting[]
-  documents   Document[]
-  folders     Folder[]
-  qaItems     ProjectQaItem[]
+  id             String           @id @default(cuid())
+  name           String
+  description    String?
+  color          String           @default("#3B5CF0")
+  status         String           @default("ACTIVE") // ACTIVE | ARCHIVED
+  createdById    String
+  createdBy      User             @relation("ProjectCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  members        ProjectMember[]
+  events         ProjectEvent[]
+  webhooks       WebhookChannel[]
+  meetings       Meeting[]
+  documents      Document[]
+  folders        Folder[]
+  qaItems        ProjectQaItem[]
   // 전사 캘린더(Event) 중 이 프로젝트 범위로 공유된 일정
   scheduleEvents Event[]
 }
@@ -132,7 +140,7 @@ model ProjectQaItem {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  attachments  ProjectQaAttachment[]
+  attachments ProjectQaAttachment[]
 
   @@index([projectId, status])
   @@index([projectId, sortOrder])
@@ -142,20 +150,20 @@ model ProjectQaItem {
 /// QA 항목에 첨부된 이미지/영상/파일. 업로드는 공용 `/api/upload` 를 거쳐
 /// 반환된 url/metadata 를 그대로 이 레코드에 저장해둠.
 model ProjectQaAttachment {
-  id         String   @id @default(cuid())
-  qaItemId   String
-  qaItem    ProjectQaItem @relation(fields: [qaItemId], references: [id], onDelete: Cascade)
+  id           String        @id @default(cuid())
+  qaItemId     String
+  qaItem       ProjectQaItem @relation(fields: [qaItemId], references: [id], onDelete: Cascade)
   /// 업로드 후 내려받을 수 있는 URL (`/uploads/<key>` 형식)
-  url        String
+  url          String
   /// 원본 파일명 (한글 포함)
-  name       String
+  name         String
   /// MIME 타입 — 썸네일/재생 분기에 쓰임
-  mimeType   String
-  sizeBytes  Int
+  mimeType     String
+  sizeBytes    Int
   /// IMAGE | VIDEO | FILE — 클라이언트 렌더 분기 편의를 위해 사전 계산해 저장
-  kind       String
+  kind         String
   uploadedById String
-  createdAt  DateTime @default(now())
+  createdAt    DateTime      @default(now())
 
   @@index([qaItemId, createdAt])
 }
@@ -163,26 +171,26 @@ model ProjectQaAttachment {
 /// 외부 서비스에서 들어오는 웹훅 이벤트를 받아 프로젝트 안 "채널"로 묶어 노출.
 /// token 은 URL 경로에 들어가 비밀 키 역할 — 외부로 노출되므로 rotate 가능하게 저장.
 model WebhookChannel {
-  id          String   @id @default(cuid())
-  projectId   String
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  name        String
-  description String?
-  color       String   @default("#6366F1")
+  id            String         @id @default(cuid())
+  projectId     String
+  project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name          String
+  description   String?
+  color         String         @default("#6366F1")
   /// URL 경로용 secret token — `/api/webhook/:token` 로 외부에서 POST
-  token       String   @unique
+  token         String         @unique
   /// (선택) HMAC-SHA256 서명 검증용 시크릿. 지정 시 요청에 반드시 X-Signature: sha256=<hex>
   /// 가 있어야 수락. raw body 기준으로 서명.
   signingSecret String?
-  createdById String
-  createdAt   DateTime @default(now())
-  events      WebhookEvent[]
+  createdById   String
+  createdAt     DateTime       @default(now())
+  events        WebhookEvent[]
 
   @@index([projectId])
 }
 
 model WebhookEvent {
-  id         String   @id @default(cuid())
+  id         String         @id @default(cuid())
   channelId  String
   channel    WebhookChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
   /// 추출된 제목 — 기본은 payload.title / payload.subject / payload.text 첫줄.
@@ -193,7 +201,7 @@ model WebhookEvent {
   rawPayload String
   /// 요청 발신 IP (X-Forwarded-For 우선)
   sourceIp   String?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime       @default(now())
 
   @@index([channelId, createdAt])
 }
@@ -213,25 +221,25 @@ model ProjectMember {
 
 /// 프로젝트 전용 일정 — 회사 전체 일정(Event) 과 분리. 월/주/일 뷰에서 쓰임.
 model ProjectEvent {
-  id          String   @id @default(cuid())
-  projectId   String
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  title       String
-  description String?
-  startAt     DateTime
-  endAt       DateTime
-  allDay      Boolean  @default(false)
-  color       String   @default("#3B5CF0")
+  id            String    @id @default(cuid())
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title         String
+  description   String?
+  startAt       DateTime
+  endAt         DateTime
+  allDay        Boolean   @default(false)
+  color         String    @default("#3B5CF0")
   // 담당자 userId 콤마 구분 — 해당 프로젝트 멤버에 한해 선택.
-  assigneeIds String?
+  assigneeIds   String?
   /// 완료 여부. UI 에서 체크박스로 토글.
   /// completedAt/completedById 는 completed=true 로 전환 시 자동 기록 — 누가 언제 완료했는지 감사용.
   completed     Boolean   @default(false)
   completedAt   DateTime?
   completedById String?
-  createdById String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdById   String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([projectId, startAt])
 }
@@ -239,12 +247,12 @@ model ProjectEvent {
 /// Electron 데스크톱 앱에서 OS Touch ID 로 총관리자 잠금 해제할 수 있게 등록된 기기.
 /// Chromium WebAuthn 이 Electron 에서 플랫폼 인증기를 노출하지 않기 때문에 별도 관리.
 model DesktopBiometric {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  deviceId   String   // Electron 이 userData 폴더에 생성한 안정적인 기기 UUID
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId   String // Electron 이 userData 폴더에 생성한 안정적인 기기 UUID
   deviceName String?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime  @default(now())
   lastUsedAt DateTime?
 
   @@unique([userId, deviceId])
@@ -294,7 +302,7 @@ model Event {
   projectId     String?
   project       Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
   category      String   @default("OTHER") // MEETING | DEADLINE | OUT | HOLIDAY | EVENT | BIRTHDAY | TASK | OTHER
-  targetUserIds String?  // comma separated userIds (scope=TARGETED or mention targets)
+  targetUserIds String? // comma separated userIds (scope=TARGETED or mention targets)
   startAt       DateTime
   endAt         DateTime
   color         String   @default("#3B5CF0")
@@ -311,7 +319,7 @@ model Leave {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String   // ANNUAL | HALF | SICK | OTHER
+  type      String // ANNUAL | HALF | SICK | OTHER
   startDate DateTime
   endDate   DateTime
   reason    String?
@@ -323,13 +331,13 @@ model Leave {
 }
 
 model Attendance {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  date      String   // YYYY-MM-DD
-  checkIn   DateTime?
-  checkOut  DateTime?
-  note      String?
+  id       String    @id @default(cuid())
+  userId   String
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date     String // YYYY-MM-DD
+  checkIn  DateTime?
+  checkOut DateTime?
+  note     String?
 
   @@unique([userId, date])
   // 디렉터리 페이지가 "오늘 date + userId IN (...)" 로 묶어 조회 →
@@ -341,7 +349,7 @@ model Journal {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  date      String   // YYYY-MM-DD
+  date      String // YYYY-MM-DD
   title     String
   content   String
   createdAt DateTime @default(now())
@@ -351,15 +359,167 @@ model Journal {
 }
 
 model Notice {
-  id        String   @id @default(cuid())
+  id        String           @id @default(cuid())
   title     String
   content   String
-  pinned    Boolean  @default(false)
+  pinned    Boolean          @default(false)
   authorId  String
-  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  author    User             @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+  reactions NoticeReaction[]
 
   @@index([pinned(sort: Desc), createdAt(sort: Desc)])
+}
+
+/// 공지에 남긴 이모지 반응. (noticeId, userId, emoji) 유니크 — 같은 이모지 중복 반응 방지.
+model NoticeReaction {
+  id        String   @id @default(cuid())
+  noticeId  String
+  notice    Notice   @relation(fields: [noticeId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String
+  createdAt DateTime @default(now())
+
+  @@unique([noticeId, userId, emoji])
+  @@index([noticeId])
+}
+
+/// 유저별 즐겨찾기(핀). targetType 으로 대상 타입 구분 — "document" | "folder" | "meeting" | "notice" | "project" | "room".
+/// 사이드바 "고정" 섹션에 모으고, 각 객체의 star 버튼에서 토글.
+model Pin {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetType String
+  targetId   String
+  label      String? // 캐시 — 원본이 사라져도 사이드바에 회색으로 보여주기 위함
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, targetType, targetId])
+  @@index([userId])
+}
+
+/// 유저별 알림 환경설정. prefs 는 종별 on/off 맵, dndStart/End 는 "HH:mm".
+model NotificationPref {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// {"NOTICE":true,"DM":true,"MENTION":true,"APPROVAL_REQUEST":true,"APPROVAL_REVIEW":true,"SYSTEM":true}
+  prefs     Json     @default("{}")
+  /// 방해금지 시작/종료 (Asia/Seoul, "HH:mm"). 둘 다 세팅돼있을 때만 적용.
+  dndStart  String?
+  dndEnd    String?
+  /// 이메일 알림 on/off (현재는 구조만; 메일러 붙일 때 사용).
+  emailOn   Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}
+
+/// 문서 외부 공유 링크 — 사내 로그인 없이도 토큰으로 접근.
+/// 보안: 만료시각, 다운로드 횟수 제한, 선택적 비밀번호(bcrypt).
+model DocumentShareLink {
+  id           String    @id @default(cuid())
+  documentId   String
+  document     Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  token        String    @unique
+  createdById  String
+  createdBy    User      @relation("ShareLinkCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  expiresAt    DateTime?
+  maxDownloads Int?
+  downloads    Int       @default(0)
+  passwordHash String?
+  createdAt    DateTime  @default(now())
+  revokedAt    DateTime?
+
+  accessLogs ShareLinkAccess[]
+
+  @@index([documentId])
+}
+
+model ShareLinkAccess {
+  id        String            @id @default(cuid())
+  linkId    String
+  link      DocumentShareLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  action    String // VIEW | DOWNLOAD | AUTH_FAIL
+  ip        String?
+  userAgent String?
+  createdAt DateTime          @default(now())
+
+  @@index([linkId, createdAt])
+}
+
+/// 결재 템플릿 — 유형/제목/기본 본문/기본 결재라인을 저장해두고 재사용.
+/// scope=ALL 이면 전사 공개, TEAM 이면 해당 팀만, PRIVATE 이면 작성자 본인만.
+model ApprovalTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  type        String
+  scope       String   @default("ALL")
+  scopeTeam   String?
+  /// { title?: string, content?: string, fields?: any, defaultLine?: string[] (reviewer userId 순서) }
+  body        Json
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([createdById])
+}
+
+/// 유저가 즐겨쓰는 결재라인. reviewerIds 콤마 구분.
+model ApprovalLineFavorite {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  reviewerIds String
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// 결재에 달린 댓글 — 반려 후 재상신 대화 스레드, 일반 코멘트 모두 여기에 저장.
+model ApprovalComment {
+  id         String   @id @default(cuid())
+  approvalId String
+  approval   Approval @relation(fields: [approvalId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content    String
+  createdAt  DateTime @default(now())
+
+  @@index([approvalId, createdAt])
+}
+
+/// 회의록 수정 스냅샷 — PATCH 마다 이전 content 를 저장해 되돌리기 가능하게.
+model MeetingRevision {
+  id        String   @id @default(cuid())
+  meetingId String
+  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  title     String
+  content   Json
+  editorId  String
+  editor    User     @relation(fields: [editorId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([meetingId, createdAt])
+}
+
+/// 문서 수정 스냅샷 — title/description/fileUrl 등 변경 시점의 값 보관.
+model DocumentRevision {
+  id          String   @id @default(cuid())
+  documentId  String
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  fileUrl     String?
+  fileName    String?
+  fileType    String?
+  fileSize    Int?
+  editorId    String
+  editor      User     @relation(fields: [editorId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@index([documentId, createdAt])
 }
 
 model ChatRoom {
@@ -385,24 +545,24 @@ model RoomMember {
 }
 
 model ChatMessage {
-  id          String    @id @default(cuid())
+  id          String            @id @default(cuid())
   roomId      String
   senderId    String
   content     String
-  kind        String    @default("TEXT") // TEXT | IMAGE | VIDEO | FILE
+  kind        String            @default("TEXT") // TEXT | IMAGE | VIDEO | FILE
   fileUrl     String?
   fileName    String?
   fileType    String?
   fileSize    Int?
-  mentions    String?   // comma-separated userIds
+  mentions    String? // comma-separated userIds
   editedAt    DateTime?
   deletedAt   DateTime?
   scheduledAt DateTime?
   pinnedAt    DateTime?
   pinnedById  String?
-  createdAt   DateTime  @default(now())
-  room        ChatRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  sender      User      @relation("Sender", fields: [senderId], references: [id], onDelete: Cascade)
+  createdAt   DateTime          @default(now())
+  room        ChatRoom          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sender      User              @relation("Sender", fields: [senderId], references: [id], onDelete: Cascade)
   reactions   MessageReaction[]
 
   @@index([roomId, scheduledAt])
@@ -442,10 +602,10 @@ model CardExpense {
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   usedAt     DateTime
   merchant   String
-  category   String   // 식비 | 교통 | 업무 | 접대 | 비품 | 기타
+  category   String // 식비 | 교통 | 업무 | 접대 | 비품 | 기타
   amount     Int
   memo       String?
-  receiptUrl String?  // base64 데이터 URL 또는 외부 링크
+  receiptUrl String? // base64 데이터 URL 또는 외부 링크
   status     String   @default("PENDING") // PENDING | APPROVED | REJECTED
   reviewer   String?
   createdAt  DateTime @default(now())
@@ -454,17 +614,17 @@ model CardExpense {
 }
 
 model Notification {
-  id        String    @id @default(cuid())
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String    // NOTICE | DM | APPROVAL_REQUEST | APPROVAL_REVIEW | MENTION | SYSTEM
-  title     String
-  body      String?
-  linkUrl   String?
-  actorName String?   // 알림 유발자 이름 (ex. 메시지 발신자)
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       String // NOTICE | DM | APPROVAL_REQUEST | APPROVAL_REVIEW | MENTION | SYSTEM
+  title      String
+  body       String?
+  linkUrl    String?
+  actorName  String? // 알림 유발자 이름 (ex. 메시지 발신자)
   actorColor String?
-  readAt    DateTime?
-  createdAt DateTime  @default(now())
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
 
   // 미읽음 필터용 — (userId, readAt=null) 부분 빠른 조회.
   @@index([userId, readAt])
@@ -473,82 +633,89 @@ model Notification {
 }
 
 model Folder {
-  id        String     @id @default(cuid())
-  name      String
-  parentId  String?
-  parent    Folder?    @relation("FolderChildren", fields: [parentId], references: [id], onDelete: Cascade)
-  children  Folder[]   @relation("FolderChildren")
-  documents Document[]
+  id           String     @id @default(cuid())
+  name         String
+  parentId     String?
+  parent       Folder?    @relation("FolderChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children     Folder[]   @relation("FolderChildren")
+  documents    Document[]
   // 폴더 공개 범위 — Document 의 scope 와 동일 의미.
   // ALL(전체) | TEAM(팀) | PRIVATE(개인) | CUSTOM(사용자지정)
   // 탭별로 구분되어 보이도록 추가. authorId 는 PRIVATE / 권한 판단용.
-  scope        String  @default("ALL")
+  scope        String     @default("ALL")
   scopeTeam    String?
   scopeUserIds String? // CUSTOM 일 때 접근 허용 유저 id 콤마 구분
   authorId     String?
   // 프로젝트 문서함 전용 폴더. null 이면 전역 문서함.
   // projectId 가 있으면 visibility 는 ProjectMember 기준으로 판단 (scope 필드는 무시됨).
-  projectId String?
-  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdAt DateTime   @default(now())
+  projectId    String?
+  project      Project?   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
 
   @@index([projectId])
 }
 
 model Document {
-  id          String   @id @default(cuid())
-  title       String
-  description String?
-  folderId    String?
-  folder      Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
-  fileUrl     String?
-  fileName    String?
-  fileType    String?
-  fileSize    Int?
-  tags        String?  // comma separated
-  authorId    String
-  author      User     @relation("DocumentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  id           String              @id @default(cuid())
+  title        String
+  description  String?
+  folderId     String?
+  folder       Folder?             @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  fileUrl      String?
+  fileName     String?
+  fileType     String?
+  fileSize     Int?
+  tags         String? // comma separated
+  authorId     String
+  author       User                @relation("DocumentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
   // 공개 범위 — ALL(전체) | TEAM(팀) | PRIVATE(개인) | CUSTOM(사용자지정)
-  scope        String  @default("ALL")
+  scope        String              @default("ALL")
   scopeTeam    String? // TEAM 일 때 대상 팀명
   scopeUserIds String? // CUSTOM 일 때 접근 허용 유저 id 콤마 구분
   // 프로젝트 문서함 전용 문서. null 이면 전역 문서함.
   // projectId 가 있으면 가시성은 ProjectMember 기준 (scope 는 무시됨).
-  projectId String?
-  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  projectId    String?
+  project      Project?            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  shareLinks   DocumentShareLink[]
+  revisions    DocumentRevision[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
 
   @@index([projectId, updatedAt])
 }
 
 model Approval {
-  id          String   @id @default(cuid())
-  type        String   // TRIP | EXPENSE | PURCHASE | GENERAL | OFFSITE | OTHER
-  title       String
-  content     String?
-  data        String?  // JSON
-  status      String   @default("PENDING") // PENDING | APPROVED | REJECTED | CANCELED
-  requesterId String
-  requester   User     @relation("ApprovalRequester", fields: [requesterId], references: [id], onDelete: Cascade)
-  startDate   DateTime?
-  endDate     DateTime?
-  amount      Int?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  steps       ApprovalStep[]
+  id            String            @id @default(cuid())
+  type          String // TRIP | EXPENSE | PURCHASE | GENERAL | OFFSITE | OTHER
+  title         String
+  content       String?
+  data          String? // JSON
+  status        String            @default("PENDING") // PENDING | APPROVED | REJECTED | CANCELED
+  requesterId   String
+  requester     User              @relation("ApprovalRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  startDate     DateTime?
+  endDate       DateTime?
+  amount        Int?
+  /// 반려 후 재상신으로 새로 만들어진 기안이면 원본 id. 스레드 이어보기용.
+  revisedFromId String?
+  revisedFrom   Approval?         @relation("ApprovalRevision", fields: [revisedFromId], references: [id], onDelete: SetNull)
+  revisions     Approval[]        @relation("ApprovalRevision")
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  steps         ApprovalStep[]
+  comments      ApprovalComment[]
 
   @@index([requesterId, createdAt(sort: Desc)])
 }
 
 model ApprovalStep {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   approvalId String
-  approval   Approval @relation(fields: [approvalId], references: [id], onDelete: Cascade)
+  approval   Approval  @relation(fields: [approvalId], references: [id], onDelete: Cascade)
   reviewerId String
-  reviewer   User     @relation("ApprovalReviewer", fields: [reviewerId], references: [id], onDelete: Cascade)
+  reviewer   User      @relation("ApprovalReviewer", fields: [reviewerId], references: [id], onDelete: Cascade)
   order      Int
-  status     String   @default("PENDING") // PENDING | APPROVED | REJECTED | SKIPPED
+  status     String    @default("PENDING") // PENDING | APPROVED | REJECTED | SKIPPED
   comment    String?
   actedAt    DateTime?
 
@@ -576,18 +743,19 @@ model AuditLog {
 ///   SPECIFIC  선택된 개별 유저만 (viewers 릴레이션)
 /// 작성자는 무조건 조회·수정 가능. ADMIN 은 전역 열람.
 model Meeting {
-  id          String            @id @default(cuid())
-  title       String
+  id         String            @id @default(cuid())
+  title      String
   /// TipTap JSON document. HTML 이 아닌 구조화된 노드 트리.
-  content     Json
-  visibility  String            @default("ALL") // ALL | PROJECT | SPECIFIC
-  projectId   String?
-  project     Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  authorId    String
-  author      User              @relation("MeetingAuthor", fields: [authorId], references: [id], onDelete: Cascade)
-  viewers     MeetingViewer[]
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  content    Json
+  visibility String            @default("ALL") // ALL | PROJECT | SPECIFIC
+  projectId  String?
+  project    Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  authorId   String
+  author     User              @relation("MeetingAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  viewers    MeetingViewer[]
+  revisions  MeetingRevision[]
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
 
   @@index([authorId, createdAt])
   @@index([projectId, createdAt])

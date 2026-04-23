@@ -15,13 +15,53 @@ function canWriteNotice(role: unknown): boolean {
   return typeof role === "string" && NOTICE_WRITE_ROLES.has(role);
 }
 
-router.get("/", async (_req, res) => {
+router.get("/", async (req, res) => {
+  const u = (req as any).user;
   const list = await prisma.notice.findMany({
     orderBy: [{ pinned: "desc" }, { createdAt: "desc" }],
     take: 300,
-    include: { author: { select: { name: true } } },
+    include: {
+      author: { select: { name: true } },
+      reactions: { select: { emoji: true, userId: true } },
+    },
   });
-  res.json({ notices: list });
+  // 이모지별 count + 내가 눌렀는지 집계 — 프런트가 바로 쓰기 쉽게 펴준다.
+  const shaped = list.map((n) => {
+    const byEmoji = new Map<string, { emoji: string; count: number; reactedByMe: boolean }>();
+    for (const r of n.reactions) {
+      const e = byEmoji.get(r.emoji) ?? { emoji: r.emoji, count: 0, reactedByMe: false };
+      e.count += 1;
+      if (r.userId === u.id) e.reactedByMe = true;
+      byEmoji.set(r.emoji, e);
+    }
+    const { reactions, ...rest } = n;
+    return { ...rest, reactions: Array.from(byEmoji.values()) };
+  });
+  res.json({ notices: shaped });
+});
+
+/** 이모지 반응 추가. 같은 이모지 중복은 @@unique 로 조용히 무시. */
+router.post("/:id/reactions", async (req, res) => {
+  const u = (req as any).user;
+  const emoji = typeof req.body?.emoji === "string" ? req.body.emoji.slice(0, 16) : "";
+  if (!emoji) return res.status(400).json({ error: "emoji required" });
+  const notice = await prisma.notice.findUnique({ where: { id: req.params.id }, select: { id: true } });
+  if (!notice) return res.status(404).json({ error: "not found" });
+  try {
+    await prisma.noticeReaction.create({ data: { noticeId: notice.id, userId: u.id, emoji } });
+  } catch (e: any) {
+    if (e?.code !== "P2002") throw e; // 이미 눌렀음 — 멱등 처리
+  }
+  res.json({ ok: true });
+});
+
+/** 이모지 반응 삭제 (내 반응만). */
+router.delete("/:id/reactions/:emoji", async (req, res) => {
+  const u = (req as any).user;
+  await prisma.noticeReaction.deleteMany({
+    where: { noticeId: req.params.id, userId: u.id, emoji: req.params.emoji },
+  });
+  res.json({ ok: true });
 });
 
 const schema = z.object({
