@@ -22,6 +22,10 @@ type ConfirmOpts = {
   confirmLabel?: string;
   cancelLabel?: string;
   tone?: "primary" | "danger";
+  // 2차 액션 (선택) — "삭제"/"보관하며 삭제" 같은 3지선다용.
+  //   확인 버튼이 "전체 삭제" 라면 secondary 는 "문서만 남기고 폴더 삭제" 처럼.
+  //   선택되면 confirmAsync 가 "secondary" 문자열로 resolve.
+  secondaryLabel?: string;
 };
 
 type AlertOpts = {
@@ -39,8 +43,9 @@ type PromptOpts = {
   cancelLabel?: string;
 };
 
+type ConfirmResult = boolean | "secondary";
 type Dialog =
-  | { kind: "confirm"; opts: ConfirmOpts; resolve: (v: boolean) => void }
+  | { kind: "confirm"; opts: ConfirmOpts; resolve: (v: ConfirmResult) => void }
   | { kind: "alert"; opts: AlertOpts; resolve: () => void }
   | { kind: "prompt"; opts: PromptOpts; resolve: (v: string | null) => void };
 
@@ -72,7 +77,7 @@ function cancelPrevious() {
   else d.resolve(null);
 }
 
-export function confirmAsync(opts: ConfirmOpts): Promise<boolean> {
+export function confirmAsync(opts: ConfirmOpts): Promise<ConfirmResult> {
   return new Promise((resolve) => {
     cancelPrevious();
     currentDialog = { kind: "confirm", opts, resolve };
@@ -192,10 +197,22 @@ export default function ConfirmHost() {
             />
           )}
         </div>
-        <div className="border-t border-ink-150 px-5 py-3 flex justify-end gap-2">
+        <div className="border-t border-ink-150 px-5 py-3 flex justify-end gap-2 flex-wrap">
           {cancelLabel && (
             <button type="button" className="btn-ghost" onClick={onCancel}>
               {cancelLabel}
+            </button>
+          )}
+          {dialog.kind === "confirm" && dialog.opts.secondaryLabel && (
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => {
+                (dialog as any).resolve("secondary");
+                close();
+              }}
+            >
+              {dialog.opts.secondaryLabel}
             </button>
           )}
           <button

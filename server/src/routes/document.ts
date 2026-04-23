@@ -271,14 +271,46 @@ router.patch("/folders/:id", async (req, res) => {
   res.json({ folder });
 });
 
+/**
+ * 폴더 삭제 — 두 가지 모드.
+ *   - 기본 (cascade=true): 폴더 + 하위 폴더 + 그 안의 모든 문서를 통째로 삭제.
+ *     Document.folder 관계는 onDelete: SetNull 이라, 문서를 명시적으로 먼저 지우지 않으면
+ *     "문서로 이동" 모드와 동일한 결과가 돼 버림. 그래서 cascade 모드는 먼저 문서들을 삭제함.
+ *   - keep: 폴더 안의 모든 문서를 현재 폴더의 부모(없으면 루트/ null) 로 옮긴 뒤, 빈 폴더 트리만 삭제.
+ *     문서는 보존하고 싶은 사용자를 위한 안전장치.
+ */
 router.delete("/folders/:id", async (req, res) => {
   const u = (req as any).user;
+  const mode = String(req.query.mode || "cascade"); // "cascade" | "keep"
   const check = await assertFolderWritable(u, req.params.id);
   if (!check.folder) return res.status(404).json({ error: "not found" });
   if (!check.ok) return res.status(403).json({ error: "forbidden" });
+
+  const subtreeIds = await collectFolderSubtree(req.params.id);
+
+  if (mode === "keep") {
+    // 문서를 부모 폴더로 이동 — parentId 가 없으면 루트(null).
+    const parentId = check.folder.projectId ? null : null; // 현재 모델은 Folder.parentId 기반. 최상위면 null.
+    const target = (await prisma.folder.findUnique({
+      where: { id: req.params.id },
+      select: { parentId: true },
+    }))?.parentId ?? null;
+    await prisma.document.updateMany({
+      where: { folderId: { in: subtreeIds } },
+      data: { folderId: target },
+    });
+    // 빈 폴더들 삭제 (하위부터 상위 순서는 Prisma cascade 가 처리).
+    await prisma.folder.delete({ where: { id: req.params.id } });
+    await writeLog(u.id, "FOLDER_DELETE", req.params.id, "keep-docs");
+    void parentId; // 린트 무시 — 향후 프로젝트 이동 고려 자리.
+    return res.json({ ok: true, mode: "keep" });
+  }
+
+  // cascade — 하위 문서까지 전부 삭제.
+  await prisma.document.deleteMany({ where: { folderId: { in: subtreeIds } } });
   await prisma.folder.delete({ where: { id: req.params.id } });
-  await writeLog(u.id, "FOLDER_DELETE", req.params.id);
-  res.json({ ok: true });
+  await writeLog(u.id, "FOLDER_DELETE", req.params.id, "cascade");
+  res.json({ ok: true, mode: "cascade" });
 });
 
 /* ===== 문서 ===== */
