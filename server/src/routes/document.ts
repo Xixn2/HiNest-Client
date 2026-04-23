@@ -565,8 +565,90 @@ router.patch("/:id", async (req, res) => {
     }
   }
 
+  // 변경 전 스냅샷을 DocumentRevision 에 남김 — title/description/fileUrl 의 실질 변경이
+  // 있을 때만 기록해 잡음을 줄인다. 폴더 이동·태그 변경만으로는 리비전을 찍지 않음.
+  const contentChanged =
+    (d.title !== undefined && d.title !== exist.title) ||
+    (d.description !== undefined && d.description !== exist.description);
+  if (contentChanged) {
+    try {
+      await prisma.documentRevision.create({
+        data: {
+          documentId: exist.id,
+          title: exist.title,
+          description: exist.description,
+          fileUrl: exist.fileUrl,
+          fileName: exist.fileName,
+          fileType: exist.fileType,
+          fileSize: exist.fileSize,
+          editorId: u.id,
+        },
+      });
+    } catch {}
+  }
+
   const doc = await prisma.document.update({ where: { id: exist.id }, data: updateData });
   await writeLog(u.id, "DOC_UPDATE", doc.id);
+  res.json({ document: doc });
+});
+
+/**
+ * 문서 버전 히스토리 — 수정 전 스냅샷 목록. 최신 → 과거 순.
+ * 권한은 해당 문서를 수정할 수 있는 사람과 동일 (작성자/ADMIN/프로젝트 멤버).
+ */
+router.get("/:id/revisions", async (req, res) => {
+  const u = (req as any).user;
+  const exist = await prisma.document.findUnique({ where: { id: req.params.id } });
+  if (!exist) return res.status(404).json({ error: "not found" });
+  const isAuthor = exist.authorId === u.id;
+  const isAdmin = u.role === "ADMIN";
+  const isProjectMember = exist.projectId ? await assertProjectMember(u, exist.projectId) : false;
+  if (!isAuthor && !isAdmin && !isProjectMember) return res.status(403).json({ error: "forbidden" });
+  const rows = await prisma.documentRevision.findMany({
+    where: { documentId: exist.id },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+    include: { editor: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } } },
+  });
+  res.json({ revisions: rows });
+});
+
+/** 특정 리비전으로 문서를 되돌림. 되돌리기 직전 값도 한 번 더 스냅샷 → 되돌리기 취소 가능. */
+router.post("/:id/revisions/:revId/restore", async (req, res) => {
+  const u = (req as any).user;
+  const exist = await prisma.document.findUnique({ where: { id: req.params.id } });
+  if (!exist) return res.status(404).json({ error: "not found" });
+  const isAuthor = exist.authorId === u.id;
+  const isAdmin = u.role === "ADMIN";
+  const isProjectMember = exist.projectId ? await assertProjectMember(u, exist.projectId) : false;
+  if (!isAuthor && !isAdmin && !isProjectMember) return res.status(403).json({ error: "forbidden" });
+  const rev = await prisma.documentRevision.findUnique({ where: { id: req.params.revId } });
+  if (!rev || rev.documentId !== exist.id) return res.status(404).json({ error: "revision not found" });
+  // 복구 직전 현재 상태도 하나 남겨둠.
+  await prisma.documentRevision.create({
+    data: {
+      documentId: exist.id,
+      title: exist.title,
+      description: exist.description,
+      fileUrl: exist.fileUrl,
+      fileName: exist.fileName,
+      fileType: exist.fileType,
+      fileSize: exist.fileSize,
+      editorId: u.id,
+    },
+  });
+  const doc = await prisma.document.update({
+    where: { id: exist.id },
+    data: {
+      title: rev.title,
+      description: rev.description,
+      fileUrl: rev.fileUrl,
+      fileName: rev.fileName,
+      fileType: rev.fileType,
+      fileSize: rev.fileSize,
+    },
+  });
+  await writeLog(u.id, "DOC_REVISION_RESTORE", exist.id, rev.id);
   res.json({ document: doc });
 });
 
