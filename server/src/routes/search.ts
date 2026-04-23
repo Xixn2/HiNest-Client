@@ -65,7 +65,19 @@ router.get("/", async (req, res) => {
   // ILIKE 를 쓰도록 변경 (모든 필드 공통 적용).
   const ic = { contains: q, mode: "insensitive" as const };
 
-  const [people, notices, events, documents, messages] = await Promise.all([
+  // 회의록 접근권: ADMIN 은 전체, 일반 유저는 (ALL) ∪ (내가 작성) ∪ (SPECIFIC viewer) ∪ (PROJECT 내가 멤버)
+  const meetingWhere: any = isAdmin
+    ? {}
+    : {
+        OR: [
+          { visibility: "ALL" },
+          { authorId: u.id },
+          { visibility: "SPECIFIC", viewers: { some: { userId: u.id } } },
+          { visibility: "PROJECT", projectId: { in: myProjectIds.length ? myProjectIds : ["__none__"] } },
+        ],
+      };
+
+  const [people, notices, events, documents, messages, meetings, approvals, projects] = await Promise.all([
     prisma.user.findMany({
       where: {
         active: true,
@@ -126,11 +138,53 @@ router.get("/", async (req, res) => {
         room: { select: { id: true, name: true, type: true } },
       },
     }),
+    // 회의록 — 제목으로만 매칭 (content 는 JSONB 라 단순 LIKE 가 안 되고 비용도 큼).
+    prisma.meeting.findMany({
+      where: {
+        AND: [{ title: ic }, meetingWhere],
+      },
+      take: 8,
+      orderBy: { updatedAt: "desc" },
+      include: {
+        author: { select: { name: true } },
+      },
+    }),
+    // 결재 — 내가 신청자이거나 결재자/참조자로 보이는 문서만.
+    prisma.approval.findMany({
+      where: {
+        AND: [
+          { OR: [{ title: ic }, { content: ic }] },
+          isAdmin
+            ? {}
+            : {
+                OR: [
+                  { requesterId: u.id },
+                  { steps: { some: { reviewerId: u.id } } },
+                ],
+              },
+        ],
+      },
+      take: 6,
+      orderBy: { createdAt: "desc" },
+      include: { requester: { select: { name: true } } },
+    }),
+    // 프로젝트 — 내가 멤버인 것만(ADMIN 전체).
+    prisma.project.findMany({
+      where: {
+        AND: [
+          { OR: [{ name: ic }, { description: ic }] },
+          isAdmin ? {} : { members: { some: { userId: u.id } } },
+        ],
+      },
+      take: 6,
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true, description: true, color: true, status: true },
+    }),
   ]);
 
   res.json({
     q,
-    results: { people, notices, events, documents, messages },
+    results: { people, notices, events, documents, messages, meetings, approvals, projects },
   });
 });
 
