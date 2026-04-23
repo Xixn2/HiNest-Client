@@ -21,6 +21,35 @@ if (!RAW_SECRET || RAW_SECRET.length < 16) {
   );
 }
 const SECRET = RAW_SECRET ?? "hinest-dev-secret-change-me";
+/**
+ * requireAuth 가 매 요청마다 DB 에 날리는 user.findUnique 를 30초간 캐시.
+ * - Fargate 태스크마다 독립 캐시 (Redis 불필요 — 30초 스탈 허용 범위 내).
+ * - 유저 비활성화·권한 변경은 최대 30초 지연 반영 (기존 JWT 7일 만료보다 훨씬 짧음).
+ * - 캐시는 최대 5000엔트리 → 5000 * ~500B ≈ 2.5MB 상한. 1만 명 이상 회사라면 LRU 도입.
+ */
+const _userCache = new Map<string, { user: any; exp: number }>();
+const USER_CACHE_TTL = 30_000;
+const USER_CACHE_MAX = 5_000;
+
+async function getCachedUser(id: string): Promise<any | null> {
+  const hit = _userCache.get(id);
+  if (hit && hit.exp > Date.now()) return hit.user;
+  const user = await prisma.user.findUnique({ where: { id } });
+  if (user) {
+    if (_userCache.size >= USER_CACHE_MAX) {
+      // 가장 오래된 키 하나 제거 (Map 삽입 순 보장).
+      _userCache.delete(_userCache.keys().next().value!);
+    }
+    _userCache.set(id, { user, exp: Date.now() + USER_CACHE_TTL });
+  }
+  return user;
+}
+
+/** 유저 정보가 변경됐을 때 캐시에서 즉시 제거 (관리자 편집, 비활성화 등). */
+export function evictUserCache(id: string) {
+  _userCache.delete(id);
+}
+
 const COOKIE = "hinest_token";
 const SUPER_COOKIE = "hinest_super";
 const SUPER_TTL_SEC = 15 * 60; // 15분
@@ -59,7 +88,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   if (!token) return res.status(401).json({ error: "unauthorized" });
   try {
     const payload = jwt.verify(token, SECRET) as any;
-    const user = await prisma.user.findUnique({ where: { id: payload.id } });
+    const user = await getCachedUser(payload.id);
     if (!user || !user.active) return res.status(401).json({ error: "unauthorized" });
     (req as any).user = {
       id: user.id,

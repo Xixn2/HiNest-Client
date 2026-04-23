@@ -167,7 +167,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     const t = setInterval(reload, 30_000);
 
     function onVisibility() {
-      if (document.visibilityState === "visible") reload();
+      if (document.visibilityState !== "visible") return;
+      // SSE 가 살아있으면 실시간 push 로 이미 동기화됨 — reload() 생략.
+      // SSE 가 끊긴 상태(재연결 대기 중)에서만 전체 재조회.
+      if (esRef.current && esRef.current.readyState !== EventSource.CLOSED) return;
+      reload();
     }
     document.addEventListener("visibilitychange", onVisibility);
 

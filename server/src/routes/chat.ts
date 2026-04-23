@@ -337,8 +337,9 @@ router.get("/rooms/:id/messages", async (req, res) => {
  */
 router.post("/rooms/:id/read", async (req, res) => {
   const u = (req as any).user;
-  const member = await prisma.roomMember.findFirst({
-    where: { roomId: req.params.id, userId: u.id },
+  // findUnique 로 복합 unique 인덱스(roomId_userId) 직접 사용 → findFirst 보다 효율적.
+  const member = await prisma.roomMember.findUnique({
+    where: { roomId_userId: { roomId: req.params.id, userId: u.id } },
   });
   if (!member) return res.json({ ok: true });
   const now = new Date();
@@ -388,8 +389,8 @@ router.post("/rooms/:id/messages", async (req, res) => {
   const d = parsed.data;
   if (!d.content.trim() && !d.fileUrl) return res.status(400).json({ error: "empty" });
 
-  const member = await prisma.roomMember.findFirst({
-    where: { roomId: req.params.id, userId: u.id },
+  const member = await prisma.roomMember.findUnique({
+    where: { roomId_userId: { roomId: req.params.id, userId: u.id } },
   });
   if (!member) return res.status(403).json({ error: "멤버만 메시지를 보낼 수 있습니다" });
 
@@ -489,8 +490,8 @@ router.post("/messages/:id/reactions", async (req, res) => {
   if (!emoji) return res.status(400).json({ error: "invalid" });
   const msg = await prisma.chatMessage.findUnique({ where: { id: req.params.id } });
   if (!msg) return res.status(404).json({ error: "not found" });
-  const member = await prisma.roomMember.findFirst({
-    where: { roomId: msg.roomId, userId: u.id },
+  const member = await prisma.roomMember.findUnique({
+    where: { roomId_userId: { roomId: msg.roomId, userId: u.id } },
   });
   if (!member) return res.status(403).json({ error: "forbidden" });
 

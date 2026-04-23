@@ -100,11 +100,12 @@ const uploadLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "업로드 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." },
 });
-// 문서 생성 등 대량 동반 API 호출 감당 위해 전역 API 리밋도 상향.
-// (파일 1개 업로드 = /api/upload + /api/document 두 호출이라 대략 2배 소모)
+// 사내 인트라넷 기준 600 req/min(10 req/sec)으로 하향.
+// 업로드 워크플로 최악 케이스: 파일 업로드(/api/upload) + 문서 생성(/api/document) = 2 req.
+// 폴더 1개 50파일 드래그 드롭 = 100 req → 분당 600 안에 여유 있게 들어옴.
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  limit: 3000,
+  limit: 600,
   standardHeaders: "draft-7",
   legacyHeaders: false,
 });

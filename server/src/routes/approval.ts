@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/db.js";
 import { requireAuth, writeLog } from "../lib/auth.js";
-import { notify } from "../lib/notify.js";
+import { notify, notifyMany } from "../lib/notify.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -100,18 +100,18 @@ router.post("/:id/comments", async (req, res) => {
     data: { approvalId: a.id, authorId: u.id, content },
     include: { author: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } } },
   });
-  // 관련 당사자에게 멘션 알림 — 본인 제외.
+  // 관련 당사자에게 멘션 알림 — 본인 제외. 순차 notify() → 병렬 notifyMany() 로 교체.
   const targets = new Set<string>([a.requesterId, ...a.steps.map((s) => s.reviewerId)]);
   targets.delete(u.id);
-  for (const userId of targets) {
-    await notify({
+  if (targets.size > 0) {
+    await notifyMany(Array.from(targets).map((userId) => ({
       userId,
-      type: "MENTION",
-      title: `결재에 새 댓글`,
+      type: "MENTION" as const,
+      title: "결재에 새 댓글",
       body: `${u.name}: ${content.slice(0, 120)}`,
       linkUrl: `/approvals?id=${a.id}`,
       actorName: u.name,
-    });
+    })));
   }
   res.json({ comment: c });
 });

@@ -22,8 +22,20 @@ router.get("/", async (req, res) => {
   const q = raw.length > 128 ? raw.slice(0, 128) : raw;
   if (q.length < 1) return res.json({ q, results: {} });
 
-  const meUser = await prisma.user.findUnique({ where: { id: u.id } });
   const isAdmin = u.role === "ADMIN";
+
+  // meUser, myProjectIds, myRoomIds 를 병렬로 미리 조회 — 순차 DB 왕복 3회 → 1회.
+  const [meUser, projectMems, myRoomMems] = await Promise.all([
+    prisma.user.findUnique({ where: { id: u.id }, select: { id: true, team: true } }),
+    isAdmin
+      ? Promise.resolve([] as { projectId: string }[])
+      : prisma.projectMember.findMany({ where: { userId: u.id }, select: { projectId: true } }),
+    // roomId IN (...) 방식으로 chatMessage 필터 — members.some 은 correlated subquery 라 느림.
+    prisma.roomMember.findMany({ where: { userId: u.id }, select: { roomId: true } }),
+  ]);
+
+  const myProjectIds = projectMems.map((m) => m.projectId);
+  const myRoomIds = myRoomMems.map((m) => m.roomId);
 
   // 일정(TEAM) — 빈 team 을 "매칭" 으로 만들지 않도록 team 이 있을 때만 clause 추가.
   const eventOr: any[] = [
@@ -33,18 +45,6 @@ router.get("/", async (req, res) => {
     { scope: "TARGETED", targetUserIds: { contains: u.id } },
   ];
   if (meUser?.team) eventOr.push({ scope: "TEAM", team: meUser.team });
-
-  // 문서 검색 — 내가 실제로 볼 수 있는 것만 돌려줘야 함.
-  // scope 는 ALL/TEAM/PRIVATE/CUSTOM + 프로젝트 문서(projectId != null 이면 프로젝트 멤버) 체크.
-  // ADMIN 은 전체 조회.
-  let myProjectIds: string[] = [];
-  if (!isAdmin) {
-    const mems = await prisma.projectMember.findMany({
-      where: { userId: u.id },
-      select: { projectId: true },
-    });
-    myProjectIds = mems.map((m) => m.projectId);
-  }
   const docScopeOr: any[] = isAdmin
     ? [{}]
     : [
@@ -125,10 +125,12 @@ router.get("/", async (req, res) => {
       orderBy: { updatedAt: "desc" },
       include: { author: { select: { name: true } }, folder: { select: { name: true } } },
     }),
+    // roomId: { in: myRoomIds } 는 (roomId, createdAt) 인덱스를 바로 사용.
+    // room.members.some 은 correlated subquery 라 인덱스를 활용 못하고 느림.
     prisma.chatMessage.findMany({
       where: {
         deletedAt: null,
-        room: { members: { some: { userId: u.id } } },
+        roomId: { in: myRoomIds.length ? myRoomIds : ["__none__"] },
         content: ic,
       },
       take: 8,
