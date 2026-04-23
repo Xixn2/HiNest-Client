@@ -434,7 +434,7 @@ function PinsSection() {
               onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
               onDrop={(e) => { e.preventDefault(); onDrop(p.id); }}
               onDragEnd={() => setDragId(null)}
-              className={`group flex items-center gap-2 h-[30px] px-3 rounded-full text-[12.5px] font-semibold cursor-pointer transition ${
+              className={`group flex items-center gap-2 h-[40px] md:h-[30px] px-3 rounded-full text-[12.5px] font-semibold cursor-pointer transition ${
                 dragId === p.id ? "opacity-40" : ""
               } ${p.missing ? "text-ink-400" : "text-ink-700 hover:bg-ink-100 hover:text-ink-900"}`}
               title={p.missing ? "원본이 삭제되었어요 — 클릭해서 핀 해제" : label}
@@ -478,7 +478,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 function navClass(active: boolean) {
   return [
-    "flex items-center gap-2.5 h-[34px] px-3 rounded-full text-[13px] font-bold transition",
+    "flex items-center gap-2.5 h-[40px] md:h-[34px] px-3 rounded-full text-[13px] font-bold transition",
     active ? "nav-active" : "text-ink-700 hover:bg-ink-100 hover:text-ink-900",
   ].join(" ");
 }

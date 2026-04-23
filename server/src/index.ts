@@ -15,7 +15,7 @@ import noticeRouter from "./routes/notice.js";
 import chatRouter from "./routes/chat.js";
 import expenseRouter from "./routes/expense.js";
 import uploadRouter, { UPLOAD_DIR } from "./routes/upload.js";
-import { isStorageEnabled, downloadFile, storageBackend, storageBucket } from "./lib/storage.js";
+import { isStorageEnabled, downloadFile } from "./lib/storage.js";
 import fs from "node:fs";
 import notificationRouter from "./routes/notification.js";
 import searchRouter from "./routes/search.js";
@@ -125,12 +125,8 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get("/api/health", (_req, res) =>
-  res.json({
-    ok: true,
-    storage: { backend: storageBackend(), bucket: storageBucket() },
-  })
-);
+// 내부 인프라 정보(스토리지 백엔드/버킷명)는 외부에 노출하지 않음
+app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
 // 전역 API 레이트 리밋 — 라우트별 특수 limiter 는 그 뒤에 추가로 씌운다.
 // (login/upload 는 더 엄격한 limiter 가 먼저 적용됨)
@@ -241,7 +237,11 @@ function sanitizeDownloadName(s: string): string {
 
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);
-  res.status(err.status ?? 500).json({ error: err.message ?? "server error" });
+  const status = typeof err.status === "number" ? err.status : 500;
+  // 500 계열 예상치 못한 에러는 내부 메시지 유출 방지 — DB/Prisma 오류가 그대로 나가지 않도록.
+  // 4xx 는 우리가 직접 throw 한 의도된 에러라 message 노출 허용.
+  const msg = status < 500 ? (err.message ?? "bad request") : "서버 오류가 발생했습니다";
+  res.status(status).json({ error: msg });
 });
 
 // 방어: Prisma 등 async 에러로 프로세스가 죽지 않도록

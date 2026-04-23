@@ -91,6 +91,9 @@ router.patch("/:id", async (req, res) => {
   if (body.status && (u.role === "ADMIN" || u.role === "MANAGER")) {
     if (!["PENDING", "APPROVED", "REJECTED"].includes(body.status))
       return res.status(400).json({ error: "invalid status" });
+    // 본인 지출 자기 심사 방지 — 역할에 관계없이 본인 경비는 심사 불가
+    if (exist.userId === u.id)
+      return res.status(403).json({ error: "본인 지출은 심사할 수 없어요" });
     // MANAGER 는 같은 팀 지출만 심사 가능.
     if (u.role === "MANAGER") {
       const [me, owner] = await Promise.all([
