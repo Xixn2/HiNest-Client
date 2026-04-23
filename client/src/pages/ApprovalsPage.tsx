@@ -33,6 +33,33 @@ type Approval = {
 
 type DirUser = { id: string; name: string; email: string; team?: string; position?: string; avatarColor?: string; avatarUrl?: string | null };
 
+type ApprovalComment = {
+  id: string;
+  content: string;
+  createdAt: string;
+  author: { id: string; name: string; avatarColor: string; avatarUrl?: string | null };
+};
+type ApprovalRef = { id: string; title: string; status: Approval["status"]; createdAt: string };
+type ApprovalFull = Approval & {
+  revisedFromId?: string | null;
+  revisedFrom?: ApprovalRef | null;
+  revisions?: ApprovalRef[];
+  comments?: ApprovalComment[];
+};
+
+// CreateModal 이 결재 재상신에도 재사용되도록 prefill 타입을 정리. 원본 결재를 그대로
+// 카피하되 결재선은 자유롭게 다시 고를 수 있게 — 원본 결재선을 기본값으로 두긴 한다.
+type CreatePrefill = {
+  type?: ApprovalType;
+  title?: string;
+  content?: string;
+  startDate?: string;
+  endDate?: string;
+  amount?: string;
+  destination?: string;
+  reviewerIds?: string[];
+};
+
 const TYPE_META: Record<ApprovalType, { label: string; color: string; icon: JSX.Element }> = {
   TRIP:     { label: "출장 신청",   color: "#0EA5E9", icon: <IconSvg><><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" /></></IconSvg> },
   OFFSITE:  { label: "외근 신청",   color: "#16A34A", icon: <IconSvg><><rect x="2" y="8" width="16" height="8" rx="2" /><path d="M6 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><circle cx="6" cy="17" r="2" /><circle cx="14" cy="17" r="2" /></></IconSvg> },
@@ -71,6 +98,8 @@ export default function ApprovalsPage() {
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [selected, setSelected] = useState<Approval | null>(null);
   const [creating, setCreating] = useState(false);
+  // 재상신 시에는 원본 id와 prefill 을 함께 넘겨 POST /:id/revise 로 라우팅.
+  const [revising, setRevising] = useState<{ origId: string; prefill: CreatePrefill } | null>(null);
   const [directory, setDirectory] = useState<DirUser[]>([]);
   // 승인/반려/취소 버튼 연속 클릭 방지 — 네트워크 끊겨도 같은 요청이 2중 들어가면 결재선이 이상해짐.
   const [actingId, setActingId] = useState<string | null>(null);
@@ -257,6 +286,15 @@ export default function ApprovalsPage() {
               onAct={act}
               onCancel={askCancel}
               busy={actingId === selected.id}
+              onSelect={(id) => {
+                const m = approvals.find((x) => x.id === id);
+                if (m) setSelected(m);
+                else {
+                  // 체인상 다른 스코프의 결재일 수 있음 — 직접 조회해 띄움.
+                  api<{ approval: Approval }>(`/api/approval/${id}`).then((r) => setSelected(r.approval)).catch(() => {});
+                }
+              }}
+              onRevise={(origId, prefill) => setRevising({ origId, prefill })}
             />
           ) : (
             <div className="grid place-items-center h-[70vh]">
@@ -274,6 +312,22 @@ export default function ApprovalsPage() {
       </div>
 
       {creating && <CreateModal directory={directory} meId={user?.id} onClose={() => setCreating(false)} onDone={() => { setCreating(false); load(); }} />}
+
+      {revising && (
+        <CreateModal
+          directory={directory}
+          meId={user?.id}
+          reviseFromId={revising.origId}
+          prefill={revising.prefill}
+          onClose={() => setRevising(null)}
+          onDone={(newId) => {
+            setRevising(null);
+            load().then(() => {
+              if (newId) api<{ approval: Approval }>(`/api/approval/${newId}`).then((r) => setSelected(r.approval)).catch(() => {});
+            });
+          }}
+        />
+      )}
 
       {rejectingId && (
         <ConfirmModal
@@ -363,19 +417,66 @@ function ConfirmModal({
 }
 
 function ApprovalDetail({
-  a, meId, onAct, onCancel, busy,
+  a, meId, onAct, onCancel, busy, onSelect, onRevise,
 }: {
   a: Approval;
   meId?: string;
   onAct: (id: string, action: "approve" | "reject") => void;
   onCancel: (id: string) => void;
   busy?: boolean;
+  onSelect: (id: string) => void;
+  onRevise: (origId: string, prefill: CreatePrefill) => void;
 }) {
   const meta = TYPE_META[a.type];
   const smeta = STATUS_META[a.status];
   const myTurn = a.currentReviewerId === meId;
   const isRequester = a.requester.id === meId;
   const data = a.data ? safeJson(a.data) : null;
+
+  // 결재 상세(revisedFrom / revisions / comments) 는 목록에 포함되어 있지 않으므로
+  // 선택이 바뀔 때마다 따로 조회. a.id 변경이나 status/steps 갱신 후에도 재호출되어
+  // 댓글/체인이 제 때 반영되도록 의존성에 업데이트 대리값을 포함.
+  const [full, setFull] = useState<ApprovalFull | null>(null);
+  const [commentBody, setCommentBody] = useState("");
+  const [posting, setPosting] = useState(false);
+  const stepsFp = a.steps.map((s) => `${s.id}:${s.status}`).join(",");
+
+  async function loadFull() {
+    try {
+      const r = await api<{ approval: ApprovalFull }>(`/api/approval/${a.id}`);
+      setFull(r.approval);
+    } catch {}
+  }
+  useEffect(() => { setFull(null); loadFull(); /* eslint-disable-next-line */ }, [a.id, a.status, stepsFp]);
+
+  async function postComment() {
+    const c = commentBody.trim();
+    if (!c || posting) return;
+    setPosting(true);
+    try {
+      await api(`/api/approval/${a.id}/comments`, { method: "POST", json: { content: c } });
+      setCommentBody("");
+      await loadFull();
+    } catch (err: any) {
+      alertAsync({ title: "댓글 실패", description: err?.message ?? "다시 시도해주세요" });
+    } finally {
+      setPosting(false);
+    }
+  }
+
+  function startRevise() {
+    const parsed = a.data ? safeJson(a.data) : null;
+    onRevise(a.id, {
+      type: a.type,
+      title: a.title,
+      content: a.content ?? "",
+      startDate: a.startDate ? a.startDate.slice(0, 10) : "",
+      endDate: a.endDate ? a.endDate.slice(0, 10) : "",
+      amount: typeof a.amount === "number" ? String(a.amount) : "",
+      destination: parsed?.destination ?? "",
+      reviewerIds: a.steps.map((s) => s.reviewer.id),
+    });
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -391,6 +492,31 @@ function ApprovalDetail({
       </div>
 
       <div className="flex-1 overflow-auto p-5 space-y-5">
+        {(full?.revisedFrom || (full?.revisions && full.revisions.length > 0)) && (
+          <div className="panel p-3 bg-ink-25">
+            <div className="text-[11px] font-extrabold text-ink-500 uppercase tracking-[0.08em] mb-1.5">재상신 체인</div>
+            <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
+              {full?.revisedFrom && (
+                <>
+                  <button className="chip-gray hover:underline" onClick={() => onSelect(full.revisedFrom!.id)}>
+                    ← 원본: {full.revisedFrom.title}
+                  </button>
+                  <span className="text-ink-300">/</span>
+                </>
+              )}
+              <span className="chip-amber">현재</span>
+              {full?.revisions?.map((r) => (
+                <span key={r.id} className="flex items-center gap-1.5">
+                  <span className="text-ink-300">/</span>
+                  <button className="chip-gray hover:underline" onClick={() => onSelect(r.id)}>
+                    재상신: {r.title}
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <InfoField label="신청자" value={`${a.requester.name}${a.requester.position ? " · " + a.requester.position : ""}${a.requester.team ? " · " + a.requester.team : ""}`} />
           <InfoField label="신청일" value={new Date(a.createdAt).toLocaleString("ko-KR")} tabular />
@@ -432,6 +558,42 @@ function ApprovalDetail({
             ))}
           </div>
         </div>
+
+        <div>
+          <div className="text-[11px] font-extrabold text-ink-500 uppercase tracking-[0.08em] mb-2">댓글</div>
+          {full?.comments && full.comments.length > 0 ? (
+            <div className="space-y-2">
+              {full.comments.map((c) => (
+                <div key={c.id} className="panel p-3 flex items-start gap-2.5">
+                  <div className="w-7 h-7 rounded-full grid place-items-center text-white text-[11px] font-bold flex-shrink-0 overflow-hidden" style={{ background: c.author.avatarUrl ? "transparent" : c.author.avatarColor }}>
+                    {c.author.avatarUrl ? <img src={c.author.avatarUrl} alt={c.author.name} className="w-full h-full object-cover" /> : c.author.name[0]}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-1.5">
+                      <div className="text-[12px] font-bold text-ink-900">{c.author.name}</div>
+                      <div className="text-[10px] text-ink-400 tabular">{new Date(c.createdAt).toLocaleString("ko-KR")}</div>
+                    </div>
+                    <div className="text-[13px] text-ink-800 whitespace-pre-wrap leading-[1.55] mt-0.5">{c.content}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-[12px] text-ink-400">아직 댓글이 없어요.</div>
+          )}
+          <div className="mt-2 flex items-start gap-2">
+            <textarea
+              className="input flex-1"
+              rows={2}
+              value={commentBody}
+              onChange={(e) => setCommentBody(e.target.value.slice(0, 2000))}
+              placeholder="반려 사유에 대한 맥락이나 추가 질문을 남겨보세요"
+            />
+            <button className="btn-primary" disabled={posting || !commentBody.trim()} onClick={postComment}>
+              {posting ? "..." : "등록"}
+            </button>
+          </div>
+        </div>
       </div>
 
       {a.status === "PENDING" && (
@@ -456,17 +618,26 @@ function ApprovalDetail({
           )}
         </div>
       )}
+
+      {a.status === "REJECTED" && isRequester && (
+        <div className="border-t border-ink-150 px-5 py-3 flex items-center gap-2">
+          <div className="text-[12px] text-ink-500 flex-1">반려된 결재는 내용을 수정해 다시 올릴 수 있어요. 원본은 그대로 보존됩니다.</div>
+          <button className="btn-primary" onClick={startRevise}>수정해서 재상신</button>
+        </div>
+      )}
     </div>
   );
 }
 
 function CreateModal({
-  directory, meId, onClose, onDone,
+  directory, meId, onClose, onDone, reviseFromId, prefill,
 }: {
   directory: DirUser[];
   meId?: string;
   onClose: () => void;
-  onDone: () => void;
+  onDone: (newId?: string) => void;
+  reviseFromId?: string;
+  prefill?: CreatePrefill;
 }) {
   const [form, setForm] = useState<{
     type: ApprovalType;
@@ -478,14 +649,14 @@ function CreateModal({
     destination: string;
     reviewerIds: string[];
   }>({
-    type: "TRIP",
-    title: "",
-    content: "",
-    startDate: "",
-    endDate: "",
-    amount: "",
-    destination: "",
-    reviewerIds: [],
+    type: prefill?.type ?? "TRIP",
+    title: prefill?.title ?? "",
+    content: prefill?.content ?? "",
+    startDate: prefill?.startDate ?? "",
+    endDate: prefill?.endDate ?? "",
+    amount: prefill?.amount ?? "",
+    destination: prefill?.destination ?? "",
+    reviewerIds: prefill?.reviewerIds ?? [],
   });
   // 상신 버튼 중복 클릭 방지 + 실패 시 모달 안에서 오류를 보여줘 사용자가 내용을 다시 수정할 수 있게.
   // 기존에는 실패해도 onDone() 으로 바로 닫아버려 입력한 내용을 전부 잃었음.
@@ -512,8 +683,9 @@ function CreateModal({
     }
     setSaving(true);
     try {
-      await api("/api/approval", { method: "POST", json: payload });
-      onDone();
+      const url = reviseFromId ? `/api/approval/${reviseFromId}/revise` : "/api/approval";
+      const res = await api<{ approval: { id: string } }>(url, { method: "POST", json: payload });
+      onDone(res?.approval?.id);
     } catch (err: any) {
       setError(err?.message ?? "상신에 실패했어요");
       setSaving(false);
@@ -529,7 +701,7 @@ function CreateModal({
     <div className="fixed inset-0 bg-ink-900/40 grid place-items-center p-4 z-50" onClick={onClose}>
       <div className="panel w-full max-w-[560px] shadow-pop overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="section-head">
-          <div className="title">새 결재 올리기</div>
+          <div className="title">{reviseFromId ? "수정해서 재상신" : "새 결재 올리기"}</div>
           <button className="btn-icon" onClick={onClose}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>
@@ -654,7 +826,7 @@ function CreateModal({
           <div className="flex justify-end gap-2 pt-1">
             <button type="button" className="btn-ghost" disabled={saving} onClick={onClose}>취소</button>
             <button className="btn-primary" disabled={saving}>
-              {saving ? "상신 중…" : "상신"}
+              {saving ? "상신 중…" : reviseFromId ? "재상신" : "상신"}
             </button>
           </div>
         </form>

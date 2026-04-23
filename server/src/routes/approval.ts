@@ -66,12 +66,107 @@ router.get("/:id", async (req, res) => {
         orderBy: { order: "asc" },
         include: { reviewer: { select: { id: true, name: true, avatarColor: true, avatarUrl: true, position: true } } },
       },
+      // 반려 → 재상신 체인을 양방향으로 포함. 원본을 타고 올라가고 개정본을 타고 내려감.
+      revisedFrom: { select: { id: true, title: true, status: true, createdAt: true } },
+      revisions: { select: { id: true, title: true, status: true, createdAt: true }, orderBy: { createdAt: "asc" } },
+      comments: {
+        orderBy: { createdAt: "asc" },
+        include: { author: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } } },
+      },
     },
   });
   if (!a) return res.status(404).json({ error: "not found" });
   const canSee = a.requesterId === u.id || a.steps.some((s) => s.reviewerId === u.id) || u.role === "ADMIN";
   if (!canSee) return res.status(403).json({ error: "forbidden" });
   res.json({ approval: a });
+});
+
+/**
+ * 결재 댓글 스레드 — 반려 사유에 대한 후속 논의, 재상신 전 맥락 정리용.
+ * 기안자/결재자/ADMIN 만 보이고 쓸 수 있음.
+ */
+router.post("/:id/comments", async (req, res) => {
+  const u = (req as any).user;
+  const content = typeof req.body?.content === "string" ? req.body.content.trim().slice(0, 2000) : "";
+  if (!content) return res.status(400).json({ error: "내용을 입력해주세요" });
+  const a = await prisma.approval.findUnique({
+    where: { id: req.params.id },
+    include: { steps: { select: { reviewerId: true } } },
+  });
+  if (!a) return res.status(404).json({ error: "not found" });
+  const canPost = a.requesterId === u.id || a.steps.some((s) => s.reviewerId === u.id) || u.role === "ADMIN";
+  if (!canPost) return res.status(403).json({ error: "forbidden" });
+  const c = await prisma.approvalComment.create({
+    data: { approvalId: a.id, authorId: u.id, content },
+    include: { author: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } } },
+  });
+  // 관련 당사자에게 멘션 알림 — 본인 제외.
+  const targets = new Set<string>([a.requesterId, ...a.steps.map((s) => s.reviewerId)]);
+  targets.delete(u.id);
+  for (const userId of targets) {
+    await notify({
+      userId,
+      type: "MENTION",
+      title: `결재에 새 댓글`,
+      body: `${u.name}: ${content.slice(0, 120)}`,
+      linkUrl: `/approvals?id=${a.id}`,
+      actorName: u.name,
+    });
+  }
+  res.json({ comment: c });
+});
+
+/**
+ * 반려된 결재를 기반으로 수정 재상신. 원본은 그대로 보존하고 revisedFromId 로 이어 붙여
+ * 스레드 형태로 볼 수 있게 한다. 기안자 본인만 가능.
+ */
+router.post("/:id/revise", async (req, res) => {
+  const u = (req as any).user;
+  const parsed = approvalSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid input" });
+  const d = parsed.data;
+  const orig = await prisma.approval.findUnique({ where: { id: req.params.id } });
+  if (!orig) return res.status(404).json({ error: "not found" });
+  if (orig.requesterId !== u.id) return res.status(403).json({ error: "본인 기안만 재상신할 수 있어요" });
+  if (orig.status !== "REJECTED") return res.status(400).json({ error: "반려된 결재만 재상신할 수 있어요" });
+
+  const reviewers = Array.from(new Set(d.reviewerIds.filter((id) => id !== u.id)));
+  if (!reviewers.length) return res.status(400).json({ error: "결재자를 1명 이상 선택해주세요" });
+  let dataJson: string | null = null;
+  if (d.data !== undefined && d.data !== null) {
+    const serialized = JSON.stringify(d.data);
+    dataJson = serialized.length > 16_000 ? serialized.slice(0, 16_000) : serialized;
+  }
+  const approval = await prisma.approval.create({
+    data: {
+      type: d.type,
+      title: d.title,
+      content: d.content,
+      data: dataJson,
+      startDate: d.startDate ? new Date(d.startDate) : null,
+      endDate: d.endDate ? new Date(d.endDate) : null,
+      amount: d.amount,
+      requesterId: u.id,
+      revisedFromId: orig.id,
+      steps: {
+        create: reviewers.map((rid, idx) => ({ reviewerId: rid, order: idx + 1 })),
+      },
+    },
+    include: { steps: true },
+  });
+  await writeLog(u.id, "APPROVAL_REVISE", approval.id, `${orig.id}→${approval.id}`);
+  const first = approval.steps.find((s) => s.order === 1);
+  if (first) {
+    await notify({
+      userId: first.reviewerId,
+      type: "APPROVAL_REQUEST",
+      title: `재상신 결재 요청 · ${labelForType(d.type)}`,
+      body: d.title,
+      linkUrl: `/approvals?id=${approval.id}`,
+      actorName: u.name,
+    });
+  }
+  res.json({ approval });
 });
 
 router.post("/", async (req, res) => {
