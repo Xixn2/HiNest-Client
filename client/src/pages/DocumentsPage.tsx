@@ -186,8 +186,15 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
   }, [currentFolder, q, scopeTab, activeProjectId]);
 
   // 프로젝트/탭 전환 시 폴더 루트로 되돌림 (다른 네임스페이스의 폴더 id 가 stale 한 채 남지 않게).
+  // 단, 첫 마운트에선 URL 의 ?folder= 를 지키기 위해 skip.
+  const firstProjectRef = useRef(true);
   useEffect(() => {
+    if (firstProjectRef.current) {
+      firstProjectRef.current = false;
+      return;
+    }
     setCurrentFolder("root");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProjectId]);
 
   // 사용자지정 범위 선택 시 유저 목록 로드 (문서 / 폴더 모달 공용)
