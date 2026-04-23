@@ -6,6 +6,7 @@ import { useNotifications } from "../notifications";
 import PageHeader from "../components/PageHeader";
 import { confirmAsync, alertAsync } from "../components/ConfirmHost";
 
+type ReactionAgg = { emoji: string; count: number; reactedByMe: boolean };
 type Notice = {
   id: string;
   title: string;
@@ -13,7 +14,11 @@ type Notice = {
   pinned: boolean;
   createdAt: string;
   author: { name: string };
+  reactions?: ReactionAgg[];
 };
+
+/** 공지 반응용 자주 쓰이는 기본 이모지 팔레트. */
+const NOTICE_REACTION_EMOJI = ["👍", "❤️", "🎉", "🙏", "👀", "😂"];
 
 export default function NoticePage() {
   const { user } = useAuth();
@@ -26,6 +31,8 @@ export default function NoticePage() {
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [reactingEmoji, setReactingEmoji] = useState<string | null>(null);
 
   const canPost = user?.role === "ADMIN" || user?.role === "MANAGER";
 
@@ -115,6 +122,52 @@ export default function NoticePage() {
     }
   }
 
+  async function toggleReaction(notice: Notice, emoji: string) {
+    if (reactingEmoji) return;
+    const existing = notice.reactions?.find((r) => r.emoji === emoji);
+    const mine = !!existing?.reactedByMe;
+    // 낙관적 업데이트 — 내 반응 토글 후 count 조정.
+    const nextReactions = (() => {
+      const cur = notice.reactions ? [...notice.reactions] : [];
+      const idx = cur.findIndex((r) => r.emoji === emoji);
+      if (idx === -1) {
+        cur.push({ emoji, count: 1, reactedByMe: true });
+      } else {
+        const it = cur[idx];
+        if (mine) {
+          const nc = it.count - 1;
+          if (nc <= 0) cur.splice(idx, 1);
+          else cur[idx] = { ...it, count: nc, reactedByMe: false };
+        } else {
+          cur[idx] = { ...it, count: it.count + 1, reactedByMe: true };
+        }
+      }
+      return cur;
+    })();
+    const applyNext = (reactions: ReactionAgg[]) => {
+      setList((xs) => xs.map((n) => (n.id === notice.id ? { ...n, reactions } : n)));
+      setSelected((s) => (s && s.id === notice.id ? { ...s, reactions } : s));
+    };
+    const prevReactions = notice.reactions ?? [];
+    applyNext(nextReactions);
+    setReactingEmoji(emoji);
+    setPickerOpen(false);
+    try {
+      if (mine) {
+        await api(`/api/notice/${notice.id}/reactions/${encodeURIComponent(emoji)}`, { method: "DELETE" });
+      } else {
+        await api(`/api/notice/${notice.id}/reactions`, { method: "POST", json: { emoji } });
+      }
+      invalidateCache("/api/notice");
+    } catch (e: any) {
+      // 실패 시 롤백.
+      applyNext(prevReactions);
+      alertAsync({ title: "반응 처리 실패", description: e?.message ?? "잠시 후 다시 시도해주세요" });
+    } finally {
+      setReactingEmoji(null);
+    }
+  }
+
   return (
     <div>
       <PageHeader
@@ -196,6 +249,63 @@ export default function NoticePage() {
                 )}
               </div>
               <div className="mt-6 whitespace-pre-wrap text-slate-700 leading-relaxed">{selected.content}</div>
+
+              {/* 이모지 반응 — 이미 달린 반응을 먼저 보여주고 맨 끝에 + 버튼으로 추가 팔레트 열기. */}
+              <div className="mt-6 pt-4 border-t border-slate-100">
+                <div className="flex flex-wrap items-center gap-2">
+                  {(selected.reactions ?? []).map((r) => (
+                    <button
+                      key={r.emoji}
+                      type="button"
+                      onClick={() => toggleReaction(selected, r.emoji)}
+                      disabled={reactingEmoji === r.emoji}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-sm transition ${
+                        r.reactedByMe
+                          ? "bg-brand-50 border-brand-300 text-brand-700"
+                          : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                      } ${reactingEmoji === r.emoji ? "opacity-60" : ""}`}
+                      aria-pressed={r.reactedByMe}
+                    >
+                      <span>{r.emoji}</span>
+                      <span className="text-xs font-semibold tabular-nums">{r.count}</span>
+                    </button>
+                  ))}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setPickerOpen((v) => !v)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-dashed border-slate-300 text-slate-500 hover:bg-slate-50 text-sm"
+                      aria-label="이모지 반응 추가"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                        <line x1="9" y1="9" x2="9.01" y2="9" />
+                        <line x1="15" y1="9" x2="15.01" y2="9" />
+                      </svg>
+                      <span className="text-xs">추가</span>
+                    </button>
+                    {pickerOpen && (
+                      <div
+                        className="absolute z-10 mt-2 left-0 bg-white border border-slate-200 shadow-lg rounded-lg p-1 flex gap-1"
+                        onMouseLeave={() => setPickerOpen(false)}
+                      >
+                        {NOTICE_REACTION_EMOJI.map((e) => (
+                          <button
+                            key={e}
+                            type="button"
+                            onClick={() => toggleReaction(selected, e)}
+                            className="w-8 h-8 grid place-items-center rounded hover:bg-slate-100 text-lg"
+                            disabled={reactingEmoji === e}
+                          >
+                            {e}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           ) : (
             <div className="text-center text-slate-400 py-20">좌측에서 공지를 선택해주세요.</div>
