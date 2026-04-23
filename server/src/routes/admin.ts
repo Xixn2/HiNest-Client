@@ -481,9 +481,12 @@ router.get("/positions", async (_req, res) => {
 
 router.post("/positions", async (req, res) => {
   const name = capName(req.body?.name);
-  const rank = Number(req.body?.rank ?? 0);
   if (!name) return res.status(400).json({ error: "이름을 입력해주세요" });
   const u = (req as any).user;
+  // rank 는 더이상 수동 입력받지 않음 — 드래그 정렬 UI 로 바뀌면서
+  // 새 항목은 항상 맨 아래로 붙인다 (기존 max rank + 1).
+  const last = await prisma.position.findFirst({ orderBy: { rank: "desc" }, select: { rank: true } });
+  const rank = (last?.rank ?? -1) + 1;
   try {
     const position = await prisma.position.create({ data: { name, rank } });
     await writeLog(u.id, "POSITION_CREATE", position.id, name);
@@ -492,6 +495,30 @@ router.post("/positions", async (req, res) => {
     if (e?.code === "P2002") return res.status(400).json({ error: "이미 존재하는 직급" });
     throw e;
   }
+});
+
+/**
+ * 직급 순서 일괄 재정렬 — 드래그로 옮긴 후 클라가 전체 id 순서를 보낸다.
+ * 누락된 id 가 있으면 400 (race 상태에서 레코드가 조용히 밀려나는 걸 방지).
+ */
+router.post("/positions/reorder", async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter((x: any) => typeof x === "string") : [];
+  if (!ids.length) return res.status(400).json({ error: "ids required" });
+  const u = (req as any).user;
+
+  const all = await prisma.position.findMany({ select: { id: true } });
+  const existing = new Set(all.map((p) => p.id));
+  if (ids.length !== existing.size || ids.some((id: string) => !existing.has(id))) {
+    return res.status(400).json({ error: "ids 가 현재 직급 목록과 일치하지 않습니다" });
+  }
+
+  await prisma.$transaction(
+    ids.map((id: string, i: number) =>
+      prisma.position.update({ where: { id }, data: { rank: i } }),
+    ),
+  );
+  await writeLog(u.id, "POSITION_REORDER", undefined, `${ids.length}건`);
+  res.json({ ok: true });
 });
 
 router.patch("/positions/:id", async (req, res) => {
