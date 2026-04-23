@@ -384,6 +384,24 @@ router.patch("/:id", async (req, res) => {
     return res.status(413).json({ error: "회의록 본문이 너무 깁니다 (512KB 초과)" });
   }
 
+  // 본문/제목이 실제로 바뀌면 변경 전 스냅샷을 MeetingRevision 에 남김. 공개 범위만
+  // 조정하는 경우엔 리비전을 찍지 않음 — 히스토리가 의미 있는 건 내용 변화.
+  const contentChanged =
+    (d.title !== undefined && d.title !== existing.title) ||
+    (d.content !== undefined && JSON.stringify(d.content) !== JSON.stringify(existing.content));
+  if (contentChanged) {
+    try {
+      await prisma.meetingRevision.create({
+        data: {
+          meetingId: existing.id,
+          title: existing.title,
+          content: existing.content as any,
+          editorId: u.id,
+        },
+      });
+    } catch {}
+  }
+
   // visibility=SPECIFIC 으로 바뀌거나 이미 SPECIFIC 인데 viewerIds 를 다시 주면 교체.
   const replaceViewers =
     d.viewerIds !== undefined &&
@@ -441,6 +459,42 @@ router.patch("/:id", async (req, res) => {
       }
     }
   }
+  res.json({ meeting: updated });
+});
+
+/**
+ * 회의록 버전 히스토리. 읽기 권한만 있으면 누구나 열람 가능.
+ * 복구는 수정 권한(= 읽기 권한) 을 가진 사람 누구나 가능하도록 수정 규칙과 맞춤.
+ */
+router.get("/:id/revisions", async (req, res) => {
+  const u = (req as any).user;
+  const existing = await prisma.meeting.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ error: "not found" });
+  if (!(await canRead(existing, u.id, u.role))) return res.status(403).json({ error: "forbidden" });
+  const rows = await prisma.meetingRevision.findMany({
+    where: { meetingId: existing.id },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+    include: { editor: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } } },
+  });
+  res.json({ revisions: rows });
+});
+
+router.post("/:id/revisions/:revId/restore", async (req, res) => {
+  const u = (req as any).user;
+  const existing = await prisma.meeting.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ error: "not found" });
+  if (!(await canRead(existing, u.id, u.role))) return res.status(403).json({ error: "forbidden" });
+  const rev = await prisma.meetingRevision.findUnique({ where: { id: req.params.revId } });
+  if (!rev || rev.meetingId !== existing.id) return res.status(404).json({ error: "revision not found" });
+  await prisma.meetingRevision.create({
+    data: { meetingId: existing.id, title: existing.title, content: existing.content as any, editorId: u.id },
+  });
+  const updated = await prisma.meeting.update({
+    where: { id: existing.id },
+    data: { title: rev.title, content: rev.content as any },
+  });
+  await writeLog(u.id, "MEETING_REVISION_RESTORE", existing.id, rev.id);
   res.json({ meeting: updated });
 });
 

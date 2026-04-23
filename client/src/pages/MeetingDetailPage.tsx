@@ -4,6 +4,7 @@ import { api, apiSWR } from "../api";
 import { useAuth } from "../auth";
 import { confirmAsync, alertAsync } from "../components/ConfirmHost";
 import PinButton from "../components/PinButton";
+import RevisionHistoryModal from "../components/RevisionHistoryModal";
 // TipTap 에디터는 ~300KB 덩어리 — 회의록 상세 페이지 안에서 다시 한 번 나눠서
 // 제목/메타/공개범위 UI 가 먼저 보이고, 에디터는 뒤따라 로드되도록 함.
 const MeetingEditor = lazy(() => import("../components/MeetingEditor"));
@@ -49,6 +50,7 @@ export default function MeetingDetailPage() {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [viewerIds, setViewerIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [lastSaved, setLastSaved] = useState<number | null>(null);
 
   const [myProjects, setMyProjects] = useState<ProjectLite[]>([]);
@@ -229,6 +231,7 @@ export default function MeetingDetailPage() {
         </Link>
         <div className="flex items-center gap-2 flex-wrap justify-end">
           <PinButton type="MEETING" id={meeting.id} label={meeting.title} />
+          <button className="btn-ghost" onClick={() => setHistoryOpen(true)} title="버전 히스토리">히스토리</button>
           {canEdit && !edit && (
             <button className="btn-ghost" onClick={() => { setEdit(true); setSearchParams({ edit: "1" }); }}>
               편집
@@ -346,6 +349,19 @@ export default function MeetingDetailPage() {
           mentionFetcher={mentionFetcher}
         />
       </Suspense>
+
+      {historyOpen && meeting && (
+        <RevisionHistoryModal
+          kind="meeting"
+          targetId={meeting.id}
+          title={meeting.title}
+          onClose={() => setHistoryOpen(false)}
+          onRestored={() => {
+            // 복구 후 본문/제목이 바뀌었을 수 있음 — 페이지 전체를 재조회.
+            window.location.reload();
+          }}
+        />
+      )}
     </div>
   );
 }

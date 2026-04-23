@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
 import { confirmAsync, alertAsync, promptAsync } from "../components/ConfirmHost";
 import ShareLinkModal from "../components/ShareLinkModal";
+import RevisionHistoryModal from "../components/RevisionHistoryModal";
 
 type Folder = {
   id: string;
@@ -130,6 +131,7 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
     scopeUserIds: string[];
   }>({ name: "", scope: "ALL", scopeUserIds: [] });
   const [sharingDoc, setSharingDoc] = useState<Doc | null>(null);
+  const [historyDoc, setHistoryDoc] = useState<Doc | null>(null);
   const [docForm, setDocForm] = useState<{
     title: string; description: string; tags: string;
     fileUrl: string; fileName: string; fileType: string; fileSize: number;
@@ -1290,6 +1292,9 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" /></svg>
                         </button>
                       )}
+                      <button className="btn-icon" onClick={() => setHistoryDoc(d)} title="버전 히스토리">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l3 2" /></svg>
+                      </button>
                       <button className="btn-icon" onClick={() => deleteDoc(d)} title="삭제">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
                       </button>
@@ -1571,6 +1576,16 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
           documentId={sharingDoc.id}
           documentTitle={sharingDoc.title}
           onClose={() => setSharingDoc(null)}
+        />
+      )}
+
+      {historyDoc && (
+        <RevisionHistoryModal
+          kind="document"
+          targetId={historyDoc.id}
+          title={historyDoc.title}
+          onClose={() => setHistoryDoc(null)}
+          onRestored={() => load()}
         />
       )}
     </div>
