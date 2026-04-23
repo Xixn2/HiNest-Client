@@ -178,7 +178,16 @@ pub.post("/:token/download", async (req, res) => {
       const ok = await bcrypt.compare(password, fl.passwordHash);
       if (!ok) return res.status(401).json({ error: "비밀번호가 올바르지 않아요" });
     }
-    await prisma.folderShareLink.update({ where: { id: fl.id }, data: { downloads: { increment: 1 } } });
+    // 원자적 카운트 증가 — 동시 요청이 maxDownloads 를 초과하는 것을 DB 레벨에서 차단
+    const folderWhere: any = { id: fl.id, revokedAt: null };
+    if (fl.maxDownloads !== null) folderWhere.downloads = { lt: fl.maxDownloads };
+    const folderUpdated = await prisma.folderShareLink.updateMany({
+      where: folderWhere,
+      data: { downloads: { increment: 1 } },
+    });
+    if (folderUpdated.count === 0) {
+      return res.status(429).json({ error: statusMsg(429) });
+    }
     return streamFolderZip(fl.folder.id, fl.folder.name, res);
   }
   if (folderResult.err && folderResult.err !== 404) {
@@ -203,8 +212,18 @@ pub.post("/:token/download", async (req, res) => {
   const buf = await readFile(key);
   if (!buf) return res.status(404).json({ error: "파일을 찾을 수 없어요" });
 
-  // 다운로드 카운트 증가 + 감사 로그 — 동시 요청으로 maxDownloads 초과 방지는 낙관적.
-  await prisma.documentShareLink.update({ where: { id: link.id }, data: { downloads: { increment: 1 } } });
+  // 원자적 카운트 증가 — updateMany + WHERE 조건으로 동시 요청이 maxDownloads 를 초과하는 것을 방지.
+  // count === 0 이면 다른 요청이 먼저 한도를 채웠음을 의미.
+  const docWhere: any = { id: link.id, revokedAt: null };
+  if (link.maxDownloads !== null) docWhere.downloads = { lt: link.maxDownloads };
+  const docUpdated = await prisma.documentShareLink.updateMany({
+    where: docWhere,
+    data: { downloads: { increment: 1 } },
+  });
+  if (docUpdated.count === 0) {
+    return res.status(429).json({ error: statusMsg(429) });
+  }
+
   await prisma.shareLinkAccess.create({
     data: { linkId: link.id, action: "DOWNLOAD", ip: req.ip, userAgent: req.get("user-agent")?.slice(0, 200) },
   });
