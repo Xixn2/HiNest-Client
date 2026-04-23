@@ -201,27 +201,60 @@ const folderPatchSchema = z.object({
   // 스코프/프로젝트 이동 — 드래그 앤 드롭용.
   scope: z.enum(["ALL", "TEAM", "PRIVATE", "CUSTOM"]).nullable().optional(),
   projectId: z.string().max(64).nullable().optional(),
+  // 폴더 중첩 이동 — null 이면 루트로, 값이 있으면 해당 폴더의 자식으로.
+  parentId: z.string().max(64).nullable().optional(),
 });
 
 router.patch("/folders/:id", async (req, res) => {
   const u = (req as any).user;
   const parsed = folderPatchSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid input" });
-  const { name: rawName, scope, projectId } = parsed.data;
+  const { name: rawName, scope, projectId, parentId } = parsed.data;
   const name = rawName !== undefined ? rawName.trim().slice(0, 100) : undefined;
 
   const check = await assertFolderWritable(u, req.params.id);
   if (!check.folder) return res.status(404).json({ error: "not found" });
   if (!check.ok) return res.status(403).json({ error: "forbidden" });
 
-  const wantsMove = scope !== undefined || projectId !== undefined;
+  const wantsScopeMove = scope !== undefined || projectId !== undefined;
+  const wantsParentMove = parentId !== undefined;
+  const wantsMove = wantsScopeMove || wantsParentMove;
   const data: any = {};
   if (name !== undefined) {
     if (!name) return res.status(400).json({ error: "이름이 필요합니다" });
     data.name = name;
   }
 
-  if (wantsMove) {
+  // 부모 폴더로 이동(중첩) — 스코프 이동과 독립적으로 처리.
+  //   - 사이클 방지: 자기 자신 또는 하위로는 이동 금지.
+  //   - 부모의 scope/projectId 를 상속 (가시성 일관성 유지).
+  if (wantsParentMove && !wantsScopeMove) {
+    if (parentId) {
+      if (parentId === req.params.id) return res.status(400).json({ error: "자기 자신으로는 이동할 수 없어요" });
+      const subtree = await collectFolderSubtree(req.params.id);
+      if (subtree.includes(parentId)) {
+        return res.status(400).json({ error: "하위 폴더로는 이동할 수 없어요" });
+      }
+      const parent = await prisma.folder.findUnique({
+        where: { id: parentId },
+        select: { id: true, projectId: true, scope: true, scopeTeam: true, authorId: true },
+      });
+      if (!parent) return res.status(404).json({ error: "부모 폴더를 찾을 수 없어요" });
+      // 부모 폴더에 대해서도 쓰기 권한 확인.
+      const parentCheck = await assertFolderWritable(u, parentId);
+      if (!parentCheck.ok) return res.status(403).json({ error: "부모 폴더에 권한이 없어요" });
+      data.parentId = parentId;
+      data.projectId = parent.projectId;
+      data.scope = parent.scope;
+      data.scopeTeam = parent.scopeTeam;
+      data.scopeUserIds = null;
+    } else {
+      // parentId=null → 현재 스코프 유지한 채 루트로 빼기.
+      data.parentId = null;
+    }
+  }
+
+  if (wantsScopeMove) {
     // 최상위로 올리고 이동 — 새로운 스코프/프로젝트의 루트로 옮김.
     // (하위 폴더는 parentId 체인 유지로 자연스럽게 딸려 옴.)
     data.parentId = null;
@@ -247,15 +280,16 @@ router.patch("/folders/:id", async (req, res) => {
 
   const folder = await prisma.folder.update({ where: { id: req.params.id }, data });
 
-  if (wantsMove) {
-    // 하위 폴더·문서 전부 동일한 스코프/프로젝트로 정렬.
+  // 스코프/프로젝트가 바뀌는 케이스(scope-move 또는 다른 스코프의 부모로 parent-move) 는
+  // 하위 폴더·문서까지 동일 범주로 cascade — 가시성 일관성 유지를 위해.
+  const scopeChanged = data.scope !== undefined || data.projectId !== undefined;
+  if (scopeChanged) {
     const subtreeIds = await collectFolderSubtree(req.params.id);
     const cascade: any = {
       projectId: data.projectId,
       scope: data.scope,
       scopeTeam: data.scopeTeam,
     };
-    // CUSTOM 아닐 땐 scopeUserIds 비움. CUSTOM 이면 유지(루트에만 리셋).
     if (data.scope !== "CUSTOM") cascade.scopeUserIds = null;
     await prisma.folder.updateMany({
       where: { id: { in: subtreeIds.filter((id) => id !== req.params.id) } },

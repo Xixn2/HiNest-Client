@@ -908,15 +908,27 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
             } ${currentFolder === "root" ? "font-bold text-ink-900" : "text-ink-600"}`}
             onClick={() => setCurrentFolder("root")}
             onDragOver={(e) => {
-              if (!draggingDocId) return;
+              if (!draggingDocId && !draggingFolderId) return;
               e.preventDefault();
               setDragOverKey("root");
             }}
             onDragLeave={() => setDragOverKey((k) => (k === "root" ? null : k))}
             onDrop={(e) => {
-              if (!draggingDocId) return;
+              if (!draggingDocId && !draggingFolderId) return;
               e.preventDefault();
-              moveDocToFolder(draggingDocId, null);
+              if (draggingFolderId) {
+                const fid = draggingFolderId;
+                setDragOverKey(null);
+                setDraggingFolderId(null);
+                void api(`/api/document/folders/${fid}`, {
+                  method: "PATCH",
+                  json: { parentId: null },
+                }).then(load).catch((err: any) => {
+                  alertAsync({ title: "폴더 이동 실패", description: err?.message ?? "" });
+                });
+                return;
+              }
+              if (draggingDocId) moveDocToFolder(draggingDocId, null);
               setDragOverKey(null);
               setDraggingDocId(null);
             }}
@@ -934,17 +946,30 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
                   } ${f.id === currentFolder ? "font-bold text-ink-900" : "text-ink-600"}`}
                   onClick={() => setCurrentFolder(f.id)}
                   onDragOver={(e) => {
-                    if (!draggingDocId) return;
+                    if (!draggingDocId && !draggingFolderId) return;
+                    if (draggingFolderId === f.id) return;
                     e.preventDefault();
                     setDragOverKey(key);
                   }}
                   onDragLeave={() => setDragOverKey((k) => (k === key ? null : k))}
                   onDrop={(e) => {
-                    if (!draggingDocId) return;
-                    e.preventDefault();
-                    moveDocToFolder(draggingDocId, f.id);
-                    setDragOverKey(null);
-                    setDraggingDocId(null);
+                    if (draggingDocId) {
+                      e.preventDefault();
+                      moveDocToFolder(draggingDocId, f.id);
+                      setDragOverKey(null);
+                      setDraggingDocId(null);
+                    } else if (draggingFolderId && draggingFolderId !== f.id) {
+                      e.preventDefault();
+                      const fid = draggingFolderId;
+                      setDragOverKey(null);
+                      setDraggingFolderId(null);
+                      void api(`/api/document/folders/${fid}`, {
+                        method: "PATCH",
+                        json: { parentId: f.id },
+                      }).then(load).catch((err: any) => {
+                        alertAsync({ title: "폴더 이동 실패", description: err?.message ?? "" });
+                      });
+                    }
                   }}
                 >
                   {f.name}
@@ -1027,17 +1052,32 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
                 } ${draggingFolderId === f.id ? "opacity-50" : ""}`}
                 onClick={() => setCurrentFolder(f.id)}
                 onDragOver={(e) => {
-                  if (!draggingDocId) return;
+                  // 문서 드래그거나 폴더 드래그 둘 다 수락 — 단, 자기 자신 위로는 안 됨.
+                  if (!draggingDocId && !draggingFolderId) return;
+                  if (draggingFolderId === f.id) return;
                   e.preventDefault();
                   setDragOverKey(dropKey);
                 }}
                 onDragLeave={() => setDragOverKey((k) => (k === dropKey ? null : k))}
                 onDrop={(e) => {
-                  if (!draggingDocId) return;
-                  e.preventDefault();
-                  moveDocToFolder(draggingDocId, f.id);
-                  setDragOverKey(null);
-                  setDraggingDocId(null);
+                  if (draggingDocId) {
+                    e.preventDefault();
+                    moveDocToFolder(draggingDocId, f.id);
+                    setDragOverKey(null);
+                    setDraggingDocId(null);
+                  } else if (draggingFolderId && draggingFolderId !== f.id) {
+                    e.preventDefault();
+                    const fid = draggingFolderId;
+                    setDragOverKey(null);
+                    setDraggingFolderId(null);
+                    // 서버가 자기 하위 폴더 체크하므로 이상 입력은 거절됨.
+                    void api(`/api/document/folders/${fid}`, {
+                      method: "PATCH",
+                      json: { parentId: f.id },
+                    }).then(load).catch((err: any) => {
+                      alertAsync({ title: "폴더 이동 실패", description: err?.message ?? "옮기지 못했어요" });
+                    });
+                  }
                 }}
               >
                 <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 grid place-items-center flex-shrink-0">
