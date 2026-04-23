@@ -91,6 +91,7 @@ const HR_SELECT = {
   hireDate: true,
   phone: true,
   note: true,
+  autoClockOutTime: true,
 } as const;
 
 router.get("/users", async (req, res) => {
@@ -131,6 +132,9 @@ const updateUserSchema = z.object({
   hireDate: nullableStr,
   phone: nullableStr,
   note: noteStr,
+  // 자동 퇴근 시간 — "HH:mm" 형식. 빈 문자열이면 null 로 저장해 자동 퇴근 해제.
+  autoClockOutTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "HH:mm 형식").optional().nullable()
+    .or(z.literal("")),
 });
 
 router.patch("/users/:id", async (req, res) => {
@@ -144,6 +148,11 @@ router.patch("/users/:id", async (req, res) => {
   if (target.superAdmin && !u.superAdmin) return res.status(404).json({ error: "not found" });
 
   const data = parsed.data;
+
+  // 빈 문자열 "" 는 null 로 정규화 — DB 에 저장되면 "자동 퇴근 미설정" 으로 해석됨.
+  if (data.autoClockOutTime === "") {
+    (data as any).autoClockOutTime = null;
+  }
 
   // 역할 변경은 민감한 권한 에스컬레이션 경로. superAdmin + step-up 쿠키가 있어야 허용.
   // ADMIN 이 자신 또는 동료의 role 을 임의로 바꿀 수 없게 함.

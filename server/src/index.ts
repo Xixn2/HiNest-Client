@@ -325,4 +325,8 @@ app.listen(PORT, () => {
   console.log(`[HiNest API] http://localhost:${PORT}`);
   backfillNoticeLinks();
   backfillUserIdentity();
+  // 자동 퇴근 스케줄러 — 매 분 tick, 설정된 시각의 사용자를 자동 퇴근 처리.
+  import("./jobs/autoClockOut.js").then((m) => m.startAutoClockOut()).catch((e) => {
+    console.error("[autoClockOut] 스케줄러 로드 실패:", e);
+  });
 });

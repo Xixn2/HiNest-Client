@@ -46,6 +46,10 @@ model User {
   hireDate           String?  // 입사일 YYYY-MM-DD
   phone              String?  // 전화번호
   note               String?  // 비고
+  // 자동 퇴근 시간 ("HH:mm", Asia/Seoul 기준).
+  // 설정돼있으면 매일 이 시간이 됐을 때 오늘 출근 기록(checkIn 존재, checkOut null)에 대해
+  // 서버 스케줄러가 checkOut 을 그 시각으로 기록한다. null 이면 자동 퇴근 없음.
+  autoClockOutTime   String?
   // 사용자 업무 상태 — AVAILABLE(근무중) | MEETING | MEAL | OUT | OFFLINE | AWAY
   // null 이면 attendance 기준으로 "출근/퇴근/미출근" 자동 판정
   presenceStatus    String?
