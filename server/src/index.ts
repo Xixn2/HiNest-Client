@@ -32,6 +32,7 @@ import webhookRouter from "./routes/webhook.js";
 import meetingRouter from "./routes/meeting.js";
 import pinRouter from "./routes/pin.js";
 import { shareLinkAuthedRouter, shareLinkPublicRouter } from "./routes/shareLink.js";
+import { folderShareLinkAuthedRouter } from "./routes/folderShareLink.js";
 import path from "node:path";
 import mime from "mime-types";
 
@@ -162,6 +163,7 @@ app.use("/api/meeting", meetingRouter);
 app.use("/api/pins", pinRouter);
 // 공유 링크 — 생성/관리는 인증 필요, 실제 외부 다운로드는 인증 없이.
 app.use("/api/share-links", shareLinkAuthedRouter);
+app.use("/api/folder-share-links", folderShareLinkAuthedRouter);
 app.use("/api/public-share", shareLinkPublicRouter);
 // 웹훅 수신은 인증 없음 — 라우터 내부에서 token 검증.
 app.use("/api/webhook", webhookRouter);

@@ -373,9 +373,49 @@ export default function ExpensePage() {
               </div>
               <div>
                 <label className="label">영수증 (이미지, 1.3MB 이하)</label>
-                <input ref={fileRef} type="file" accept="image/*" onChange={onFile} className="text-sm" />
-                {form.receiptUrl && (
-                  <img src={form.receiptUrl} alt="receipt" loading="lazy" decoding="async" className="mt-2 max-h-40 rounded-lg border border-slate-200" />
+                <input ref={fileRef} type="file" accept="image/*" onChange={onFile} className="hidden" />
+                {form.receiptUrl ? (
+                  <div className="relative inline-flex mt-1">
+                    <img
+                      src={form.receiptUrl}
+                      alt="receipt"
+                      loading="lazy"
+                      decoding="async"
+                      className="max-h-36 rounded-xl border border-ink-150 shadow-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setForm((p) => ({ ...p, receiptUrl: "" })); if (fileRef.current) fileRef.current.value = ""; }}
+                      className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-ink-800 text-white text-[10px] font-bold grid place-items-center shadow hover:bg-rose-600 transition"
+                      title="영수증 제거"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <label
+                    className="mt-1 flex flex-col items-center gap-2 border-2 border-dashed border-ink-200 rounded-xl p-5 cursor-pointer hover:border-brand-400 hover:bg-brand-50/30 transition group"
+                    onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("border-brand-400", "bg-brand-50/40"); }}
+                    onDragLeave={(e) => { e.currentTarget.classList.remove("border-brand-400", "bg-brand-50/40"); }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.remove("border-brand-400", "bg-brand-50/40");
+                      const f = e.dataTransfer.files?.[0];
+                      if (!f) return;
+                      const fakeEvt = { target: { files: e.dataTransfer.files } } as unknown as React.ChangeEvent<HTMLInputElement>;
+                      onFile(fakeEvt);
+                    }}
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-ink-100 group-hover:bg-brand-100 grid place-items-center transition">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-ink-500 group-hover:text-brand-600">
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                        <circle cx="9" cy="9" r="2" />
+                        <path d="m21 15-5-5L5 21" />
+                      </svg>
+                    </div>
+                    <span className="text-[12px] font-semibold text-ink-600 group-hover:text-brand-700">클릭 또는 이미지를 여기에 끌어다 놓기</span>
+                    <span className="text-[11px] text-ink-400">JPG · PNG · GIF · WEBP · 1.3MB 이하</span>
+                  </label>
                 )}
               </div>
               <div className="flex justify-end gap-2 pt-2">
