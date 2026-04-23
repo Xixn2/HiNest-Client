@@ -227,16 +227,19 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
 
   async function deleteFolder(f: Folder) {
     if (busyFolderId) return;
-    const ok = await confirmAsync({
+    // 3지선다: 전체 삭제(기본) / 문서는 보존하고 폴더만 삭제 / 취소.
+    const choice = await confirmAsync({
       title: "폴더 삭제",
-      description: `'${f.name}' 폴더를 삭제할까요? 하위 폴더·문서가 모두 삭제돼요.`,
+      description: `'${f.name}' 폴더를 삭제할까요?\n기본은 하위 폴더·문서까지 전부 삭제예요.\n"문서는 보관" 을 누르면 안에 있던 문서는 상위 폴더로 옮기고 빈 폴더만 삭제해요.`,
       tone: "danger",
-      confirmLabel: "삭제",
+      confirmLabel: "전체 삭제",
+      secondaryLabel: "문서는 보관",
     });
-    if (!ok) return;
+    if (!choice) return; // false / null 취소.
+    const mode = choice === "secondary" ? "keep" : "cascade";
     setBusyFolderId(f.id);
     try {
-      await api(`/api/document/folders/${f.id}`, { method: "DELETE" });
+      await api(`/api/document/folders/${f.id}?mode=${mode}`, { method: "DELETE" });
       if (currentFolder === f.id) setCurrentFolder("root");
       else await load();
     } catch (e: any) {
