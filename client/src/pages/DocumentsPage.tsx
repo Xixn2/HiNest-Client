@@ -350,7 +350,9 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
       }
 
       // 3) 파일 업로드 — 각자 제 자리 folderId 로.
+      //    에러는 그때그때 alert 로 띄우지 않고 모았다가 끝나고 사유별로 한 번에 보여준다.
       let done = 0;
+      const failures: { rel: string; reason: string }[] = [];
       for (const f of list) {
         const rel: string = (f as any).webkitRelativePath || f.name;
         const parts = rel.split("/");
@@ -359,7 +361,7 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
         setFolderUpload({ done, total: list.length, label: rel });
         try {
           if (f.size > 500 * 1024 * 1024) {
-            await alertAsync({ title: `${f.name} 건너뜀`, description: "500MB 초과" });
+            failures.push({ rel, reason: "500MB 초과" });
           } else {
             const form = new FormData();
             form.append("file", f);
@@ -383,29 +385,125 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
             });
           }
         } catch (e: any) {
-          await alertAsync({ title: `${rel} 업로드 실패`, description: e?.message ?? "" });
+          failures.push({ rel, reason: e?.message ?? "알 수 없는 오류" });
         }
         done += 1;
         setFolderUpload({ done, total: list.length, label: rel });
       }
       await load();
+      if (failures.length) await reportUploadFailures(failures);
     } finally {
       setFolderUpload(null);
       if (folderInputRef.current) folderInputRef.current.value = "";
     }
   }
 
+  /**
+   * 업로드 실패 여러 건을 사유별로 묶어 한 번에 알림.
+   *   - 같은 사유가 여러 건: "파일A 외 3개: 사유" 형식으로 한 줄
+   *   - 사유가 다양하면 줄바꿈으로 섹션 나눠 표시
+   * 파일 50개 중 30개가 SVG 차단에 걸려도 "확인" 한 번이면 끝난다.
+   */
+  async function reportUploadFailures(failures: { rel: string; reason: string }[]) {
+    if (!failures.length) return;
+    const byReason = new Map<string, string[]>();
+    for (const f of failures) {
+      const key = f.reason || "알 수 없는 오류";
+      const arr = byReason.get(key) ?? [];
+      arr.push(f.rel);
+      byReason.set(key, arr);
+    }
+    const lines: string[] = [];
+    for (const [reason, files] of byReason) {
+      const head = files[0];
+      const rest = files.length - 1;
+      const label = rest > 0 ? `${head} 외 ${rest}개` : head;
+      lines.push(`• ${label}: ${reason}`);
+    }
+    await alertAsync({
+      title: `업로드 실패 ${failures.length}건`,
+      description: lines.join("\n"),
+    });
+  }
+
   const [dropActive, setDropActive] = useState(false);
-  async function handleFilesDropped(files: FileList) {
+
+  /**
+   * 드롭된 DataTransfer 에서 파일과 "디렉터리 포함 여부" 를 같이 추출.
+   *   - 일반 파일 드롭: files 만 채워진다.
+   *   - 폴더 드롭(Chrome/Electron): items[].webkitGetAsEntry() 로 재귀 탐색.
+   *     각 File 에 webkitRelativePath 를 붙여서 handleFolderUpload 가 이해하게 만든다.
+   *
+   * DataTransfer 는 비동기 루프 안에서 items 가 비어버리는 버그가 있어서 진입 직후에
+   * entry 배열을 먼저 뽑아놓고 나서 walker 를 돌린다.
+   */
+  async function extractFromDataTransfer(dt: DataTransfer): Promise<{ files: File[]; hasDir: boolean }> {
+    const items = Array.from(dt.items || []);
+    const entries: any[] = [];
+    for (const it of items) {
+      if (it.kind !== "file") continue;
+      const anyIt = it as any;
+      const entry = anyIt.webkitGetAsEntry ? anyIt.webkitGetAsEntry() : null;
+      if (entry) entries.push(entry);
+    }
+    // 폴더 entry 가 하나도 없고 단순 파일 드롭이면 fast path.
+    const hasDir = entries.some((e) => e?.isDirectory);
+    if (!hasDir) return { files: Array.from(dt.files || []), hasDir: false };
+
+    const out: File[] = [];
+    async function readDir(dirEntry: any, pathPrefix: string) {
+      const reader = dirEntry.createReader();
+      // readEntries 는 한 번에 최대 100 개만 돌려주므로 빌 때까지 반복.
+      while (true) {
+        const batch: any[] = await new Promise((res, rej) => reader.readEntries(res, rej));
+        if (!batch.length) break;
+        for (const entry of batch) {
+          if (entry.isFile) {
+            const file: File = await new Promise((res, rej) => entry.file(res, rej));
+            const rel = `${pathPrefix}${entry.name}`;
+            try { Object.defineProperty(file, "webkitRelativePath", { value: rel, configurable: true }); } catch {}
+            out.push(file);
+          } else if (entry.isDirectory) {
+            await readDir(entry, `${pathPrefix}${entry.name}/`);
+          }
+        }
+      }
+    }
+    for (const entry of entries) {
+      if (entry.isFile) {
+        const file: File = await new Promise((res, rej) => entry.file(res, rej));
+        // 최상위 파일은 상대경로 없이 루트 취급.
+        out.push(file);
+      } else if (entry.isDirectory) {
+        await readDir(entry, `${entry.name}/`);
+      }
+    }
+    return { files: out, hasDir: true };
+  }
+
+  async function handleDrop(dt: DataTransfer) {
+    const { files, hasDir } = await extractFromDataTransfer(dt);
     if (!files.length) return;
+    if (hasDir) {
+      // FileList 흉내: handleFolderUpload 는 FileList 시그니처지만 내부에서 Array.from 만 써서 배열도 OK.
+      await handleFolderUpload(files as unknown as FileList);
+    } else {
+      await handleFilesDropped(files);
+    }
+  }
+
+  async function handleFilesDropped(files: FileList | File[]) {
+    const list = Array.from(files);
+    if (!list.length) return;
     setUploading(true);
     try {
-      const list = Array.from(files);
+      const failures: { rel: string; reason: string }[] = [];
       for (const f of list) {
         try { await uploadAndCreate(f); }
-        catch (e: any) { await alertAsync({ title: `${f.name} 업로드 실패`, description: e?.message ?? "" }); }
+        catch (e: any) { failures.push({ rel: f.name, reason: e?.message ?? "알 수 없는 오류" }); }
       }
       await load();
+      if (failures.length) await reportUploadFailures(failures);
     } finally {
       setUploading(false);
     }
@@ -822,7 +920,9 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
           if (!e.dataTransfer.types.includes("Files")) return;
           e.preventDefault();
           setDropActive(false);
-          if (e.dataTransfer.files?.length) void handleFilesDropped(e.dataTransfer.files);
+          // DataTransfer 는 이벤트 객체 수명 이후 비워지므로 즉시 캡처해서 넘긴다.
+          const dt = e.dataTransfer;
+          void handleDrop(dt);
         }}
         className={`relative rounded-2xl transition ${dropActive ? "ring-2 ring-brand-400 ring-offset-2 ring-offset-[color:var(--c-bg)]" : ""}`}
       >
@@ -1066,7 +1166,27 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
               </button>
             </div>
             <form onSubmit={createDoc} className="p-5 space-y-3">
-              <input ref={fileRef} type="file" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFile(f); }} className="hidden" />
+              <input
+                ref={fileRef}
+                type="file"
+                multiple
+                onChange={(e) => {
+                  const fs = e.target.files;
+                  if (!fs || !fs.length) return;
+                  // 1개만 고르면 기존 플로우 — 제목/설명/태그 같이 입력하는 모달.
+                  // 2개 이상이면 모달 닫고 드롭 업로드 플로우로 일괄 처리(파일명 그대로 저장).
+                  if (fs.length === 1) {
+                    void uploadFile(fs[0]);
+                  } else {
+                    const arr = Array.from(fs);
+                    setCreating(null);
+                    void handleFilesDropped(arr);
+                  }
+                  // 동일 파일 재선택 허용.
+                  if (fileRef.current) fileRef.current.value = "";
+                }}
+                className="hidden"
+              />
               <button type="button" className="w-full h-[100px] rounded-xl border-2 border-dashed border-ink-200 hover:border-brand-400 hover:bg-brand-50/30 transition flex flex-col items-center justify-center gap-1" onClick={() => fileRef.current?.click()} disabled={uploading}>
                 {uploading ? (
                   <span className="text-[13px] text-ink-500">업로드 중…</span>
@@ -1079,7 +1199,7 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
                   <>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12" /><path d="m7 8 5-5 5 5" /><path d="M20 21H4" /></svg>
                     <div className="text-[13px] font-bold text-ink-800">파일 선택 (최대 500MB)</div>
-                    <div className="text-[11px] text-ink-500">선택 사항 · 링크만 있는 문서도 가능</div>
+                    <div className="text-[11px] text-ink-500">여러 개 선택 가능 · 링크만 있는 문서도 OK</div>
                   </>
                 )}
               </button>
