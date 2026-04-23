@@ -1,0 +1,49 @@
+# HiNest 데스크톱 Windows 빌드 — macOS aarch64 에선 wine ia32 에뮬레이션이 막혀서
+# 로컬/도커로는 빌드가 안 됨. 깃허브 windows-latest 러너에서 네이티브로 빌드해
+# Xixn2/HiNest-Desktop 릴리스에 publish 한다.
+#
+# 트리거:
+#  - desktop/ 변경이 main 에 push 됐을 때
+#  - workflow_dispatch 로 수동 실행 (원하는 버전 강제 재빌드)
+#
+# 필요한 시크릿:
+#  DESKTOP_RELEASE_TOKEN — Xixn2/HiNest-Desktop 에 contents:write 권한을 가진
+#                         fine-grained PAT 또는 repo-scoped PAT. GITHUB_TOKEN 은
+#                         다른 레포에 릴리스를 못 올리기 때문에 별도 토큰이 필수.
+
+name: build-desktop-windows
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "desktop/**"
+      - ".github/workflows/build-desktop-windows.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install deps
+        run: npm ci --no-audit --no-fund
+
+      - name: Compile TypeScript
+        run: npm run build
+
+      - name: Build + publish Windows installer
+        env:
+          # Xixn2/HiNest-Desktop 에 쓸 수 있는 PAT. GITHUB_TOKEN 은 cross-repo publish 불가.
+          GH_TOKEN: ${{ secrets.DESKTOP_RELEASE_TOKEN }}
+        run: npx electron-builder --win --publish always
