@@ -87,16 +87,21 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." },
 });
+// 업로드 리밋 — 30/분은 대량 업로드 시나리오(폴더 통째, 문서 수백 개) 를 못 버리므로
+// 초당 ~10 건 상당인 600/분 으로 상향. 사용자가 진짜로 폴더 하나 드롭해도 분당 수백 개 업로드가 정상 동작.
+// IP 기반이라 NAT 뒤 여러 직원이 동시에 올려도 공유되는 버킷이므로 여유있게 잡음.
 const uploadLimiter = rateLimit({
   windowMs: 60 * 1000,
-  limit: 30,
+  limit: 600,
   standardHeaders: "draft-7",
   legacyHeaders: false,
-  message: { error: "업로드 요청이 너무 많습니다." },
+  message: { error: "업로드 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." },
 });
+// 문서 생성 등 대량 동반 API 호출 감당 위해 전역 API 리밋도 상향.
+// (파일 1개 업로드 = /api/upload + /api/document 두 호출이라 대략 2배 소모)
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  limit: 600, // 대다수 읽기/쓰기용
+  limit: 3000,
   standardHeaders: "draft-7",
   legacyHeaders: false,
 });
