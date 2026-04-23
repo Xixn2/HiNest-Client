@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, apiSWR } from "../api";
 import { useAuth } from "../auth";
@@ -101,6 +101,31 @@ export default function MeetingDetailPage() {
       .then((r) => setUsers(r.users))
       .catch(() => {});
   }, [edit, user?.role]);
+
+  // 멘션 자동완성 — 현재 편집 중인 공개 범위(visibility/projectId/viewerIds)를
+  // 서버로 보내 열람 가능한 유저만 반환받는다. 편집 중 상태가 바뀌어도 항상
+  // 최신 값을 쓰도록 ref 로 감싼다 (에디터 재생성 방지).
+  const scopeRef = useRef({ visibility, projectId, viewerIds, meetingId: id });
+  useEffect(() => {
+    scopeRef.current = { visibility, projectId, viewerIds, meetingId: id };
+  }, [visibility, projectId, viewerIds, id]);
+  const mentionFetcher = useCallback(async (q: string) => {
+    const s = scopeRef.current;
+    const params = new URLSearchParams();
+    if (s.meetingId) params.set("meetingId", s.meetingId);
+    else {
+      params.set("visibility", s.visibility);
+      if (s.projectId) params.set("projectId", s.projectId);
+      if (s.viewerIds.length) params.set("viewerIds", s.viewerIds.join(","));
+    }
+    if (q) params.set("q", q);
+    try {
+      const r = await api<{ users: any[] }>(`/api/meeting/mentionable?${params.toString()}`);
+      return r.users;
+    } catch {
+      return [];
+    }
+  }, []);
 
   const canEdit = useMemo(() => {
     if (!meeting || !user) return false;
@@ -316,6 +341,7 @@ export default function MeetingDetailPage() {
           value={content}
           onChange={(json) => setContent(json)}
           editable={edit && canEdit}
+          mentionFetcher={mentionFetcher}
         />
       </Suspense>
     </div>

@@ -48,6 +48,99 @@ function sizeOfJson(v: unknown): number {
   }
 }
 
+/**
+ * 회의록 본문에서 @멘션 자동완성용 — 해당 회의록(또는 설정 중인 공개 범위)
+ * 을 열람 가능한 사용자 목록만 돌려준다. 권한 없는 사람을 멘션하면 링크가
+ * 깨져 보이므로 서버에서 한 번 필터한다.
+ *
+ * 쿼리:
+ *   meetingId  — 이미 저장된 회의록의 공개 범위 기준 (가장 정확)
+ *   또는
+ *   visibility=ALL|PROJECT|SPECIFIC
+ *   projectId  — PROJECT 일 때
+ *   viewerIds  — SPECIFIC 일 때 콤마 구분
+ *   q          — (옵션) 이름/이메일/팀/직급 부분 검색
+ */
+router.get("/mentionable", async (req, res) => {
+  const u = (req as any).user;
+  const meetingId = typeof req.query.meetingId === "string" ? req.query.meetingId : undefined;
+  const q = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
+
+  let visibility: string | undefined;
+  let projectId: string | null | undefined;
+  let viewerIds: string[] = [];
+  let authorId: string | undefined;
+
+  if (meetingId) {
+    const m = await prisma.meeting.findUnique({
+      where: { id: meetingId },
+      include: { viewers: { select: { userId: true } } },
+    });
+    if (!m) return res.status(404).json({ error: "not found" });
+    // 열람 권한 없는 사람이 남의 회의록 멘션 목록을 긁어가지 못하게 한 번 걸러둔다.
+    const canAccess = await canRead(m, u.id, u.role);
+    if (!canAccess) return res.status(403).json({ error: "forbidden" });
+    visibility = m.visibility;
+    projectId = m.projectId;
+    viewerIds = m.viewers.map((v) => v.userId);
+    authorId = m.authorId;
+  } else {
+    visibility = typeof req.query.visibility === "string" ? req.query.visibility : "ALL";
+    projectId = typeof req.query.projectId === "string" && req.query.projectId ? req.query.projectId : null;
+    const raw = typeof req.query.viewerIds === "string" ? req.query.viewerIds : "";
+    viewerIds = raw ? raw.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 200) : [];
+    // 아직 저장 전이라 작성자 = 본인.
+    authorId = u.id;
+  }
+
+  // visibility 별로 접근 가능한 유저 ID 집합을 만든다.
+  let allowedIds: Set<string> | null = null; // null = 전체 허용
+  if (visibility === "ALL") {
+    allowedIds = null;
+  } else if (visibility === "PROJECT") {
+    if (!projectId) {
+      allowedIds = new Set<string>(authorId ? [authorId] : []);
+    } else {
+      const members = await prisma.projectMember.findMany({
+        where: { projectId },
+        select: { userId: true },
+      });
+      allowedIds = new Set(members.map((m) => m.userId));
+      if (authorId) allowedIds.add(authorId);
+    }
+  } else if (visibility === "SPECIFIC") {
+    allowedIds = new Set(viewerIds);
+    if (authorId) allowedIds.add(authorId);
+  }
+
+  const users = await prisma.user.findMany({
+    where: allowedIds ? { id: { in: Array.from(allowedIds) } } : {},
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      team: true,
+      position: true,
+      avatarColor: true,
+      avatarUrl: true,
+    },
+    take: 500,
+    orderBy: { name: "asc" },
+  });
+
+  const filtered = q
+    ? users.filter(
+        (x) =>
+          x.name.toLowerCase().includes(q) ||
+          x.email.toLowerCase().includes(q) ||
+          (x.team ?? "").toLowerCase().includes(q) ||
+          (x.position ?? "").toLowerCase().includes(q),
+      )
+    : users;
+
+  res.json({ users: filtered.slice(0, 50) });
+});
+
 /** 내가 읽을 수 있는 회의록 목록. */
 router.get("/", async (req, res) => {
   const u = (req as any).user;
