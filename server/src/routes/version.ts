@@ -13,7 +13,7 @@ import { Router } from "express";
  *  - hardForce 플래그가 true 면 모달을 닫을 수 없게 만들 수도 있음
  */
 
-export const LATEST_DESKTOP_VERSION = process.env.DESKTOP_VERSION ?? "0.1.2";
+export const LATEST_DESKTOP_VERSION = process.env.DESKTOP_VERSION ?? "0.1.3";
 export const MIN_DESKTOP_VERSION = process.env.DESKTOP_MIN_VERSION ?? "0.0.0";
 
 const router = Router();
