@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
 import { confirmAsync, alertAsync, promptAsync } from "../components/ConfirmHost";
 
@@ -57,6 +58,15 @@ type Props = {
 };
 
 export default function DocumentsPage({ projectId: fixedProjectId, embedded = false }: Props = {}) {
+  const { user } = useAuth();
+  // 팀 스코프 탭 라벨은 내 팀 이름으로. 팀이 없으면 그냥 "팀".
+  const teamLabel = user?.team?.trim() || "팀";
+  const SCOPE_TABS: { key: ScopeTab; label: string }[] = [
+    { key: "all", label: "전체" },
+    { key: "team", label: teamLabel },
+    { key: "private", label: "개인" },
+    { key: "custom", label: "사용자지정" },
+  ];
   const [folders, setFolders] = useState<Folder[]>([]);
   const [docs, setDocs] = useState<Doc[]>([]);
   const [q, setQ] = useState("");
