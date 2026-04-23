@@ -9,10 +9,14 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Highlight from "@tiptap/extension-highlight";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
+import Mention from "@tiptap/extension-mention";
 import { Extension } from "@tiptap/core";
-import { useEffect } from "react";
+import { PluginKey } from "@tiptap/pm/state";
+import { useEffect, useMemo } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import "./MeetingEditor.css";
 import { promptAsync } from "./ConfirmHost";
+import MentionList, { type MentionUser } from "./MentionList";
 
 /** 노션식 글씨 크기(픽셀) — textStyle 의 `data-font-size` 속성으로 직렬화. */
 const FONT_SIZES = [
@@ -85,9 +89,21 @@ type Props = {
   onChange?: (json: any) => void;
   editable?: boolean;
   placeholder?: string;
+  /**
+   * "@" 를 치면 호출됨. 최근 query 에 맞는 멘션 대상 후보 반환.
+   * 권한 체크는 서버 /api/meeting/mentionable 이 담당.
+   */
+  mentionFetcher?: (query: string) => Promise<MentionUser[]>;
 };
 
-export default function MeetingEditor({ value, onChange, editable = true, placeholder }: Props) {
+export default function MeetingEditor({ value, onChange, editable = true, placeholder, mentionFetcher }: Props) {
+  // 멘션 suggestion 렌더러 — createRoot 기반 팝업. 에디터 인스턴스당 1개.
+  const mentionSuggestion = useMemo(
+    () => buildMentionSuggestion(mentionFetcher),
+    // mentionFetcher 는 부모에서 useCallback 으로 고정해야 함.
+    [mentionFetcher],
+  );
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
@@ -101,6 +117,15 @@ export default function MeetingEditor({ value, onChange, editable = true, placeh
       Placeholder.configure({ placeholder: placeholder ?? "여기에 회의록을 작성하세요..." }),
       TaskList,
       TaskItem.configure({ nested: true }),
+      ...(mentionFetcher
+        ? [
+            Mention.configure({
+              HTMLAttributes: { class: "mention" },
+              suggestion: mentionSuggestion,
+              renderText: ({ node }) => `@${node.attrs.label ?? node.attrs.id}`,
+            }),
+          ]
+        : []),
     ],
     content: value ?? "",
     editable,
@@ -313,6 +338,96 @@ function ToolBtn({
 
 function Divider() {
   return <span className="meeting-toolbar-divider" />;
+}
+
+/**
+ * TipTap Mention suggestion 설정 빌더.
+ * tippy 없이 document.body 에 직접 띄운 div + React root 로 팝업을 구현한다.
+ * (새 의존성 줄이고 z-index/CSP 충돌 줄이는 목적)
+ */
+function buildMentionSuggestion(fetcher: ((q: string) => Promise<MentionUser[]>) | undefined) {
+  return {
+    char: "@",
+    // 다른 Mention extension 과 충돌하지 않도록 별도 키 — 회의록 전용.
+    pluginKey: new PluginKey("meetingMention"),
+    items: async ({ query }: { query: string }) => {
+      if (!fetcher) return [];
+      try {
+        const list = await fetcher(query);
+        return list.slice(0, 20);
+      } catch {
+        return [];
+      }
+    },
+    render: () => {
+      let root: Root | null = null;
+      let container: HTMLDivElement | null = null;
+      let listRef: { onKeyDown: (e: { event: KeyboardEvent }) => boolean } | null = null;
+
+      function position(rect: DOMRect | null | (() => DOMRect | null)) {
+        const r = typeof rect === "function" ? rect() : rect;
+        if (!r || !container) return;
+        // 커서 아래 4px, 화면 하단 넘치면 위로 플립
+        const popupH = container.offsetHeight || 240;
+        const below = r.bottom + 4;
+        const flip = below + popupH > window.innerHeight;
+        container.style.left = `${Math.min(r.left, window.innerWidth - 280)}px`;
+        container.style.top = `${flip ? r.top - popupH - 4 : below}px`;
+      }
+
+      return {
+        onStart: (props: any) => {
+          container = document.createElement("div");
+          container.className = "mention-popup-host";
+          container.style.position = "fixed";
+          container.style.zIndex = "9999";
+          document.body.appendChild(container);
+          root = createRoot(container);
+          root.render(
+            <MentionList
+              ref={(r) => {
+                listRef = r;
+              }}
+              items={props.items}
+              command={props.command}
+            />,
+          );
+          position(props.clientRect);
+        },
+        onUpdate: (props: any) => {
+          if (!root) return;
+          root.render(
+            <MentionList
+              ref={(r) => {
+                listRef = r;
+              }}
+              items={props.items}
+              command={props.command}
+            />,
+          );
+          position(props.clientRect);
+        },
+        onKeyDown: (props: any) => {
+          if (props.event.key === "Escape") {
+            return true;
+          }
+          return listRef?.onKeyDown(props) ?? false;
+        },
+        onExit: () => {
+          // React root unmount 는 다음 tick 으로 미뤄야 `flushSync` 경고가 안 뜬다.
+          const r = root;
+          const c = container;
+          queueMicrotask(() => {
+            r?.unmount();
+            c?.remove();
+          });
+          root = null;
+          container = null;
+          listRef = null;
+        },
+      };
+    },
+  };
 }
 
 function AlignIcon({ d }: { d: string }) {
