@@ -226,6 +226,12 @@ textarea.input {
   height: auto;
   line-height: 1.55;
 }
+/* iOS Safari 는 font-size < 16px 인 input 에 포커스 시 viewport 를 자동 확대함.
+   모바일에서만 16px 로 고정해 자동 줌을 억제한다. */
+@media (max-width: 640px) {
+  .input { font-size: 16px; }
+  .filter-input { font-size: 16px; }
+}
 /* iOS Safari 는 네이티브 date/time/datetime-local 입력에 내장 min-width 를
    강제해서 w-full 지정에도 컨테이너 밖으로 튀어나올 수 있음. 강제로 shrink 허용 */
 input.input[type="date"],
@@ -385,6 +391,20 @@ table.pro.pro-grid-fixed tbody td > div > select {
   text-overflow: ellipsis;
 }
 
+
+/* ============================================================ */
+/*   모바일 테이블 수평 스크롤 — 테이블을 감싸는 .table-wrap 에  */
+/*   overflow-x: auto 를 적용해 375px 화면에서 수평 스크롤 가능  */
+/* ============================================================ */
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+@media (max-width: 640px) {
+  /* 내부 테이블이 최소 컨텐츠 너비를 유지하도록 */
+  .table-wrap table { min-width: 480px; }
+}
 
 /* ============================================================ */
 /*                         HEADINGS                              */

@@ -3,7 +3,7 @@ import { z } from "zod";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/db.js";
-import { requireAdmin, requireAuth, requireSuperAdmin, requireSuperAdminStepUp, verifySuperToken, writeLog } from "../lib/auth.js";
+import { requireAdmin, requireAuth, requireSuperAdmin, requireSuperAdminStepUp, verifySuperToken, writeLog, evictUserCache } from "../lib/auth.js";
 import { todayStr } from "../lib/dates.js";
 
 const router = Router();
@@ -179,6 +179,8 @@ router.patch("/users/:id", async (req, res) => {
     data,
     select: HR_SELECT,
   });
+  // 권한/활성 상태 변경 시 캐시된 세션 정보를 즉시 무효화해야 함 (30s TTL 대기 없이 즉시 반영)
+  evictUserCache(req.params.id);
   await writeLog(
     u.id,
     isRoleChange ? "USER_ROLE_CHANGE" : "USER_UPDATE",
@@ -383,6 +385,7 @@ router.post("/users/:id/resign", async (req, res) => {
     data: { resignedAt: when, active: false },
     select: HR_SELECT,
   });
+  evictUserCache(target.id);
   await writeLog(u.id, "USER_RESIGN", target.id, `at=${when.toISOString()}`);
   res.json({ user: updated });
 });
@@ -413,6 +416,7 @@ router.post("/users/:id/unresign", async (req, res) => {
     data: { resignedAt: null, active: true },
     select: HR_SELECT,
   });
+  evictUserCache(target.id);
   await writeLog(u.id, "USER_UNRESIGN", target.id);
   res.json({ user: updated });
 });
