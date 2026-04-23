@@ -180,10 +180,23 @@ router.patch("/:id", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: "invalid input" });
   const existing = await prisma.meeting.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "not found" });
-  if (existing.authorId !== u.id && u.role !== "ADMIN") {
+
+  // 권한 모델:
+  //   - 제목/본문 수정: 열람 권한이 있으면 누구나 가능 (회의록 협업 수정 목적).
+  //   - 공개 범위(visibility / projectId / viewerIds) 변경: 작성자 또는 ADMIN 만.
+  //     열람자가 SPECIFIC → ALL 로 풀어버리는 사고 방지.
+  const isAuthor = existing.authorId === u.id;
+  const isAdmin = u.role === "ADMIN";
+  const canAccess = await canRead(existing, u.id, u.role);
+  if (!canAccess) {
     return res.status(403).json({ error: "forbidden" });
   }
   const d = parsed.data;
+  const changesVisibility =
+    d.visibility !== undefined || d.projectId !== undefined || d.viewerIds !== undefined;
+  if (changesVisibility && !(isAuthor || isAdmin)) {
+    return res.status(403).json({ error: "공개 범위는 작성자 또는 관리자만 변경할 수 있어요" });
+  }
   if (d.content !== undefined && sizeOfJson(d.content) > MEETING_CONTENT_MAX) {
     return res.status(413).json({ error: "회의록 본문이 너무 깁니다 (512KB 초과)" });
   }
