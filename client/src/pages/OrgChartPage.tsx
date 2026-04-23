@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
@@ -24,6 +25,7 @@ const VIEW_LS_KEY = "hinest.orgchart.view";
 
 export default function OrgChartPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [users, setUsers] = useState<DirUser[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [dmBusyId, setDmBusyId] = useState<string | null>(null);
@@ -124,6 +126,20 @@ export default function OrgChartPage() {
     });
   }, [orgUsers, rank]);
 
+  function scheduleWith(target: DirUser) {
+    if (target.id === user?.id) return;
+    // 일정 페이지로 이동 + TARGETED 스코프로 이 유저를 기본 대상에 꽂아 모달 오픈.
+    // 페이지 마운트 레이스를 피하려고 다음 tick 에 이벤트 발행 (목적지에서 리스너 붙을 틈).
+    navigate("/schedule");
+    setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent("schedule:create", {
+          detail: { targetUserIds: [target.id], scope: "TARGETED" as const },
+        }),
+      );
+    }, 30);
+  }
+
   async function startDM(target: DirUser) {
     if (target.id === user?.id) return;
     if (dmBusyId) return;
@@ -165,13 +181,13 @@ export default function OrgChartPage() {
       </div>
 
       {view === "list" && (
-        <ListView grouped={grouped} meId={user?.id ?? null} dmBusyId={dmBusyId} onDM={startDM} />
+        <ListView grouped={grouped} meId={user?.id ?? null} dmBusyId={dmBusyId} onDM={startDM} onSchedule={scheduleWith} />
       )}
       {view === "tree" && (
-        <TeamTreeView grouped={grouped} rank={rank} meId={user?.id ?? null} dmBusyId={dmBusyId} onDM={startDM} totalCount={orgUsers.length} />
+        <TeamTreeView grouped={grouped} rank={rank} meId={user?.id ?? null} dmBusyId={dmBusyId} onDM={startDM} onSchedule={scheduleWith} totalCount={orgUsers.length} />
       )}
       {view === "rank" && (
-        <RankTreeView byRank={byRank} meId={user?.id ?? null} dmBusyId={dmBusyId} onDM={startDM} />
+        <RankTreeView byRank={byRank} meId={user?.id ?? null} dmBusyId={dmBusyId} onDM={startDM} onSchedule={scheduleWith} />
       )}
     </div>
   );
@@ -200,11 +216,13 @@ function ListView({
   meId,
   dmBusyId,
   onDM,
+  onSchedule,
 }: {
   grouped: [string, DirUser[]][];
   meId: string | null;
   dmBusyId: string | null;
   onDM: (u: DirUser) => void;
+  onSchedule: (u: DirUser) => void;
 }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -223,7 +241,7 @@ function ListView({
           </div>
           <div className="divide-y divide-ink-100">
             {members.map((u) => (
-              <MemberRow key={u.id} u={u} meId={meId} dmBusyId={dmBusyId} onDM={onDM} />
+              <MemberRow key={u.id} u={u} meId={meId} dmBusyId={dmBusyId} onDM={onDM} onSchedule={onSchedule} />
             ))}
           </div>
         </div>
@@ -239,9 +257,9 @@ function ListView({
 }
 
 function MemberRow({
-  u, meId, dmBusyId, onDM,
+  u, meId, dmBusyId, onDM, onSchedule,
 }: {
-  u: DirUser; meId: string | null; dmBusyId: string | null; onDM: (u: DirUser) => void;
+  u: DirUser; meId: string | null; dmBusyId: string | null; onDM: (u: DirUser) => void; onSchedule: (u: DirUser) => void;
 }) {
   return (
     <div className="group flex items-center gap-3 px-4 py-2.5 hover:bg-ink-25">
@@ -254,16 +272,30 @@ function MemberRow({
         <div className="text-[11px] text-ink-500 truncate">{u.position ?? "—"}</div>
       </div>
       {u.id !== meId && (
-        <button
-          onClick={() => onDM(u)}
-          disabled={dmBusyId === u.id}
-          className="md:opacity-0 md:group-hover:opacity-100 btn-icon disabled:opacity-60"
-          title="1:1 대화"
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 5h16v11H9l-4 4z" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-1 md:opacity-0 md:group-hover:opacity-100">
+          <button
+            onClick={() => onSchedule(u)}
+            className="btn-icon"
+            title="일정 잡기"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+          </button>
+          <button
+            onClick={() => onDM(u)}
+            disabled={dmBusyId === u.id}
+            className="btn-icon disabled:opacity-60"
+            title="1:1 대화"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 5h16v11H9l-4 4z" />
+            </svg>
+          </button>
+        </div>
       )}
     </div>
   );
@@ -280,6 +312,7 @@ function TeamTreeView({
   meId,
   dmBusyId,
   onDM,
+  onSchedule,
   totalCount,
 }: {
   grouped: [string, DirUser[]][];
@@ -287,6 +320,7 @@ function TeamTreeView({
   meId: string | null;
   dmBusyId: string | null;
   onDM: (u: DirUser) => void;
+  onSchedule: (u: DirUser) => void;
   totalCount: number;
 }) {
   return (
@@ -314,7 +348,7 @@ function TeamTreeView({
                       <div className="org-vtree-members">
                         {ms.map((u) => (
                           <div key={u.id} className="org-vtree-member">
-                            <PersonNode u={u} meId={meId} dmBusyId={dmBusyId} onDM={onDM} />
+                            <PersonNode u={u} meId={meId} dmBusyId={dmBusyId} onDM={onDM} onSchedule={onSchedule} />
                           </div>
                         ))}
                       </div>
@@ -340,11 +374,13 @@ function RankTreeView({
   meId,
   dmBusyId,
   onDM,
+  onSchedule,
 }: {
   byRank: [string, DirUser[]][];
   meId: string | null;
   dmBusyId: string | null;
   onDM: (u: DirUser) => void;
+  onSchedule: (u: DirUser) => void;
 }) {
   const total = byRank.reduce((a, [, arr]) => a + arr.length, 0);
   return (
@@ -358,7 +394,7 @@ function RankTreeView({
               <div className="org-vtree-members">
                 {members.map((u) => (
                   <div key={u.id} className="org-vtree-member">
-                    <PersonNode u={u} meId={meId} dmBusyId={dmBusyId} onDM={onDM} showTeam />
+                    <PersonNode u={u} meId={meId} dmBusyId={dmBusyId} onDM={onDM} onSchedule={onSchedule} showTeam />
                   </div>
                 ))}
               </div>
@@ -414,9 +450,9 @@ function LevelNode({ level, count }: { level: string; count: number }) {
 }
 
 function PersonNode({
-  u, meId, dmBusyId, onDM, showTeam,
+  u, meId, dmBusyId, onDM, onSchedule, showTeam,
 }: {
-  u: DirUser; meId: string | null; dmBusyId: string | null; onDM: (u: DirUser) => void; showTeam?: boolean;
+  u: DirUser; meId: string | null; dmBusyId: string | null; onDM: (u: DirUser) => void; onSchedule: (u: DirUser) => void; showTeam?: boolean;
 }) {
   const isMe = u.id === meId;
   // width 를 "고정" 해서 '나' 칩 유무와 관계없이 모든 카드 크기가 동일하도록 함.
@@ -433,16 +469,30 @@ function PersonNode({
         </div>
       </div>
       {!isMe && (
-        <button
-          onClick={() => onDM(u)}
-          disabled={dmBusyId === u.id}
-          className="md:opacity-0 md:group-hover:opacity-100 btn-icon !w-6 !h-6 disabled:opacity-60 flex-shrink-0"
-          title="1:1 대화"
-        >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 5h16v11H9l-4 4z" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-0.5 md:opacity-0 md:group-hover:opacity-100 flex-shrink-0">
+          <button
+            onClick={() => onSchedule(u)}
+            className="btn-icon !w-6 !h-6"
+            title="일정 잡기"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+          </button>
+          <button
+            onClick={() => onDM(u)}
+            disabled={dmBusyId === u.id}
+            className="btn-icon !w-6 !h-6 disabled:opacity-60"
+            title="1:1 대화"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 5h16v11H9l-4 4z" />
+            </svg>
+          </button>
+        </div>
       )}
     </div>
   );
