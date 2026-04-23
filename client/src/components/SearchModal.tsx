@@ -8,6 +8,9 @@ type Results = {
   events?: any[];
   documents?: any[];
   messages?: any[];
+  meetings?: any[];
+  approvals?: any[];
+  projects?: any[];
 };
 
 /** 페이지 바로가기 — label/aliases 중 하나가 검색어에 포함되면 노출 */
@@ -230,6 +233,39 @@ export default function SearchModal({ open, onClose }: { open: boolean; onClose:
                       <div className="text-[11px] text-ink-500 tabular">
                         {new Date(e.startAt).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
                       </div>
+                    </Row>
+                  ))}
+                </Section>
+              )}
+              {results.meetings && results.meetings.length > 0 && (
+                <Section label="회의록">
+                  {results.meetings.map((m: any) => (
+                    <Row key={`mt-${m.id}`} onClick={() => go(`/meetings?id=${m.id}`)}
+                      icon={<SmallBadge color="#8B5CF6">🗒</SmallBadge>}>
+                      <div className="text-[13px] font-bold text-ink-900 truncate">{m.title}</div>
+                      <div className="text-[11px] text-ink-500 truncate">{m.author?.name}</div>
+                    </Row>
+                  ))}
+                </Section>
+              )}
+              {results.approvals && results.approvals.length > 0 && (
+                <Section label="결재">
+                  {results.approvals.map((a: any) => (
+                    <Row key={`a-${a.id}`} onClick={() => go(`/approvals?id=${a.id}`)}
+                      icon={<SmallBadge color="#16A34A">✅</SmallBadge>}>
+                      <div className="text-[13px] font-bold text-ink-900 truncate">{a.title}</div>
+                      <div className="text-[11px] text-ink-500 truncate">{a.requester?.name} · {a.status}</div>
+                    </Row>
+                  ))}
+                </Section>
+              )}
+              {results.projects && results.projects.length > 0 && (
+                <Section label="프로젝트">
+                  {results.projects.map((p: any) => (
+                    <Row key={`pr-${p.id}`} onClick={() => go(`/projects/${p.id}`)}
+                      icon={<SmallBadge color={p.color ?? "#3D54C4"}>◆</SmallBadge>}>
+                      <div className="text-[13px] font-bold text-ink-900 truncate">{p.name}</div>
+                      <div className="text-[11px] text-ink-500 truncate">{p.description ?? "—"}</div>
                     </Row>
                   ))}
                 </Section>
