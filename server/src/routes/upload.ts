@@ -29,15 +29,20 @@ function fixName(name: string) {
   }
 }
 
-// XSS 위험이 있는 타입/확장자는 업로드 차단 (SVG/HTML/JS/XML 등)
+// XSS 위험이 있는 타입/확장자는 업로드 차단 (HTML/JS/XML 등).
 // 같은 origin 에서 서빙되기 때문에 이런 파일을 클릭하면 쿠키/세션에 접근 가능.
+//
+// SVG 는 예전엔 막혀있었지만 /uploads 서빙 경로에 이미
+// `Content-Security-Policy: default-src 'none'; sandbox` + `X-Content-Type-Options: nosniff`
+// 가 걸려있어 SVG 내부 스크립트/외부 리소스 로드가 전부 차단됨 → 허용해도 안전.
+// (디자이너 아이콘/로고 업로드 수요 때문에 열어둠.)
 const BLOCKED_EXTS = new Set([
-  ".svg", ".html", ".htm", ".xhtml", ".xml", ".js", ".mjs", ".cjs",
+  ".html", ".htm", ".xhtml", ".xml", ".js", ".mjs", ".cjs",
   ".php", ".phtml", ".jsp", ".asp", ".aspx", ".sh", ".bat", ".cmd",
   ".exe", ".dll", ".app", ".jar",
 ]);
 const BLOCKED_MIME_PREFIXES = [
-  "text/html", "application/xhtml", "image/svg", "application/javascript",
+  "text/html", "application/xhtml", "application/javascript",
   "text/javascript", "application/x-javascript", "application/xml", "text/xml",
 ];
 
