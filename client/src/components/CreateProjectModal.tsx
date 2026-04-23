@@ -56,7 +56,11 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
     let alive = true;
     api<{ users: UserLite[] }>("/api/users")
       .then((r) => { if (alive) setUsers(r.users); })
-      .catch(() => {});
+      .catch((e: any) => {
+        if (!alive) return;
+        // 멤버 후보 로드 실패는 프로젝트 생성 자체를 막지 않지만, 사용자에게 왜 목록이 비었는지는 알려야 함
+        setErr(e?.message ?? "멤버 목록을 불러오지 못했어요. 새로고침 후 다시 시도해주세요.");
+      });
     return () => { alive = false; };
   }, [open]);
 
