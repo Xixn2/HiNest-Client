@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { fmtSize } from "../lib/fmt";
 
 /**
  * 외부 공유 링크 수신 페이지 — 로그인 없이 접근. 토큰을 URL 세그먼트로 받아
@@ -116,9 +117,4 @@ export default function PublicSharePage() {
   );
 }
 
-function fmtSize(n: number) {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
-  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
-}
+// fmtSize: src/lib/fmt.ts 로 이동

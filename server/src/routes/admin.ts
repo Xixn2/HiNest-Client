@@ -3,7 +3,7 @@ import { z } from "zod";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/db.js";
-import { requireAdmin, requireAuth, requireSuperAdmin, requireSuperAdminStepUp, verifySuperToken, writeLog, evictUserCache } from "../lib/auth.js";
+import { requireAdmin, requireAuth, requireSuperAdminStepUp, verifySuperToken, writeLog, evictUserCache } from "../lib/auth.js";
 import { todayStr } from "../lib/dates.js";
 
 const router = Router();
