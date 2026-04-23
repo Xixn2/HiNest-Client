@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/db.js";
 import { requireAuth, writeLog } from "../lib/auth.js";
+import { notifyMany } from "../lib/notify.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -39,6 +40,35 @@ const updateSchema = z.object({
 // 안쪽이라 512KB 면 충분. 전역 json limit(2MB) 보다 타이트하게 컷해야 Postgres JSONB
 // 파싱/인덱싱 비용이 튀지 않고, 단일 문서 열람 속도도 예측 가능.
 const MEETING_CONTENT_MAX = 512_000;
+/**
+ * TipTap 문서에서 @멘션 노드(type: "mention", attrs.id)의 사용자 ID 집합을 꺼낸다.
+ * 중첩 구조라 재귀 — 크기는 본문 상한 512KB 이내라 안전.
+ */
+function extractMentionIds(doc: unknown): Set<string> {
+  const out = new Set<string>();
+  const walk = (n: any) => {
+    if (!n || typeof n !== "object") return;
+    if (n.type === "mention" && n.attrs && typeof n.attrs.id === "string" && n.attrs.id) {
+      out.add(n.attrs.id);
+    }
+    if (Array.isArray(n.content)) n.content.forEach(walk);
+  };
+  walk(doc);
+  return out;
+}
+
+/** TipTap 문서에서 일반 텍스트만 뽑아 알림 본문 미리보기에 씀. */
+function extractPlainText(doc: unknown, limit = 120): string {
+  const out: string[] = [];
+  const walk = (n: any) => {
+    if (!n || typeof n !== "object") return;
+    if (typeof n.text === "string") out.push(n.text);
+    if (Array.isArray(n.content)) n.content.forEach(walk);
+  };
+  walk(doc);
+  return out.join(" ").replace(/\s+/g, " ").trim().slice(0, limit);
+}
+
 function sizeOfJson(v: unknown): number {
   try {
     return JSON.stringify(v ?? "").length;
@@ -188,6 +218,47 @@ router.get("/", async (req, res) => {
   res.json({ meetings });
 });
 
+/**
+ * 회의록 열람 권한이 있는 유저 ID 만 추려서 반환 — 멘션 알림 대상 필터링용.
+ * canRead 를 유저마다 네트워크 호출로 돌리면 멘션 10명에 쿼리 10+개가 나가서
+ * 한 번에 확인하도록 별도 구현.
+ */
+async function filterReadableUsers(meeting: { id: string; authorId: string; visibility: string; projectId: string | null }, userIds: string[]): Promise<string[]> {
+  if (!userIds.length) return [];
+  const uniq = Array.from(new Set(userIds));
+  // 기본적으로 author 와 ADMIN 은 항상 열람 가능.
+  const admins = await prisma.user.findMany({
+    where: { id: { in: uniq }, role: "ADMIN", active: true },
+    select: { id: true },
+  });
+  const adminSet = new Set(admins.map((a) => a.id));
+  const allowed = new Set<string>();
+  for (const id of uniq) {
+    if (id === meeting.authorId || adminSet.has(id)) allowed.add(id);
+  }
+  if (meeting.visibility === "ALL") {
+    // active 유저 전원 허용.
+    const actives = await prisma.user.findMany({
+      where: { id: { in: uniq }, active: true },
+      select: { id: true },
+    });
+    actives.forEach((a) => allowed.add(a.id));
+  } else if (meeting.visibility === "PROJECT" && meeting.projectId) {
+    const members = await prisma.projectMember.findMany({
+      where: { projectId: meeting.projectId, userId: { in: uniq } },
+      select: { userId: true },
+    });
+    members.forEach((m) => allowed.add(m.userId));
+  } else if (meeting.visibility === "SPECIFIC") {
+    const viewers = await prisma.meetingViewer.findMany({
+      where: { meetingId: meeting.id, userId: { in: uniq } },
+      select: { userId: true },
+    });
+    viewers.forEach((v) => allowed.add(v.userId));
+  }
+  return Array.from(allowed);
+}
+
 async function canRead(meeting: any, userId: string, userRole: string) {
   if (userRole === "ADMIN") return true;
   if (meeting.authorId === userId) return true;
@@ -264,6 +335,25 @@ router.post("/", async (req, res) => {
     },
   });
   await writeLog(u.id, "MEETING_CREATE", meeting.id, d.title);
+
+  // 멘션 알림 — 열람 권한 있는 사람에게만. 본인 제외.
+  const mentionIds = Array.from(extractMentionIds(d.content)).filter((id) => id !== u.id);
+  if (mentionIds.length) {
+    const recipients = await filterReadableUsers(meeting, mentionIds);
+    if (recipients.length) {
+      const preview = extractPlainText(d.content);
+      await notifyMany(
+        recipients.map((userId) => ({
+          userId,
+          type: "MENTION",
+          title: `${u.name}님이 회의록에서 언급했어요`,
+          body: `${d.title}${preview ? " · " + preview : ""}`.slice(0, 200),
+          linkUrl: `/meetings?id=${meeting.id}`,
+          actorName: u.name,
+        })),
+      );
+    }
+  }
   res.json({ meeting });
 });
 
@@ -328,6 +418,29 @@ router.patch("/:id", async (req, res) => {
     });
   });
   await writeLog(u.id, "MEETING_UPDATE", updated.id);
+
+  // 본문이 바뀌었고 새로 추가된 멘션이 있다면 그 사람들에게만 알림. 이미 언급됐던 사람은 스킵.
+  if (d.content !== undefined) {
+    const before = extractMentionIds(existing.content);
+    const after = extractMentionIds(d.content);
+    const added = Array.from(after).filter((id) => !before.has(id) && id !== u.id);
+    if (added.length) {
+      const recipients = await filterReadableUsers(updated, added);
+      if (recipients.length) {
+        const preview = extractPlainText(d.content);
+        await notifyMany(
+          recipients.map((userId) => ({
+            userId,
+            type: "MENTION",
+            title: `${u.name}님이 회의록에서 언급했어요`,
+            body: `${updated.title}${preview ? " · " + preview : ""}`.slice(0, 200),
+            linkUrl: `/meetings?id=${updated.id}`,
+            actorName: u.name,
+          })),
+        );
+      }
+    }
+  }
   res.json({ meeting: updated });
 });
 
