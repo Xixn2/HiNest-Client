@@ -37,6 +37,7 @@ type UserRow = {
   hireDate?: string | null;
   phone?: string | null;
   note?: string | null;
+  autoClockOutTime?: string | null;
 };
 
 // 나이 계산 (생년월일 기반)
@@ -815,6 +816,7 @@ function UserDetailEditModal({
     disabilityType: user.disabilityType ?? "",
     disabilityLevel: user.disabilityLevel ?? "",
     note: user.note ?? "",
+    autoClockOutTime: user.autoClockOutTime ?? "",
   };
   const [form, setForm] = useState(init);
   const [saving, setSaving] = useState(false);
@@ -897,6 +899,26 @@ function UserDetailEditModal({
               <SelectOrEtc options={CONTRACT_TYPES} value={form.contractType} onChange={(v) => set("contractType", v)} placeholder="(선택)" />
             </Field>
             <Field label="입사일"><DatePicker variant="input" value={form.hireDate} onChange={(v) => set("hireDate", v)} /></Field>
+            <Field label="자동 퇴근 시간">
+              <div className="flex items-center gap-2">
+                <div className="flex-1">
+                  <TimePicker value={form.autoClockOutTime} onChange={(v) => set("autoClockOutTime", v)} placeholder="(미설정)" />
+                </div>
+                {form.autoClockOutTime && (
+                  <button
+                    type="button"
+                    className="btn-ghost btn-xs"
+                    onClick={() => set("autoClockOutTime", "")}
+                    title="자동 퇴근 해제"
+                  >
+                    해제
+                  </button>
+                )}
+              </div>
+              <div className="text-[11px] text-ink-500 mt-1">
+                설정된 시간(KST)이 되면 오늘 출근한 기록이 자동으로 퇴근 처리돼요.
+              </div>
+            </Field>
           </Section>
 
           <Section title="개인 정보">
