@@ -517,15 +517,55 @@ router.patch("/:id", async (req, res) => {
   if (!isAuthor && !isAdmin && !isProjectMember)
     return res.status(403).json({ error: "forbidden" });
   const d = parsed.data;
-  const doc = await prisma.document.update({
-    where: { id: exist.id },
-    data: {
-      ...(d.title !== undefined && { title: d.title }),
-      ...(d.description !== undefined && { description: d.description }),
-      ...(d.folderId !== undefined && { folderId: d.folderId }),
-      ...(d.tags !== undefined && { tags: d.tags }),
-    },
-  });
+
+  // 가시성 필드(scope/scopeTeam/scopeUserIds/projectId) 는 작성자/ADMIN 만 변경 가능.
+  // 드래그 앤 드롭으로 프로젝트 칩·스코프 탭에 떨어뜨리는 흐름이 여기를 사용.
+  const touchesVisibility =
+    d.scope !== undefined || d.scopeTeam !== undefined ||
+    d.scopeUserIds !== undefined || d.projectId !== undefined;
+  if (touchesVisibility && !(isAuthor || isAdmin)) {
+    return res.status(403).json({ error: "공개 범위는 작성자 또는 관리자만 바꿀 수 있어요" });
+  }
+  // 프로젝트 이동 시 새 프로젝트 멤버십 확인 (ADMIN 은 예외).
+  if (d.projectId && !isAdmin) {
+    if (!(await assertProjectMember(u, d.projectId))) {
+      return res.status(403).json({ error: "해당 프로젝트 멤버만 이동할 수 있어요" });
+    }
+  }
+
+  const updateData: any = {
+    ...(d.title !== undefined && { title: d.title }),
+    ...(d.description !== undefined && { description: d.description }),
+    ...(d.folderId !== undefined && { folderId: d.folderId }),
+    ...(d.tags !== undefined && { tags: d.tags }),
+  };
+  if (touchesVisibility) {
+    if (d.projectId !== undefined) {
+      updateData.projectId = d.projectId;
+      if (d.projectId) {
+        // 프로젝트 문서는 scope 가 무의미 — ALL 로 고정, 팀/커스텀 리셋.
+        updateData.scope = "ALL";
+        updateData.scopeTeam = null;
+        updateData.scopeUserIds = null;
+        // 프로젝트 바뀌었는데 기존 folderId 가 다른 프로젝트의 폴더면 가시성 깨짐 → 루트로.
+        updateData.folderId = null;
+      }
+    }
+    if (d.scope !== undefined && !updateData.projectId) {
+      updateData.scope = d.scope;
+      updateData.scopeTeam = d.scope === "TEAM"
+        ? (d.scopeTeam ?? u.team ?? null)
+        : null;
+      updateData.scopeUserIds = d.scope === "CUSTOM" && d.scopeUserIds?.length
+        ? d.scopeUserIds.join(",")
+        : null;
+      // 전역으로 빠질 땐 projectId 도 해제 + 프로젝트 폴더 밖으로.
+      updateData.projectId = null;
+      updateData.folderId = null;
+    }
+  }
+
+  const doc = await prisma.document.update({ where: { id: exist.id }, data: updateData });
   await writeLog(u.id, "DOC_UPDATE", doc.id);
   res.json({ document: doc });
 });

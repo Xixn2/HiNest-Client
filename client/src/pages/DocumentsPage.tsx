@@ -777,18 +777,26 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
           <button
             onClick={() => setSelectedProjectId(null)}
             onDragOver={(e) => {
-              if (!draggingFolderId) return;
+              if (!draggingFolderId && !draggingDocId) return;
               e.preventDefault();
               setDragOverKey("chip:all");
             }}
             onDragLeave={() => setDragOverKey((k) => (k === "chip:all" ? null : k))}
             onDrop={(e) => {
-              if (!draggingFolderId) return;
               e.preventDefault();
-              const fid = draggingFolderId;
               setDragOverKey(null);
-              setDraggingFolderId(null);
-              void moveFolderTo(fid, { project: null });
+              if (draggingFolderId) {
+                const fid = draggingFolderId;
+                setDraggingFolderId(null);
+                void moveFolderTo(fid, { project: null });
+              } else if (draggingDocId) {
+                const did = draggingDocId;
+                setDraggingDocId(null);
+                // 전역 문서함(ALL) 으로 — 프로젝트 해제.
+                void api(`/api/document/${did}`, { method: "PATCH", json: { scope: "ALL" } })
+                  .then(load)
+                  .catch((err: any) => alertAsync({ title: "이동 실패", description: err?.message ?? "" }));
+              }
             }}
             className={`px-3 h-8 rounded-full text-[12px] font-bold border transition ${
               dragOverKey === "chip:all" ? "ring-2 ring-brand-400 " : ""
@@ -808,18 +816,25 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
                 key={p.id}
                 onClick={() => setSelectedProjectId(p.id)}
                 onDragOver={(e) => {
-                  if (!draggingFolderId) return;
+                  if (!draggingFolderId && !draggingDocId) return;
                   e.preventDefault();
                   setDragOverKey(chipKey);
                 }}
                 onDragLeave={() => setDragOverKey((k) => (k === chipKey ? null : k))}
                 onDrop={(e) => {
-                  if (!draggingFolderId) return;
                   e.preventDefault();
-                  const fid = draggingFolderId;
                   setDragOverKey(null);
-                  setDraggingFolderId(null);
-                  void moveFolderTo(fid, { project: p.id });
+                  if (draggingFolderId) {
+                    const fid = draggingFolderId;
+                    setDraggingFolderId(null);
+                    void moveFolderTo(fid, { project: p.id });
+                  } else if (draggingDocId) {
+                    const did = draggingDocId;
+                    setDraggingDocId(null);
+                    void api(`/api/document/${did}`, { method: "PATCH", json: { projectId: p.id } })
+                      .then(load)
+                      .catch((err: any) => alertAsync({ title: "이동 실패", description: err?.message ?? "" }));
+                  }
                 }}
                 className={`px-3 h-8 rounded-full text-[12px] font-bold border transition flex items-center gap-1.5 ${
                   dragOverKey === chipKey ? "ring-2 ring-brand-400 " : ""
