@@ -939,6 +939,39 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
         </div>
       </div>
 
+      {/*
+        폴더 + 문서 공용 드롭존 — 파일을 떨어뜨리면 문서로, 폴더를 떨어뜨리면 폴더+내부 문서로 업로드.
+        두 섹션을 하나로 감싸서 사용자가 폴더 카드 주변에 놔도 인식되게 함.
+      */}
+      <div
+        onDragOver={(e) => {
+          if (!e.dataTransfer.types.includes("Files")) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+          if (!dropActive) setDropActive(true);
+        }}
+        onDragLeave={(e) => {
+          if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+          setDropActive(false);
+        }}
+        onDrop={(e) => {
+          if (!e.dataTransfer.types.includes("Files")) return;
+          e.preventDefault();
+          setDropActive(false);
+          const dt = e.dataTransfer;
+          void handleDrop(dt);
+        }}
+        className={`relative rounded-2xl transition ${dropActive ? "ring-2 ring-brand-400 ring-offset-2 ring-offset-[color:var(--c-bg)]" : ""}`}
+      >
+        {dropActive && (
+          <div className="pointer-events-none absolute inset-0 z-10 rounded-2xl bg-brand-500/10 border-2 border-dashed border-brand-400 grid place-items-center">
+            <div className="text-center">
+              <div className="text-[13px] font-bold text-brand-700">여기에 놓으면 업로드돼요</div>
+              <div className="text-[11px] text-brand-600 mt-0.5">파일 → 문서 · 폴더 → 폴더로 업로드</div>
+            </div>
+          </div>
+        )}
+
       {/* 폴더 그리드 */}
       {currentChildren.length > 0 && (
         <div className="mb-5">
@@ -1006,36 +1039,8 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
         </div>
       )}
 
-      {/* 문서 리스트 — 파일을 이 영역에 드래그 앤 드롭하면 바로 현재 폴더/범위로 업로드. */}
+      {/* 문서 리스트 */}
       <div className="mb-2 text-[11px] font-extrabold text-ink-500 uppercase tracking-[0.08em]">문서</div>
-      <div
-        onDragOver={(e) => {
-          // 파일 드래그일 때만 반응 — 문서 row 재정렬 드래그는 제외.
-          if (!e.dataTransfer.types.includes("Files")) return;
-          e.preventDefault();
-          e.dataTransfer.dropEffect = "copy";
-          if (!dropActive) setDropActive(true);
-        }}
-        onDragLeave={(e) => {
-          // 자식 요소로 넘어가는 이벤트 무시 — relatedTarget 이 컨테이너 내부면 유지.
-          if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-          setDropActive(false);
-        }}
-        onDrop={(e) => {
-          if (!e.dataTransfer.types.includes("Files")) return;
-          e.preventDefault();
-          setDropActive(false);
-          // DataTransfer 는 이벤트 객체 수명 이후 비워지므로 즉시 캡처해서 넘긴다.
-          const dt = e.dataTransfer;
-          void handleDrop(dt);
-        }}
-        className={`relative rounded-2xl transition ${dropActive ? "ring-2 ring-brand-400 ring-offset-2 ring-offset-[color:var(--c-bg)]" : ""}`}
-      >
-        {dropActive && (
-          <div className="pointer-events-none absolute inset-0 z-10 rounded-2xl bg-brand-500/10 border-2 border-dashed border-brand-400 grid place-items-center">
-            <div className="text-[13px] font-bold text-brand-700">여기에 놓으면 업로드돼요</div>
-          </div>
-        )}
       {docs.length === 0 ? (
         <div className="panel py-14 text-center">
           <div className="mx-auto w-12 h-12 rounded-2xl bg-ink-100 grid place-items-center mb-3">
@@ -1150,6 +1155,7 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
         </div>
       )}
       </div>
+      {/* /폴더+문서 공용 드롭존 */}
 
       {creating === "folder" && (
         <div className="fixed inset-0 bg-ink-900/40 grid place-items-center p-4 z-50" onClick={() => setCreating(null)}>
