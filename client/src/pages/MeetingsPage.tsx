@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, apiSWR, invalidateCache } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
@@ -25,7 +25,19 @@ export default function MeetingsPage() {
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [creating, setCreating] = useState(false);
-  const [visibilityFilter, setVisibilityFilter] = useState<"all" | "mine" | "ALL" | "PROJECT" | "SPECIFIC">("all");
+  // 새로고침해도 필터 유지.
+  const [sp, setSp] = useSearchParams();
+  type VF = "all" | "mine" | "ALL" | "PROJECT" | "SPECIFIC";
+  const VF_SET = new Set<VF>(["all", "mine", "ALL", "PROJECT", "SPECIFIC"]);
+  const visibilityFilter: VF = (VF_SET.has((sp.get("filter") ?? "") as VF)
+    ? (sp.get("filter") as VF)
+    : "all");
+  const setVisibilityFilter = (f: VF) => {
+    const next = new URLSearchParams(sp);
+    if (f === "all") next.delete("filter");
+    else next.set("filter", f);
+    setSp(next, { replace: true });
+  };
 
   useEffect(() => {
     let alive = true;

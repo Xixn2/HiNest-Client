@@ -1,4 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import PageHeader from "../components/PageHeader";
 import SuperStepUpGate from "../components/SuperStepUpGate";
@@ -55,7 +56,15 @@ export default function SuperAdminPage() {
 }
 
 function SuperAdminContent() {
-  const [tab, setTab] = useState<Tab>("logs");
+  // 새로고침 유지 — URL 쿼리로 탭 동기화.
+  const [sp, setSp] = useSearchParams();
+  const tab = (sp.get("tab") === "chat" ? "chat" : "logs") as Tab;
+  const setTab = (t: Tab) => {
+    const next = new URLSearchParams(sp);
+    if (t === "logs") next.delete("tab");
+    else next.set("tab", t);
+    setSp(next, { replace: true });
+  };
   return (
     <>
       <div className="flex items-center gap-1 mb-4 border-b border-ink-150">

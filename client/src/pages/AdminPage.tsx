@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import PageHeader from "../components/PageHeader";
 import { downloadCSV, downloadXLSX, openPrintable, parseSheet, type TableColumn } from "../lib/exportTable";
@@ -234,7 +234,17 @@ function PdfLogo() {
 }
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<Tab>("users");
+  // 새로고침해도 현재 탭 유지되도록 URL 쿼리로 동기화.
+  const [sp, setSp] = useSearchParams();
+  const tab = (["users", "invites", "teams", "positions"].includes(sp.get("tab") ?? "")
+    ? (sp.get("tab") as Tab)
+    : "users") as Tab;
+  const setTab = (t: Tab) => {
+    const next = new URLSearchParams(sp);
+    if (t === "users") next.delete("tab");
+    else next.set("tab", t);
+    setSp(next, { replace: true });
+  };
   const [users, setUsers] = useState<UserRow[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
