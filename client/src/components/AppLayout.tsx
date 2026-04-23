@@ -8,6 +8,7 @@ import SearchModal from "./SearchModal";
 import ChatFab from "./ChatFab";
 import CreateProjectModal from "./CreateProjectModal";
 import { NotificationProvider, useNotifications } from "../notifications";
+import { PinsProvider, usePins, pinLinkUrl } from "../pins";
 import { ROUTE_PREFETCH, loadProject } from "../routes";
 
 /**
@@ -52,7 +53,9 @@ const RESOURCE_NAV: NavItem[] = [
 export default function AppLayout() {
   return (
     <NotificationProvider>
-      <AppLayoutInner />
+      <PinsProvider>
+        <AppLayoutInner />
+      </PinsProvider>
     </NotificationProvider>
   );
 }
@@ -125,6 +128,7 @@ function AppLayoutInner() {
           <NavSection label="워크스페이스" items={WORK_NAV} />
           <NavSection label="커뮤니케이션" items={COMM_NAV} />
           <NavSection label="자료·재무" items={RESOURCE_NAV} />
+          <PinsSection />
           <ProjectsSection />
 
           {user?.role === "ADMIN" && (
@@ -379,6 +383,90 @@ function ProjectsSection() {
     </div>
   );
 }
+
+/**
+ * 즐겨찾기(핀) — 문서·회의록·공지·프로젝트·채팅방을 한 곳에 모은다.
+ * 드래그로 순서 재정렬 가능. 없으면 섹션 자체 숨김.
+ */
+function PinsSection() {
+  const { pins, ready, reorder, toggle } = usePins();
+  const nav = useNavigate();
+  const [dragId, setDragId] = useState<string | null>(null);
+
+  if (!ready || pins.length === 0) return null;
+
+  const handleClick = (p: typeof pins[number]) => {
+    const url = pinLinkUrl(p);
+    if (url.startsWith("#chat:")) {
+      const roomId = url.slice("#chat:".length);
+      window.dispatchEvent(new CustomEvent("chat:open"));
+      window.dispatchEvent(new CustomEvent("chat:open-room", { detail: { roomId } }));
+    } else {
+      nav(url);
+    }
+  };
+
+  const onDrop = (overId: string) => {
+    if (!dragId || dragId === overId) { setDragId(null); return; }
+    const ids = pins.map((p) => p.id);
+    const from = ids.indexOf(dragId);
+    const to = ids.indexOf(overId);
+    if (from === -1 || to === -1) { setDragId(null); return; }
+    const next = [...ids];
+    next.splice(from, 1);
+    next.splice(to, 0, dragId);
+    reorder(next);
+    setDragId(null);
+  };
+
+  return (
+    <div>
+      <SectionLabel>즐겨찾기</SectionLabel>
+      <div className="space-y-0.5">
+        {pins.map((p) => {
+          const label = p.label ?? p.name ?? "삭제된 항목";
+          const icon = PIN_TYPE_ICON[p.targetType as keyof typeof PIN_TYPE_ICON] ?? "•";
+          return (
+            <div
+              key={p.id}
+              draggable
+              onDragStart={(e) => { setDragId(p.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", p.id); }}
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+              onDrop={(e) => { e.preventDefault(); onDrop(p.id); }}
+              onDragEnd={() => setDragId(null)}
+              className={`group flex items-center gap-2 h-[30px] px-3 rounded-full text-[12.5px] font-semibold cursor-pointer transition ${
+                dragId === p.id ? "opacity-40" : ""
+              } ${p.missing ? "text-ink-400" : "text-ink-700 hover:bg-ink-100 hover:text-ink-900"}`}
+              title={p.missing ? "원본이 삭제되었어요 — 클릭해서 핀 해제" : label}
+              onClick={() => (p.missing ? toggle(p.targetType, p.targetId) : handleClick(p))}
+            >
+              <span className="text-[11px] opacity-70">{icon}</span>
+              <span className="flex-1 truncate">{label}</span>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); toggle(p.targetType, p.targetId); }}
+                className="md:opacity-0 md:group-hover:opacity-100 w-4 h-4 grid place-items-center rounded text-ink-400 hover:text-ink-900"
+                title="핀 해제"
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const PIN_TYPE_ICON = {
+  DOCUMENT: "📄",
+  MEETING: "🗒",
+  NOTICE: "📢",
+  PROJECT: "◆",
+  CHAT_ROOM: "💬",
+} as const;
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (

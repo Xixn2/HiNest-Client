@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { api, apiSWR } from "../api";
 import { useAuth } from "../auth";
 import { confirmAsync, alertAsync } from "../components/ConfirmHost";
+import PinButton from "../components/PinButton";
 // TipTap 에디터는 ~300KB 덩어리 — 회의록 상세 페이지 안에서 다시 한 번 나눠서
 // 제목/메타/공개범위 UI 가 먼저 보이고, 에디터는 뒤따라 로드되도록 함.
 const MeetingEditor = lazy(() => import("../components/MeetingEditor"));
@@ -227,6 +228,7 @@ export default function MeetingDetailPage() {
           ← 회의록 목록
         </Link>
         <div className="flex items-center gap-2 flex-wrap justify-end">
+          <PinButton type="MEETING" id={meeting.id} label={meeting.title} />
           {canEdit && !edit && (
             <button className="btn-ghost" onClick={() => { setEdit(true); setSearchParams({ edit: "1" }); }}>
               편집

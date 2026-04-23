@@ -29,6 +29,7 @@ import navRouter from "./routes/nav.js";
 import projectRouter from "./routes/project.js";
 import webhookRouter from "./routes/webhook.js";
 import meetingRouter from "./routes/meeting.js";
+import pinRouter from "./routes/pin.js";
 import path from "node:path";
 import mime from "mime-types";
 
@@ -152,6 +153,7 @@ app.use("/api/version", versionRouter);
 app.use("/api/nav", navRouter);
 app.use("/api/project", projectRouter);
 app.use("/api/meeting", meetingRouter);
+app.use("/api/pins", pinRouter);
 // 웹훅 수신은 인증 없음 — 라우터 내부에서 token 검증.
 app.use("/api/webhook", webhookRouter);
 
