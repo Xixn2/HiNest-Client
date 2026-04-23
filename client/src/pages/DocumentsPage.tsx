@@ -656,7 +656,27 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
   // 행을 폴더 카드(또는 브레드크럼) 위에 떨어뜨려 folderId 만 PATCH.
   // 서버는 작성자 본인 or ADMIN 에게만 PATCH 를 허용하므로 권한 없는 이동은 403.
   const [draggingDocId, setDraggingDocId] = useState<string | null>(null);
-  const [dragOverKey, setDragOverKey] = useState<string | null>(null); // "folder:<id>" | "root" | "crumb:<id>"
+  const [draggingFolderId, setDraggingFolderId] = useState<string | null>(null);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null); // "folder:<id>" | "root" | "crumb:<id>" | "chip:<pid>" | "chip:all" | "scope:<key>"
+
+  /**
+   * 폴더를 상단 카테고리(프로젝트 칩) 나 공개범위 탭으로 드래그해 옮긴다.
+   *   - target.project="__all__" : 전역 문서함으로. 이 때 target.scope 미지정이면 서버 기본 ALL.
+   *   - target.project=<pid>      : 해당 프로젝트로 (scope 는 서버에서 ALL 고정).
+   *   - target.scope=<'ALL'|'TEAM'|'PRIVATE'> : 전역 문서함 내에서 스코프만 변경.
+   * 실패하면 alert 로 알리고 그대로 롤백(서버 상태만 변하면 되므로 load 만 다시).
+   */
+  async function moveFolderTo(folderId: string, target: { project?: string | null; scope?: "ALL" | "TEAM" | "PRIVATE" }) {
+    try {
+      const body: any = {};
+      if (target.project !== undefined) body.projectId = target.project;
+      if (target.scope !== undefined) body.scope = target.scope;
+      await api(`/api/document/folders/${folderId}`, { method: "PATCH", json: body });
+      await load();
+    } catch (e: any) {
+      await alertAsync({ title: "폴더 이동 실패", description: e?.message ?? "옮기지 못했어요" });
+    }
+  }
 
   async function moveDocToFolder(docId: string, folderId: string | null) {
     const doc = docs.find((x) => x.id === docId);
@@ -727,7 +747,23 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
         <div className="mb-3 flex flex-wrap items-center gap-1.5">
           <button
             onClick={() => setSelectedProjectId(null)}
+            onDragOver={(e) => {
+              if (!draggingFolderId) return;
+              e.preventDefault();
+              setDragOverKey("chip:all");
+            }}
+            onDragLeave={() => setDragOverKey((k) => (k === "chip:all" ? null : k))}
+            onDrop={(e) => {
+              if (!draggingFolderId) return;
+              e.preventDefault();
+              const fid = draggingFolderId;
+              setDragOverKey(null);
+              setDraggingFolderId(null);
+              void moveFolderTo(fid, { project: null });
+            }}
             className={`px-3 h-8 rounded-full text-[12px] font-bold border transition ${
+              dragOverKey === "chip:all" ? "ring-2 ring-brand-400 " : ""
+            }${
               selectedProjectId === null
                 ? "bg-brand-500 text-white border-brand-500"
                 : "bg-[color:var(--c-surface)] text-ink-600 border-ink-200 hover:border-ink-300"
@@ -737,11 +773,28 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
           </button>
           {projects.map((p) => {
             const on = selectedProjectId === p.id;
+            const chipKey = `chip:${p.id}`;
             return (
               <button
                 key={p.id}
                 onClick={() => setSelectedProjectId(p.id)}
+                onDragOver={(e) => {
+                  if (!draggingFolderId) return;
+                  e.preventDefault();
+                  setDragOverKey(chipKey);
+                }}
+                onDragLeave={() => setDragOverKey((k) => (k === chipKey ? null : k))}
+                onDrop={(e) => {
+                  if (!draggingFolderId) return;
+                  e.preventDefault();
+                  const fid = draggingFolderId;
+                  setDragOverKey(null);
+                  setDraggingFolderId(null);
+                  void moveFolderTo(fid, { project: p.id });
+                }}
                 className={`px-3 h-8 rounded-full text-[12px] font-bold border transition flex items-center gap-1.5 ${
+                  dragOverKey === chipKey ? "ring-2 ring-brand-400 " : ""
+                }${
                   on
                     ? "text-white border-transparent"
                     : "bg-[color:var(--c-surface)] text-ink-700 border-ink-200 hover:border-ink-300"
@@ -774,19 +827,46 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
       {/* 공개 범위 탭 — 프로젝트 문서함에선 의미 없으므로 숨김. */}
       {!inProject && (
         <div className="flex items-center gap-1 mb-3 border-b border-ink-150">
-          {SCOPE_TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setScopeTab(t.key)}
-              className={`px-3 h-9 text-[13px] font-bold border-b-2 transition ${
-                scopeTab === t.key
-                  ? "border-brand-500 text-ink-900"
-                  : "border-transparent text-ink-500 hover:text-ink-700"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+          {SCOPE_TABS.map((t) => {
+            // 드래그로 스코프 이동 가능한 탭만 드롭 허용. CUSTOM 은 대상 유저를 정해야 해서 제외.
+            // "전체"(all) 는 가시성 필터가 OR 합집합이라 특정 스코프값이 없어 → ALL 로 매핑.
+            const scopeTarget: "ALL" | "TEAM" | "PRIVATE" | null =
+              t.key === "all" || t.key === "public" ? "ALL"
+              : t.key === "team" ? "TEAM"
+              : t.key === "private" ? "PRIVATE"
+              : null;
+            const tabKey = `scope:${t.key}`;
+            const canDrop = !!draggingFolderId && scopeTarget !== null && !inProject;
+            return (
+              <button
+                key={t.key}
+                onClick={() => setScopeTab(t.key)}
+                onDragOver={(e) => {
+                  if (!canDrop) return;
+                  e.preventDefault();
+                  setDragOverKey(tabKey);
+                }}
+                onDragLeave={() => setDragOverKey((k) => (k === tabKey ? null : k))}
+                onDrop={(e) => {
+                  if (!canDrop || !scopeTarget) return;
+                  e.preventDefault();
+                  const fid = draggingFolderId!;
+                  setDragOverKey(null);
+                  setDraggingFolderId(null);
+                  void moveFolderTo(fid, { project: null, scope: scopeTarget });
+                }}
+                className={`px-3 h-9 text-[13px] font-bold border-b-2 transition ${
+                  dragOverKey === tabKey ? "bg-brand-50 " : ""
+                }${
+                  scopeTab === t.key
+                    ? "border-brand-500 text-ink-900"
+                    : "border-transparent text-ink-500 hover:text-ink-700"
+                }`}
+              >
+                {t.label}
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -870,12 +950,19 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
               return (
               <div
                 key={f.id}
+                draggable
+                onDragStart={(e) => {
+                  setDraggingFolderId(f.id);
+                  e.dataTransfer.setData("text/plain", `folder:${f.id}`);
+                  e.dataTransfer.effectAllowed = "move";
+                }}
+                onDragEnd={() => { setDraggingFolderId(null); setDragOverKey(null); }}
                 onDoubleClick={() => setCurrentFolder(f.id)}
                 className={`panel p-4 flex items-center gap-3 cursor-pointer group transition relative ${
                   isDropTarget
                     ? "border-brand-500 bg-brand-50 ring-2 ring-brand-400"
                     : "hover:border-ink-300"
-                }`}
+                } ${draggingFolderId === f.id ? "opacity-50" : ""}`}
                 onClick={() => setCurrentFolder(f.id)}
                 onDragOver={(e) => {
                   if (!draggingDocId) return;
