@@ -87,6 +87,7 @@ model User {
   meetingRevisions      MeetingRevision[]
   documentRevisions     DocumentRevision[]
   shareLinksCreated     DocumentShareLink[]    @relation("ShareLinkCreator")
+  folderShareLinksCreated FolderShareLink[]    @relation("FolderShareLinkCreator")
 }
 
 /// 팀/프로젝트 — 사이드바 "팀" 카테고리 아래에 자신이 참여중인 프로젝트가 표시됨.
@@ -438,6 +439,24 @@ model DocumentShareLink {
   @@index([documentId])
 }
 
+/// 폴더 외부 공유 링크 — 로그인 없이 폴더 ZIP 을 다운로드.
+model FolderShareLink {
+  id           String    @id @default(cuid())
+  folderId     String
+  folder       Folder    @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  token        String    @unique
+  createdById  String
+  createdBy    User      @relation("FolderShareLinkCreator", fields: [createdById], references: [id])
+  expiresAt    DateTime?
+  maxDownloads Int?
+  downloads    Int       @default(0)
+  passwordHash String?
+  createdAt    DateTime  @default(now())
+  revokedAt    DateTime?
+
+  @@index([folderId])
+}
+
 model ShareLinkAccess {
   id        String            @id @default(cuid())
   linkId    String
@@ -655,6 +674,8 @@ model Folder {
   projectId    String?
   project      Project?   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdAt    DateTime   @default(now())
+
+  shareLinks   FolderShareLink[]
 
   @@index([projectId])
 }

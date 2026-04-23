@@ -131,6 +131,7 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
     scopeUserIds: string[];
   }>({ name: "", scope: "ALL", scopeUserIds: [] });
   const [sharingDoc, setSharingDoc] = useState<Doc | null>(null);
+  const [sharingFolder, setSharingFolder] = useState<Folder | null>(null);
   const [historyDoc, setHistoryDoc] = useState<Doc | null>(null);
   const [docForm, setDocForm] = useState<{
     title: string; description: string; tags: string;
@@ -1169,6 +1170,9 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
                   <button className="btn-icon" onClick={(e) => { e.stopPropagation(); downloadFolder(f); }} title="폴더 전체 다운로드 (ZIP)">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
                   </button>
+                  <button className="btn-icon" onClick={(e) => { e.stopPropagation(); setSharingFolder(f); }} title="외부 공유 링크">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" /></svg>
+                  </button>
                   <button className="btn-icon" onClick={(e) => { e.stopPropagation(); renameFolder(f); }} title="이름 변경">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
                   </button>
@@ -1576,6 +1580,14 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
           documentId={sharingDoc.id}
           documentTitle={sharingDoc.title}
           onClose={() => setSharingDoc(null)}
+        />
+      )}
+
+      {sharingFolder && (
+        <ShareLinkModal
+          folderId={sharingFolder.id}
+          documentTitle={sharingFolder.name}
+          onClose={() => setSharingFolder(null)}
         />
       )}
 

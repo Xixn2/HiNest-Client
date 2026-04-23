@@ -6,6 +6,7 @@ import { prisma } from "../lib/db.js";
 import { requireAuth, writeLog } from "../lib/auth.js";
 import { downloadFile, isStorageEnabled } from "../lib/storage.js";
 import { UPLOAD_DIR } from "./upload.js";
+import { findActiveFolderLink, streamFolderZip } from "./folderShareLink.js";
 import path from "node:path";
 import fs from "node:fs";
 
@@ -126,6 +127,28 @@ async function findActive(token: string) {
 }
 
 pub.get("/:token", async (req, res) => {
+  // 폴더 링크 먼저 확인 (토큰 충돌 없음 — 두 테이블 모두 unique)
+  const folderResult = await findActiveFolderLink(req.params.token);
+  if (folderResult.link) {
+    const fl = folderResult.link;
+    return res.json({
+      document: {
+        title: fl.folder.name,
+        fileName: `${fl.folder.name}.zip`,
+        fileType: "application/zip",
+        fileSize: null,
+      },
+      kind: "folder",
+      expiresAt: fl.expiresAt,
+      maxDownloads: fl.maxDownloads,
+      downloads: fl.downloads,
+      hasPassword: !!fl.passwordHash,
+    });
+  }
+  if (folderResult.err && folderResult.err !== 404) {
+    return res.status(folderResult.err).json({ error: statusMsg(folderResult.err) });
+  }
+
   const r = await findActive(req.params.token);
   if (r.err) return res.status(r.err).json({ error: statusMsg(r.err) });
   const link = r.link!;
@@ -136,6 +159,7 @@ pub.get("/:token", async (req, res) => {
       fileType: link.document.fileType,
       fileSize: link.document.fileSize,
     },
+    kind: "document",
     expiresAt: link.expiresAt,
     maxDownloads: link.maxDownloads,
     downloads: link.downloads,
@@ -144,10 +168,27 @@ pub.get("/:token", async (req, res) => {
 });
 
 pub.post("/:token/download", async (req, res) => {
+  const password = typeof req.body?.password === "string" ? req.body.password : "";
+
+  // 폴더 링크 처리
+  const folderResult = await findActiveFolderLink(req.params.token);
+  if (folderResult.link) {
+    const fl = folderResult.link;
+    if (fl.passwordHash) {
+      const ok = await bcrypt.compare(password, fl.passwordHash);
+      if (!ok) return res.status(401).json({ error: "비밀번호가 올바르지 않아요" });
+    }
+    await prisma.folderShareLink.update({ where: { id: fl.id }, data: { downloads: { increment: 1 } } });
+    return streamFolderZip(fl.folder.id, fl.folder.name, res);
+  }
+  if (folderResult.err && folderResult.err !== 404) {
+    return res.status(folderResult.err).json({ error: statusMsg(folderResult.err) });
+  }
+
+  // 문서 링크 처리
   const r = await findActive(req.params.token);
   if (r.err) return res.status(r.err).json({ error: statusMsg(r.err) });
   const link = r.link!;
-  const password = typeof req.body?.password === "string" ? req.body.password : "";
   if (link.passwordHash) {
     const ok = await bcrypt.compare(password, link.passwordHash);
     if (!ok) {
@@ -163,7 +204,6 @@ pub.post("/:token/download", async (req, res) => {
   if (!buf) return res.status(404).json({ error: "파일을 찾을 수 없어요" });
 
   // 다운로드 카운트 증가 + 감사 로그 — 동시 요청으로 maxDownloads 초과 방지는 낙관적.
-  // 정확한 락이 필요하면 트랜잭션으로 바꿀 수 있으나 현실 부하에선 과함.
   await prisma.documentShareLink.update({ where: { id: link.id }, data: { downloads: { increment: 1 } } });
   await prisma.shareLinkAccess.create({
     data: { linkId: link.id, action: "DOWNLOAD", ip: req.ip, userAgent: req.get("user-agent")?.slice(0, 200) },

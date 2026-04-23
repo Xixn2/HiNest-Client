@@ -1,0 +1,209 @@
+import { Router } from "express";
+import crypto from "node:crypto";
+import bcrypt from "bcryptjs";
+import archiver from "archiver";
+import { z } from "zod";
+import { prisma } from "../lib/db.js";
+import { requireAuth, writeLog } from "../lib/auth.js";
+import { downloadFile, isStorageEnabled } from "../lib/storage.js";
+import { UPLOAD_DIR } from "./upload.js";
+import path from "node:path";
+import fs from "node:fs";
+
+/**
+ * 폴더 외부 공유 링크 — 로그인 없이 폴더 ZIP을 받을 수 있는 토큰 URL.
+ * 만료(expiresAt), 다운로드 횟수 상한(maxDownloads), 선택적 비밀번호 지원.
+ *
+ * 인증 필요 라우터는 /api/folder-share-links 에 마운트.
+ * 공개 라우터는 shareLink.ts 의 /api/public-share/:token 에서 폴더 타입으로 처리.
+ */
+
+/* =============== 인증 라우터 =============== */
+const authed = Router();
+authed.use(requireAuth);
+
+const createSchema = z.object({
+  folderId: z.string().min(1),
+  expiresAt: z.string().datetime().nullable().optional(),
+  maxDownloads: z.number().int().positive().max(10_000).nullable().optional(),
+  password: z.string().min(1).max(100).nullable().optional(),
+});
+
+async function canShareFolder(u: { id: string; role: string }, folderId: string) {
+  const folder = await prisma.folder.findUnique({
+    where: { id: folderId },
+    select: { id: true, name: true, authorId: true, projectId: true },
+  });
+  if (!folder) return null;
+  if (u.role === "ADMIN" || folder.authorId === u.id) return folder;
+  if (folder.projectId) {
+    const m = await prisma.projectMember.findUnique({
+      where: { projectId_userId: { projectId: folder.projectId, userId: u.id } },
+      select: { id: true },
+    });
+    if (m) return folder;
+  }
+  // scope=ALL 폴더는 누구나 공유 가능
+  const f2 = await prisma.folder.findUnique({ where: { id: folderId }, select: { scope: true } });
+  if (f2?.scope === "ALL") return folder;
+  return null;
+}
+
+authed.post("/", async (req, res) => {
+  const u = (req as any).user;
+  const parsed = createSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid input" });
+  const d = parsed.data;
+  const folder = await canShareFolder(u, d.folderId);
+  if (!folder) return res.status(403).json({ error: "해당 폴더에 대한 공유 권한이 없습니다" });
+
+  const token = crypto.randomBytes(24).toString("base64url");
+  const link = await prisma.folderShareLink.create({
+    data: {
+      folderId: folder.id,
+      token,
+      createdById: u.id,
+      expiresAt: d.expiresAt ? new Date(d.expiresAt) : null,
+      maxDownloads: d.maxDownloads ?? null,
+      passwordHash: d.password ? await bcrypt.hash(d.password, 10) : null,
+    },
+  });
+  await writeLog(u.id, "FOLDER_SHARE_LINK_CREATE", link.id, folder.id);
+  res.json({ link: serializeFolder(link) });
+});
+
+authed.get("/", async (req, res) => {
+  const u = (req as any).user;
+  const folderId = String(req.query.folderId ?? "");
+  if (!folderId) return res.status(400).json({ error: "folderId 필요" });
+  const folder = await canShareFolder(u, folderId);
+  if (!folder) return res.status(403).json({ error: "forbidden" });
+  const rows = await prisma.folderShareLink.findMany({
+    where: { folderId },
+    orderBy: { createdAt: "desc" },
+  });
+  res.json({ links: rows.map(serializeFolder) });
+});
+
+authed.delete("/:id", async (req, res) => {
+  const u = (req as any).user;
+  const row = await prisma.folderShareLink.findUnique({ where: { id: req.params.id } });
+  if (!row) return res.status(404).json({ error: "not found" });
+  if (row.createdById !== u.id && u.role !== "ADMIN")
+    return res.status(403).json({ error: "forbidden" });
+  await prisma.folderShareLink.update({ where: { id: row.id }, data: { revokedAt: new Date() } });
+  await writeLog(u.id, "FOLDER_SHARE_LINK_REVOKE", row.id);
+  res.json({ ok: true });
+});
+
+function serializeFolder(l: any) {
+  return {
+    id: l.id,
+    token: l.token,
+    folderId: l.folderId,
+    createdAt: l.createdAt,
+    expiresAt: l.expiresAt,
+    maxDownloads: l.maxDownloads,
+    downloads: l.downloads,
+    hasPassword: !!l.passwordHash,
+    revokedAt: l.revokedAt,
+  };
+}
+
+/* =============== 공개 핸들러 (shareLink.ts 의 pub 라우터에서 호출) =============== */
+export async function findActiveFolderLink(token: string) {
+  const link = await prisma.folderShareLink.findUnique({
+    where: { token },
+    include: { folder: { select: { id: true, name: true } } },
+  });
+  if (!link) return { err: 404 as const, link: null };
+  if (link.revokedAt) return { err: 410 as const, link: null };
+  if (link.expiresAt && link.expiresAt.getTime() < Date.now()) return { err: 410 as const, link: null };
+  if (link.maxDownloads !== null && link.downloads >= link.maxDownloads) return { err: 429 as const, link: null };
+  return { err: null, link };
+}
+
+/**
+ * 폴더 ZIP 스트림 — 폴더 내 모든 문서 파일을 재귀적으로 수집해서 zip 으로 내보냄.
+ * document.ts 의 /folders/:id/download 로직과 동일 패턴.
+ */
+export async function streamFolderZip(
+  folderId: string,
+  folderName: string,
+  res: any,
+) {
+  // 폴더 + 하위 폴더 전체 조회
+  const allFolders = await prisma.folder.findMany({ select: { id: true, name: true, parentId: true } });
+  const folderMap = new Map(allFolders.map((f) => [f.id, f]));
+
+  function collectIds(rootId: string): string[] {
+    const result = [rootId];
+    for (const f of allFolders) {
+      if (f.parentId === rootId) result.push(...collectIds(f.id));
+    }
+    return result;
+  }
+  const folderIds = collectIds(folderId);
+
+  // 해당 폴더들에 속한 문서
+  const docs = await prisma.document.findMany({
+    where: { folderId: { in: folderIds }, fileUrl: { not: null } },
+    select: { id: true, title: true, fileName: true, fileUrl: true, folderId: true },
+  });
+
+  // 파일 경로 prefix 계산 (폴더 구조 유지)
+  function folderPath(id: string | null | undefined): string {
+    if (!id || id === folderId) return "";
+    const f = folderMap.get(id);
+    if (!f) return "";
+    const parent = folderPath(f.parentId);
+    return parent ? `${parent}/${f.name}` : f.name;
+  }
+
+  const zipName = `${folderName.replace(/[\\/:*?"<>|]/g, "_")}.zip`;
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${zipName.replace(/"/g, "")}"; filename*=UTF-8''${encodeURIComponent(zipName)}`,
+  );
+
+  const archive = archiver("zip", { zlib: { level: 5 } });
+  archive.on("error", (err: any) => {
+    console.error("[folderShare:zip] archiver error", err);
+    if (!res.headersSent) res.status(500).json({ error: "zip failure" });
+  });
+  archive.pipe(res);
+
+  let added = 0;
+  for (const doc of docs) {
+    const key = doc.fileUrl!.replace(/^\/uploads\//, "");
+    try {
+      const buf = await readFileKey(key);
+      if (!buf) continue;
+      const prefix = folderPath(doc.folderId);
+      const fname = doc.fileName ?? `${doc.title}`;
+      const entryPath = prefix ? `${prefix}/${fname}` : fname;
+      archive.append(buf, { name: entryPath });
+      added++;
+    } catch (e) {
+      console.error("[folderShare:zip] fetch failed", key, e);
+    }
+  }
+
+  if (added === 0) {
+    archive.append("", { name: ".empty" });
+  }
+  await archive.finalize();
+}
+
+async function readFileKey(key: string): Promise<Buffer | null> {
+  if (isStorageEnabled()) {
+    const f = await downloadFile(key);
+    if (f) return f.buffer;
+  }
+  const diskPath = path.join(UPLOAD_DIR, key);
+  if (fs.existsSync(diskPath)) return fs.promises.readFile(diskPath);
+  return null;
+}
+
+export { authed as folderShareLinkAuthedRouter };

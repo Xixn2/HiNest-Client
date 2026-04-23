@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { alertAsync } from "./ConfirmHost";
+import DateTimePicker from "./DateTimePicker";
 
 /**
- * 외부 공유 링크 관리 모달. 문서 1건에 대해 N개의 토큰 링크를 만들고 / 해지.
- * 생성 시 만료일·다운로드 횟수·비밀번호 옵션을 걸 수 있다.
+ * 외부 공유 링크 관리 모달.
+ * - documentId 를 주면 문서 1건 파일 공유 (/api/share-links)
+ * - folderId 를 주면 폴더 ZIP 공유 (/api/folder-share-links)
  */
 type ShareLink = {
   id: string;
   token: string;
-  documentId: string;
   createdAt: string;
   expiresAt: string | null;
   maxDownloads: number | null;
@@ -18,15 +19,15 @@ type ShareLink = {
   revokedAt: string | null;
 };
 
-export default function ShareLinkModal({
-  documentId,
-  documentTitle,
-  onClose,
-}: {
-  documentId: string;
-  documentTitle: string;
-  onClose: () => void;
-}) {
+type Props =
+  | { documentId: string; folderId?: never; documentTitle: string; onClose: () => void }
+  | { folderId: string; documentId?: never; documentTitle: string; onClose: () => void };
+
+export default function ShareLinkModal({ documentId, folderId, documentTitle, onClose }: Props) {
+  const isFolder = !!folderId;
+  const apiBase = isFolder ? "/api/folder-share-links" : "/api/share-links";
+  const entityParam = isFolder ? `folderId=${encodeURIComponent(folderId!)}` : `documentId=${encodeURIComponent(documentId!)}`;
+
   const [links, setLinks] = useState<ShareLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -39,7 +40,7 @@ export default function ShareLinkModal({
   async function load() {
     setLoading(true);
     try {
-      const r = await api<{ links: ShareLink[] }>(`/api/share-links?documentId=${encodeURIComponent(documentId)}`);
+      const r = await api<{ links: ShareLink[] }>(`${apiBase}?${entityParam}`);
       setLinks(r.links);
     } catch {
       setLinks([]);
@@ -47,17 +48,17 @@ export default function ShareLinkModal({
       setLoading(false);
     }
   }
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [documentId]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [documentId, folderId]);
 
   async function create() {
     if (creating) return;
     setCreating(true);
     try {
-      const payload: any = { documentId };
+      const payload: any = isFolder ? { folderId } : { documentId };
       if (form.expiresAt) payload.expiresAt = new Date(form.expiresAt).toISOString();
       if (form.maxDownloads) payload.maxDownloads = Math.max(1, parseInt(form.maxDownloads, 10));
       if (form.password) payload.password = form.password;
-      await api("/api/share-links", { method: "POST", json: payload });
+      await api(apiBase, { method: "POST", json: payload });
       setForm({ expiresAt: "", maxDownloads: "", password: "" });
       await load();
     } catch (e: any) {
@@ -69,7 +70,7 @@ export default function ShareLinkModal({
 
   async function revoke(id: string) {
     try {
-      await api(`/api/share-links/${id}`, { method: "DELETE" });
+      await api(`${apiBase}/${id}`, { method: "DELETE" });
       await load();
     } catch (e: any) {
       alertAsync({ title: "해지 실패", description: e?.message ?? "다시 시도해주세요" });
@@ -93,20 +94,32 @@ export default function ShareLinkModal({
     <div className="fixed inset-0 bg-ink-900/40 grid place-items-center p-4 z-50" onClick={onClose}>
       <div className="panel w-full max-w-lg shadow-pop" onClick={(e) => e.stopPropagation()}>
         <div className="section-head">
-          <div className="title">외부 공유 링크 · {documentTitle}</div>
+          <div className="title">
+            {isFolder ? "📁 폴더 공유 링크" : "외부 공유 링크"} · {documentTitle}
+          </div>
           <button className="btn-icon" onClick={onClose}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>
         </div>
 
         <div className="p-5 space-y-4 max-h-[72vh] overflow-auto">
+          {isFolder && (
+            <div className="text-[12px] text-ink-500 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+              폴더 내 파일 전체를 ZIP으로 묶어 공유합니다. 로그인 없이 다운로드 가능해요.
+            </div>
+          )}
+
           <div className="panel p-3 bg-ink-25 space-y-2">
             <div className="text-[12px] font-bold text-ink-700">새 링크 만들기</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <label className="flex flex-col gap-1">
                 <span className="text-[11px] font-bold text-ink-500">만료 (선택)</span>
-                <input type="datetime-local" className="input" value={form.expiresAt}
-                  onChange={(e) => setForm({ ...form, expiresAt: e.target.value })} />
+                <DateTimePicker
+                  mode="datetime"
+                  value={form.expiresAt}
+                  onChange={(v) => setForm({ ...form, expiresAt: v })}
+                  placeholder="만료일 없음"
+                />
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-[11px] font-bold text-ink-500">다운로드 횟수 제한 (선택)</span>

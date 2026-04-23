@@ -197,7 +197,7 @@ export default function DateTimePicker({
           <rect x="3" y="5" width="18" height="16" rx="2.5" />
           <path d="M3 10h18M8 3v4M16 3v4" />
         </svg>
-        <span className={`flex-1 font-semibold ${value ? "" : "text-ink-400"}`}>
+        <span className={`flex-1 font-semibold truncate ${value ? "" : "text-ink-400"}`}>
           {value ? displayLabel(value, mode) : placeholder ?? (mode === "date" ? "날짜 선택" : "날짜·시간 선택")}
         </span>
         <svg

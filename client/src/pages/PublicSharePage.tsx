@@ -7,6 +7,7 @@ import { useParams } from "react-router-dom";
  */
 type Meta = {
   document: { title: string; fileName: string | null; fileType: string | null; fileSize: number | null };
+  kind?: "document" | "folder";
   expiresAt: string | null;
   maxDownloads: number | null;
   downloads: number;
@@ -55,7 +56,10 @@ export default function PublicSharePage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = meta?.document.fileName ?? meta?.document.title ?? "download";
+      const defaultName = meta?.kind === "folder"
+        ? `${meta.document.title}.zip`
+        : (meta?.document.fileName ?? meta?.document.title ?? "download");
+      a.download = defaultName;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -80,9 +84,16 @@ export default function PublicSharePage() {
         )}
         {meta && (
           <>
-            <div className="text-lg font-bold text-ink-900 mt-1 mb-1">{meta.document.title}</div>
+            <div className="flex items-center gap-2 mt-1 mb-1">
+              {meta.kind === "folder" ? (
+                <span className="text-2xl">📁</span>
+              ) : (
+                <span className="text-2xl">📄</span>
+              )}
+              <div className="text-lg font-bold text-ink-900">{meta.document.title}</div>
+            </div>
             <div className="text-[12px] text-ink-500 tabular">
-              {meta.document.fileName ?? "파일"}
+              {meta.kind === "folder" ? "폴더 전체 (ZIP)" : (meta.document.fileName ?? "파일")}
               {typeof meta.document.fileSize === "number" ? ` · ${fmtSize(meta.document.fileSize)}` : ""}
             </div>
             <div className="text-[11px] text-ink-500 tabular mt-2 space-y-0.5">
