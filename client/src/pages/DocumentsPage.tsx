@@ -370,16 +370,16 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
         pathToId.set(path, res.folder.id);
       }
 
-      // 3) 파일 업로드 — 각자 제 자리 folderId 로.
+      // 3) 파일 업로드 — 병렬로 (pool 패턴). 직렬로 하면 느려서 200개 업로드에 수 분.
+      //    동시 6개로 제한해 브라우저 connection limit(도메인 당 보통 6) 과 서버 메모리 둘 다 부담 적음.
       //    에러는 그때그때 alert 로 띄우지 않고 모았다가 끝나고 사유별로 한 번에 보여준다.
       let done = 0;
       const failures: { rel: string; reason: string }[] = [];
-      for (const f of list) {
+      await runInPool(list, 6, async (f) => {
         const rel: string = (f as any).webkitRelativePath || f.name;
         const parts = rel.split("/");
         const folderPath = parts.slice(0, -1).join("/");
         const targetFolderId = pathToId.get(folderPath) ?? null;
-        setFolderUpload({ done, total: list.length, label: rel });
         try {
           if (f.size > 500 * 1024 * 1024) {
             failures.push({ rel, reason: "500MB 초과" });
@@ -410,7 +410,7 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
         }
         done += 1;
         setFolderUpload({ done, total: list.length, label: rel });
-      }
+      });
       await load();
       if (failures.length) await reportUploadFailures(failures);
     } finally {
@@ -445,6 +445,25 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
       title: `업로드 실패 ${failures.length}건`,
       description: lines.join("\n"),
     });
+  }
+
+  /**
+   * 간단한 동시성 제한 풀.
+   *   - items 를 worker 동시 실행해서 concurrency 이하로 유지
+   *   - 각 worker 는 독립 (실패해도 다른 건 계속). 에러는 worker 에서 직접 처리.
+   *   - 순서는 보장하지 않음 (업로드 순서는 UX 상 중요하지 않음).
+   * 외부 라이브러리 안 넣고 12줄로 끝남 — p-limit 안 쓴 이유.
+   */
+  async function runInPool<T>(items: T[], concurrency: number, worker: (item: T) => Promise<void>) {
+    let idx = 0;
+    const runners = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+      while (true) {
+        const i = idx++;
+        if (i >= items.length) return;
+        await worker(items[i]);
+      }
+    });
+    await Promise.all(runners);
   }
 
   const [dropActive, setDropActive] = useState(false);
@@ -518,15 +537,22 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
     if (!list.length) return;
     setUploading(true);
     try {
+      // 대량일 때도 진행률 UI 가 보이도록 folderUpload 상태를 재사용.
+      // (기존 uploading 플래그는 스피너만 돌릴 뿐 몇 개중 몇 개인지 안 보였음.)
+      setFolderUpload({ done: 0, total: list.length, label: "" });
+      let done = 0;
       const failures: { rel: string; reason: string }[] = [];
-      for (const f of list) {
+      await runInPool(list, 6, async (f) => {
         try { await uploadAndCreate(f); }
         catch (e: any) { failures.push({ rel: f.name, reason: e?.message ?? "알 수 없는 오류" }); }
-      }
+        done += 1;
+        setFolderUpload({ done, total: list.length, label: f.name });
+      });
       await load();
       if (failures.length) await reportUploadFailures(failures);
     } finally {
       setUploading(false);
+      setFolderUpload(null);
     }
   }
 
