@@ -175,17 +175,99 @@ async function assertFolderWritable(
   return { ok: false, folder };
 }
 
+/**
+ * 폴더의 모든 하위 폴더 ID 를 BFS 로 수집 (자기 자신 포함).
+ *   - 스코프/프로젝트 이동 시 하위 폴더·문서까지 같이 옮겨야 가시성이 일관됨.
+ *   - 깊이 제한은 별도로 없음 (현실적으로 문서함 깊이가 수 단계를 넘지 않음).
+ */
+async function collectFolderSubtree(rootId: string): Promise<string[]> {
+  const ids: string[] = [rootId];
+  let frontier: string[] = [rootId];
+  while (frontier.length) {
+    const children = await prisma.folder.findMany({
+      where: { parentId: { in: frontier } },
+      select: { id: true },
+    });
+    if (!children.length) break;
+    const nextIds = children.map((c) => c.id);
+    ids.push(...nextIds);
+    frontier = nextIds;
+  }
+  return ids;
+}
+
+const folderPatchSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  // 스코프/프로젝트 이동 — 드래그 앤 드롭용.
+  scope: z.enum(["ALL", "TEAM", "PRIVATE", "CUSTOM"]).nullable().optional(),
+  projectId: z.string().max(64).nullable().optional(),
+});
+
 router.patch("/folders/:id", async (req, res) => {
   const u = (req as any).user;
-  // folderCreateSchema 의 name max(100) 와 맞춰서 100자 하드 캡.
-  const rawName = req.body?.name !== undefined ? String(req.body.name).trim() : undefined;
-  const name = rawName && rawName.length > 100 ? rawName.slice(0, 100) : rawName;
-  if (!name) return res.status(400).json({ error: "이름이 필요합니다" });
+  const parsed = folderPatchSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid input" });
+  const { name: rawName, scope, projectId } = parsed.data;
+  const name = rawName !== undefined ? rawName.trim().slice(0, 100) : undefined;
+
   const check = await assertFolderWritable(u, req.params.id);
   if (!check.folder) return res.status(404).json({ error: "not found" });
   if (!check.ok) return res.status(403).json({ error: "forbidden" });
-  const folder = await prisma.folder.update({ where: { id: req.params.id }, data: { name } });
-  await writeLog(u.id, "FOLDER_UPDATE", folder.id, name);
+
+  const wantsMove = scope !== undefined || projectId !== undefined;
+  const data: any = {};
+  if (name !== undefined) {
+    if (!name) return res.status(400).json({ error: "이름이 필요합니다" });
+    data.name = name;
+  }
+
+  if (wantsMove) {
+    // 최상위로 올리고 이동 — 새로운 스코프/프로젝트의 루트로 옮김.
+    // (하위 폴더는 parentId 체인 유지로 자연스럽게 딸려 옴.)
+    data.parentId = null;
+
+    if (projectId) {
+      // 프로젝트로 이동 — 멤버 확인.
+      if (!(await assertProjectMember(u, projectId))) {
+        return res.status(403).json({ error: "해당 프로젝트에 접근 권한이 없습니다" });
+      }
+      data.projectId = projectId;
+      data.scope = "ALL";
+      data.scopeTeam = null;
+      data.scopeUserIds = null;
+    } else {
+      // 프로젝트 해제 + 전역 문서함으로 이동. scope 는 명시값이 있으면 사용, 아니면 ALL 기본.
+      data.projectId = null;
+      const targetScope = scope ?? "ALL";
+      data.scope = targetScope;
+      data.scopeTeam = targetScope === "TEAM" ? (u.team ?? null) : null;
+      data.scopeUserIds = null; // CUSTOM 은 DnD 로는 지정 불가 — 상세 모달이 따로 담당.
+    }
+  }
+
+  const folder = await prisma.folder.update({ where: { id: req.params.id }, data });
+
+  if (wantsMove) {
+    // 하위 폴더·문서 전부 동일한 스코프/프로젝트로 정렬.
+    const subtreeIds = await collectFolderSubtree(req.params.id);
+    const cascade: any = {
+      projectId: data.projectId,
+      scope: data.scope,
+      scopeTeam: data.scopeTeam,
+    };
+    // CUSTOM 아닐 땐 scopeUserIds 비움. CUSTOM 이면 유지(루트에만 리셋).
+    if (data.scope !== "CUSTOM") cascade.scopeUserIds = null;
+    await prisma.folder.updateMany({
+      where: { id: { in: subtreeIds.filter((id) => id !== req.params.id) } },
+      data: cascade,
+    });
+    await prisma.document.updateMany({
+      where: { folderId: { in: subtreeIds } },
+      data: cascade,
+    });
+  }
+
+  await writeLog(u.id, "FOLDER_UPDATE", folder.id, name ?? (wantsMove ? "move" : ""));
   res.json({ folder });
 });
 
