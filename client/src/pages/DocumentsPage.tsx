@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import PageHeader from "../components/PageHeader";
 import { confirmAsync, alertAsync, promptAsync } from "../components/ConfirmHost";
@@ -66,7 +67,19 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
   const [modalErr, setModalErr] = useState<string | null>(null);
   const [busyFolderId, setBusyFolderId] = useState<string | null>(null);
   const [busyDocId, setBusyDocId] = useState<string | null>(null);
-  const [scopeTab, setScopeTab] = useState<ScopeTab>("all");
+  // 새로고침해도 탭 유지 — embed 모드에선 상위 페이지 쿼리와 충돌 방지 위해 비활성화.
+  const [sp, setSp] = useSearchParams();
+  const SCOPE_SET = new Set<ScopeTab>(["all", "public", "team", "private", "custom"]);
+  const scopeTab: ScopeTab = embedded
+    ? "all"
+    : (SCOPE_SET.has((sp.get("scope") ?? "") as ScopeTab) ? (sp.get("scope") as ScopeTab) : "all");
+  const setScopeTab = (s: ScopeTab) => {
+    if (embedded) return;
+    const next = new URLSearchParams(sp);
+    if (s === "all") next.delete("scope");
+    else next.set("scope", s);
+    setSp(next, { replace: true });
+  };
   const [allUsers, setAllUsers] = useState<DirUser[]>([]);
   // 내가 접근 가능한 프로젝트 칩 목록. fixedProjectId 로 고정된 모드에선 안 쓴다.
   const [projects, setProjects] = useState<ProjectChip[]>([]);

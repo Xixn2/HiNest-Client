@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
@@ -59,7 +59,15 @@ export default function ApprovalsPage() {
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [scope, setScope] = useState<"mine" | "pending">("mine");
+  // 새로고침해도 현재 탭 유지.
+  const [sp, setSp] = useSearchParams();
+  const scope = (sp.get("scope") === "pending" ? "pending" : "mine") as "mine" | "pending";
+  const setScope = (s: "mine" | "pending") => {
+    const next = new URLSearchParams(sp);
+    if (s === "mine") next.delete("scope");
+    else next.set("scope", s);
+    setSp(next, { replace: true });
+  };
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [selected, setSelected] = useState<Approval | null>(null);
   const [creating, setCreating] = useState(false);

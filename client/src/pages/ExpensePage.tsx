@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
@@ -35,7 +36,15 @@ function todayDT() {
 export default function ExpensePage() {
   const { user } = useAuth();
   const isReviewer = user?.role === "ADMIN" || user?.role === "MANAGER";
-  const [scope, setScope] = useState<"mine" | "all">("mine");
+  // 새로고침해도 현재 탭 유지.
+  const [sp, setSp] = useSearchParams();
+  const scope = (sp.get("scope") === "all" ? "all" : "mine") as "mine" | "all";
+  const setScope = (s: "mine" | "all") => {
+    const next = new URLSearchParams(sp);
+    if (s === "mine") next.delete("scope");
+    else next.set("scope", s);
+    setSp(next, { replace: true });
+  };
   const [month, setMonth] = useState(ymNow());
   const [list, setList] = useState<Expense[]>([]);
   const [total, setTotal] = useState(0);
