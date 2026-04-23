@@ -40,14 +40,14 @@ router.get("/", async (req, res) => {
   const scope = String(req.query.scope ?? "all"); // all | unread
   const where: any = { userId: u.id };
   if (scope === "unread") where.readAt = null;
-  const [items, unread] = await Promise.all([
-    prisma.notification.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      take: 100,
-    }),
-    prisma.notification.count({ where: { userId: u.id, readAt: null } }),
-  ]);
+  // count() 는 클라이언트가 items 에서 계산하므로 DB 왕복 1회 절약.
+  // (100개 범위 내에서는 items.filter(!readAt).length 로 충분히 정확함)
+  const items = await prisma.notification.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+  const unread = items.filter((n) => !n.readAt).length;
   res.json({ notifications: items, unread });
 });
 
@@ -73,10 +73,8 @@ router.post("/read", async (req, res) => {
       data: { readAt: new Date() },
     });
   }
-  const unread = await prisma.notification.count({
-    where: { userId: u.id, readAt: null },
-  });
-  res.json({ ok: true, unread });
+  // unread 재집계 생략 — 클라이언트가 낙관적 업데이트로 이미 반영함. DB 왕복 1회 절약.
+  res.json({ ok: true });
 });
 
 /**

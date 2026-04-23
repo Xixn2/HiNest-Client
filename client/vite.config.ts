@@ -26,16 +26,32 @@ export default defineConfig({
     // 반환값 사용 안 하면 dead code 로 제거. console.error/warn 은 살려서 장애 단서 유지.
     drop: ["debugger"],
     pure: ["console.log", "console.debug", "console.trace"],
+    // es2020 — 사내 인트라넷이므로 최신 브라우저만 지원. 불필요한 polyfill/transform 제거.
+    target: "es2020",
   },
   build: {
-    // 큰 라이브러리를 벤더 청크로 분리 — 재배포 때마다 페이지 청크 해시만 바뀌어도
-    // 브라우저가 react/router 는 그대로 캐시에서 재사용. HTTP/2 multiplexing 기준
-    // 3-5 청크가 sweet spot.
+    target: "es2020",
     rollupOptions: {
       output: {
-        manualChunks: {
-          "react-vendor": ["react", "react-dom"],
-          "router-vendor": ["react-router-dom"],
+        manualChunks(id) {
+          // React 코어 — 재배포 시 변하지 않아 장기 캐시.
+          if (id.includes("node_modules/react") || id.includes("node_modules/react-dom")) {
+            return "react-vendor";
+          }
+          // React Router
+          if (id.includes("node_modules/react-router")) {
+            return "router-vendor";
+          }
+          // TipTap 에디터 패키지 (~300KB gzip) — 회의록·문서 페이지에서만 사용.
+          // 다른 페이지 초기 로드 시 다운로드 생략.
+          if (id.includes("node_modules/@tiptap") || id.includes("node_modules/prosemirror")) {
+            return "tiptap-vendor";
+          }
+          // xlsx / xlsx-js-style (~500KB gzip) — 관리자 내보내기 전용.
+          // 일반 사용자 세션에서는 아예 다운로드 안 됨.
+          if (id.includes("node_modules/xlsx")) {
+            return "xlsx-vendor";
+          }
         },
       },
     },

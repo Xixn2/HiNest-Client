@@ -328,6 +328,8 @@ model Leave {
   createdAt DateTime @default(now())
 
   @@index([userId, status])
+  // nav.ts 에서 status="PENDING" 전체 카운트 — leading userId 없이 status 단독 스캔 가능하게.
+  @@index([status])
 }
 
 model Attendance {
@@ -611,6 +613,8 @@ model CardExpense {
   createdAt  DateTime @default(now())
 
   @@index([userId, usedAt(sort: Desc)])
+  // nav.ts 에서 status="PENDING" 전체 카운트에 사용 — status 단독 인덱스 필요.
+  @@index([status])
 }
 
 model Notification {

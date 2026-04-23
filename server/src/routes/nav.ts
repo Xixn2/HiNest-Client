@@ -88,6 +88,9 @@ router.get("/counts", async (req, res) => {
       : Promise.resolve(0),
   ]);
 
+  // 30초 캐시 — 뱃지 숫자가 30초 늦게 반영돼도 사용성 영향 없음.
+  // SSE 로 실시간 알림은 이미 처리됨.
+  res.setHeader("Cache-Control", "private, max-age=30, stale-while-revalidate=60");
   res.json({
     counts: {
       schedule: scheduleCount,
