@@ -156,7 +156,7 @@ export default function AttendancePage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 card">
           <h2 className="text-lg font-bold mb-4">{month} 출퇴근 기록</h2>
-          <div className="overflow-hidden rounded-xl border border-slate-100 overflow-x-auto">
+          <div className="overflow-hidden rounded-xl border border-slate-100 overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
             <table className="w-full text-sm min-w-[480px]">
               <thead className="bg-slate-50 text-slate-500 text-xs">
                 <tr>
@@ -214,7 +214,7 @@ export default function AttendancePage() {
       {(user?.role === "ADMIN" || user?.role === "MANAGER") && (
         <div className="card mt-6">
           <h2 className="text-lg font-bold mb-4">전체 휴가 승인 대기</h2>
-          <div className="overflow-hidden rounded-xl border border-slate-100 overflow-x-auto">
+          <div className="overflow-hidden rounded-xl border border-slate-100 overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
             <table className="w-full text-sm min-w-[720px]">
               <thead className="bg-slate-50 text-slate-500 text-xs">
                 <tr>

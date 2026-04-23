@@ -381,7 +381,7 @@ export default function ExpensePage() {
                       alt="receipt"
                       loading="lazy"
                       decoding="async"
-                      className="max-h-36 rounded-xl border border-ink-150 shadow-sm"
+                      className="max-h-[50vh] sm:max-h-36 rounded-xl border border-ink-150 shadow-sm"
                     />
                     <button
                       type="button"

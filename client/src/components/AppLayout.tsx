@@ -445,7 +445,7 @@ function PinsSection() {
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); toggle(p.targetType, p.targetId); }}
-                className="md:opacity-0 md:group-hover:opacity-100 w-4 h-4 grid place-items-center rounded text-ink-400 hover:text-ink-900"
+                className="md:opacity-0 md:group-hover:opacity-100 w-7 h-7 md:w-4 md:h-4 grid place-items-center rounded text-ink-400 hover:text-ink-900"
                 title="핀 해제"
               >
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
