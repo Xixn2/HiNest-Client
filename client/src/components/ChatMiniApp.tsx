@@ -991,9 +991,10 @@ function CreateGroupView({
   }
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", background: C.surface }}>
-      {/* 스크롤 영역 */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "4px 18px 12px" }}>
+    // minHeight:0 — flex 자식이 부모 높이를 넘지 않게 (없으면 스크롤 영역이 부모를 밀어 올려 하단 버튼이 화면 밖으로 사라짐).
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", background: C.surface }}>
+      {/* 스크롤 영역 — minHeight:0 + flex:1 조합으로만 overflowY 스크롤이 정상 작동. */}
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "4px 18px 12px" }}>
         {/* 그룹 이름 */}
         <SectionLabel>그룹 이름 (선택)</SectionLabel>
         <div
