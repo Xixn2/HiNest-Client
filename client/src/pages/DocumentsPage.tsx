@@ -89,6 +89,24 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
   // "폴더 업로드" 진행 상황 — 현재 파일 n/total 이랑 현재 경로를 표시한다.
   const [folderUpload, setFolderUpload] = useState<{ done: number; total: number; label: string } | null>(null);
 
+  // 업로드 중 새로고침/탭 닫기 방어.
+  //   - 업로드는 브라우저 JS 루프에 의존하므로 탭이 끊기면 남은 파일은 그대로 날아감
+  //     (서버 쪽 resume 이 없어서 실제로 완전 복구가 어려움).
+  //   - 그래서 최소한 "정말 떠날래?" 경고라도 띄워서 실수로 F5 / ⌘W / 뒤로가기 누르는 걸 막는다.
+  //   - 브라우저가 returnValue 의 문자열을 그대로 보여주진 않지만(모질라/크롬 모두 무시),
+  //     값을 세팅해야 모달이 뜬다. 업로드 안 하면 이 훅은 no-op.
+  const isUploadingSomething = uploading || !!folderUpload;
+  useEffect(() => {
+    if (!isUploadingSomething) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "업로드가 아직 진행 중이에요. 지금 떠나면 남은 파일은 업로드되지 않아요.";
+      return e.returnValue;
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isUploadingSomething]);
+
   async function load(aliveRef?: { current: boolean }) {
     // 프로젝트 선택 시엔 projectId 필터. scope 필터는 프로젝트 내에선 의미 없음(멤버십이 권한).
     const pid = activeProjectId;
