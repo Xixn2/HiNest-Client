@@ -85,6 +85,9 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
     scope: DocScope; scopeTeam: string; scopeUserIds: string[];
   }>({ title: "", description: "", tags: "", fileUrl: "", fileName: "", fileType: "", fileSize: 0, scope: "ALL", scopeTeam: "", scopeUserIds: [] });
   const fileRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+  // "폴더 업로드" 진행 상황 — 현재 파일 n/total 이랑 현재 경로를 표시한다.
+  const [folderUpload, setFolderUpload] = useState<{ done: number; total: number; label: string } | null>(null);
 
   async function load(aliveRef?: { current: boolean }) {
     // 프로젝트 선택 시엔 projectId 필터. scope 필터는 프로젝트 내에선 의미 없음(멤버십이 권한).
@@ -289,6 +292,109 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
     });
   }
 
+  /**
+   * 폴더(디렉터리) 통째 업로드.
+   * <input webkitdirectory> 로 들어온 파일들은 각 File 에 `webkitRelativePath` 가 채워진다.
+   *   예: 기획문서/2025Q2/기획안.docx
+   * 이 경로를 분해해서 필요한 폴더들을 서버에 먼저 생성(중복은 스킵)하고,
+   * 각 파일을 해당 folderId 밑에 업로드한다. 빈 폴더도 보존.
+   */
+  async function handleFolderUpload(files: FileList) {
+    if (!files.length) return;
+    const list = Array.from(files);
+    // 상대경로 누락된 파일(크롬/사파리 외) 은 webkitdirectory 가 없을 때 — 그냥 루트로 업로드.
+    const anyHasPath = list.some((f) => (f as any).webkitRelativePath);
+    if (!anyHasPath) {
+      await handleFilesDropped(files);
+      return;
+    }
+
+    setFolderUpload({ done: 0, total: list.length, label: "폴더 분석 중…" });
+    try {
+      // 1) 모든 파일 경로에서 필요한 폴더 경로를 추출 (중복 제거).
+      //    "a/b/c/file.png" → ["a", "a/b", "a/b/c"]
+      const needed = new Set<string>();
+      for (const f of list) {
+        const rel: string = (f as any).webkitRelativePath || f.name;
+        const parts = rel.split("/").slice(0, -1);
+        for (let i = 1; i <= parts.length; i++) {
+          needed.add(parts.slice(0, i).join("/"));
+        }
+      }
+      // 얕은 폴더부터 정렬(부모 먼저 생성되도록).
+      const orderedPaths = Array.from(needed).sort((a, b) => a.split("/").length - b.split("/").length);
+
+      // 2) 경로 → folderId 맵. 루트는 현재 폴더.
+      const pathToId = new Map<string, string | null>();
+      pathToId.set("", currentFolder === "root" ? null : currentFolder);
+
+      const fallbackScope: DocScope =
+        scopeTab === "team" ? "TEAM" : scopeTab === "private" ? "PRIVATE" : "ALL";
+
+      for (const path of orderedPaths) {
+        const parts = path.split("/");
+        const name = parts[parts.length - 1];
+        const parentPath = parts.slice(0, -1).join("/");
+        const parentId = pathToId.get(parentPath) ?? null;
+        setFolderUpload((s) => s ? { ...s, label: `폴더 생성: ${path}` } : s);
+        const res = await api<{ folder: { id: string } }>("/api/document/folders", {
+          method: "POST",
+          json: {
+            name,
+            parentId,
+            scope: inProject ? undefined : fallbackScope,
+            projectId: activeProjectId ?? undefined,
+          },
+        });
+        pathToId.set(path, res.folder.id);
+      }
+
+      // 3) 파일 업로드 — 각자 제 자리 folderId 로.
+      let done = 0;
+      for (const f of list) {
+        const rel: string = (f as any).webkitRelativePath || f.name;
+        const parts = rel.split("/");
+        const folderPath = parts.slice(0, -1).join("/");
+        const targetFolderId = pathToId.get(folderPath) ?? null;
+        setFolderUpload({ done, total: list.length, label: rel });
+        try {
+          if (f.size > 500 * 1024 * 1024) {
+            await alertAsync({ title: `${f.name} 건너뜀`, description: "500MB 초과" });
+          } else {
+            const form = new FormData();
+            form.append("file", f);
+            const res = await fetch("/api/upload/document", { method: "POST", body: form, credentials: "include" });
+            if (!res.ok) throw new Error((await res.json()).error);
+            const up = await res.json();
+            await api("/api/document", {
+              method: "POST",
+              json: {
+                title: f.name.replace(/\.[^.]+$/, ""),
+                description: "",
+                tags: "",
+                fileUrl: up.url,
+                fileName: up.name,
+                fileType: up.type,
+                fileSize: up.size,
+                folderId: targetFolderId,
+                scope: inProject ? undefined : fallbackScope,
+                projectId: activeProjectId ?? undefined,
+              },
+            });
+          }
+        } catch (e: any) {
+          await alertAsync({ title: `${rel} 업로드 실패`, description: e?.message ?? "" });
+        }
+        done += 1;
+        setFolderUpload({ done, total: list.length, label: rel });
+      }
+      await load();
+    } finally {
+      setFolderUpload(null);
+      if (folderInputRef.current) folderInputRef.current.value = "";
+    }
+  }
+
   const [dropActive, setDropActive] = useState(false);
   async function handleFilesDropped(files: FileList) {
     if (!files.length) return;
@@ -475,6 +581,9 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
 
   return (
     <div>
+      {/* 폴더 통째 업로드 입력 — 헤더 버튼이 항상 트리거할 수 있어야 하므로 페이지 루트에 고정. */}
+      {/* @ts-expect-error webkitdirectory 는 React 타입에 없지만 크롬/사파리에서 동작 */}
+      <input ref={folderInputRef} type="file" webkitdirectory="" directory="" multiple onChange={(e) => { if (e.target.files) handleFolderUpload(e.target.files); }} className="hidden" />
       {!embedded && (
         <PageHeader
           eyebrow="자료"
@@ -483,6 +592,14 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
           right={
             <>
               <button className="btn-ghost" onClick={openFolderModal}>+ 새 폴더</button>
+              <button
+                className="btn-ghost"
+                onClick={() => folderInputRef.current?.click()}
+                disabled={!!folderUpload}
+                title="폴더를 통째로 업로드 (하위 폴더 구조 유지)"
+              >
+                {folderUpload ? `업로드 중… ${folderUpload.done}/${folderUpload.total}` : "+ 폴더 업로드"}
+              </button>
               <button className="btn-primary" onClick={() => { setModalErr(null); setCreating("doc"); }}>+ 문서 업로드</button>
             </>
           }
@@ -527,6 +644,13 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
       {embedded && (
         <div className="flex items-center justify-end gap-2 mb-3">
           <button className="btn-ghost btn-xs" onClick={openFolderModal}>+ 새 폴더</button>
+          <button
+            className="btn-ghost btn-xs"
+            onClick={() => folderInputRef.current?.click()}
+            disabled={!!folderUpload}
+          >
+            {folderUpload ? `업로드 중… ${folderUpload.done}/${folderUpload.total}` : "+ 폴더 업로드"}
+          </button>
           <button className="btn-primary btn-xs" onClick={() => { setModalErr(null); setCreating("doc"); }}>+ 문서 업로드</button>
         </div>
       )}
