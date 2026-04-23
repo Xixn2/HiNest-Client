@@ -59,7 +59,6 @@ type Props = {
 export default function DocumentsPage({ projectId: fixedProjectId, embedded = false }: Props = {}) {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [docs, setDocs] = useState<Doc[]>([]);
-  const [currentFolder, setCurrentFolder] = useState<string | "root">("root");
   const [q, setQ] = useState("");
   const [creating, setCreating] = useState<null | "folder" | "doc">(null);
   const [uploading, setUploading] = useState(false);
@@ -67,24 +66,51 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
   const [modalErr, setModalErr] = useState<string | null>(null);
   const [busyFolderId, setBusyFolderId] = useState<string | null>(null);
   const [busyDocId, setBusyDocId] = useState<string | null>(null);
-  // 새로고침해도 탭 유지 — embed 모드에선 상위 페이지 쿼리와 충돌 방지 위해 비활성화.
+  // 새로고침/링크 공유 대비해 탭·프로젝트·현재 폴더를 URL 쿼리로 동기화.
+  // embed 모드에선 상위 페이지(예: 프로젝트 상세)의 쿼리와 충돌할 수 있어 scope/project 는 비활성화.
   const [sp, setSp] = useSearchParams();
   const SCOPE_SET = new Set<ScopeTab>(["all", "public", "team", "private", "custom"]);
   const scopeTab: ScopeTab = embedded
     ? "all"
     : (SCOPE_SET.has((sp.get("scope") ?? "") as ScopeTab) ? (sp.get("scope") as ScopeTab) : "all");
+  const currentFolder: string | "root" = (sp.get("folder") || "root") as string | "root";
+  const selectedProjectId: string | null = embedded
+    ? (fixedProjectId ?? null)
+    : (fixedProjectId ?? sp.get("project") ?? null);
+
+  const updateSp = (mutate: (p: URLSearchParams) => void) => {
+    const next = new URLSearchParams(sp);
+    mutate(next);
+    setSp(next, { replace: true });
+  };
   const setScopeTab = (s: ScopeTab) => {
     if (embedded) return;
-    const next = new URLSearchParams(sp);
-    if (s === "all") next.delete("scope");
-    else next.set("scope", s);
-    setSp(next, { replace: true });
+    updateSp((n) => {
+      if (s === "all") n.delete("scope");
+      else n.set("scope", s);
+      // scope 바뀌면 폴더 컨텍스트도 리셋 — 잔여 ?folder= 때문에 "없는 폴더" 조회 사고 방지.
+      n.delete("folder");
+    });
+  };
+  const setCurrentFolder = (id: string | "root") => {
+    updateSp((n) => {
+      if (!id || id === "root") n.delete("folder");
+      else n.set("folder", id);
+    });
+  };
+  const setSelectedProjectId = (pid: string | null) => {
+    if (embedded || fixedProjectId) return;
+    updateSp((n) => {
+      if (!pid) n.delete("project");
+      else n.set("project", pid);
+      // 프로젝트 전환 시 남은 folder/scope 도 정리.
+      n.delete("folder");
+      if (pid) n.delete("scope");
+    });
   };
   const [allUsers, setAllUsers] = useState<DirUser[]>([]);
   // 내가 접근 가능한 프로젝트 칩 목록. fixedProjectId 로 고정된 모드에선 안 쓴다.
   const [projects, setProjects] = useState<ProjectChip[]>([]);
-  // "전체"(null) 또는 선택된 프로젝트 id. embed 모드에선 fixedProjectId 를 우선 적용.
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(fixedProjectId ?? null);
   const activeProjectId = fixedProjectId ?? selectedProjectId;
   const inProject = !!activeProjectId;
   const [folderForm, setFolderForm] = useState<{
