@@ -92,12 +92,12 @@ export default function ShareLinkModal({ documentId, folderId, documentTitle, on
 
   return (
     <div className="fixed inset-0 bg-ink-900/40 grid place-items-center p-4 z-50" onClick={onClose}>
-      <div className="panel w-full max-w-lg shadow-pop" onClick={(e) => e.stopPropagation()}>
+      <div className="panel w-full max-w-lg shadow-pop" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="공유 링크 관리">
         <div className="section-head">
           <div className="title">
             {isFolder ? "📁 폴더 공유 링크" : "외부 공유 링크"} · {documentTitle}
           </div>
-          <button className="btn-icon" onClick={onClose}>
+          <button className="btn-icon" onClick={onClose} aria-label="닫기">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>
         </div>
