@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { confirmAsync, alertAsync } from "./ConfirmHost";
+import { fmtSize } from "../lib/fmt";
 
 /**
  * 문서/회의록 공용 히스토리 모달. API 경로만 prefix 로 갈아끼우면 됨.
@@ -123,12 +124,7 @@ export default function RevisionHistoryModal({
   );
 }
 
-function fmtSize(n: number) {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
-  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
-}
+// fmtSize: src/lib/fmt.ts 로 이동
 
 function extractPreview(doc: any): string {
   if (!doc) return "";
