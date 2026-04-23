@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import { useNotifications } from "../notifications";
 import PageHeader from "../components/PageHeader";
 import { confirmAsync, alertAsync } from "../components/ConfirmHost";
+import PinButton from "../components/PinButton";
 
 type ReactionAgg = { emoji: string; count: number; reactedByMe: boolean };
 type Notice = {
@@ -238,15 +239,18 @@ export default function NoticePage() {
                   </div>
                   <h2 className="text-xl font-bold mt-2">{selected.title}</h2>
                 </div>
-                {canPost && (
-                  <button
-                    className="btn-ghost"
-                    onClick={() => remove(selected.id)}
-                    disabled={removingId === selected.id}
-                  >
-                    {removingId === selected.id ? "삭제 중…" : "삭제"}
-                  </button>
-                )}
+                <div className="flex items-center gap-1">
+                  <PinButton type="NOTICE" id={selected.id} label={selected.title} />
+                  {canPost && (
+                    <button
+                      className="btn-ghost"
+                      onClick={() => remove(selected.id)}
+                      disabled={removingId === selected.id}
+                    >
+                      {removingId === selected.id ? "삭제 중…" : "삭제"}
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="mt-6 whitespace-pre-wrap text-slate-700 leading-relaxed">{selected.content}</div>
 
