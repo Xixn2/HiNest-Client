@@ -1,0 +1,62 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <title>HI-NEST</title>
+  <desc>Hivits internal management platform app icon</desc>
+
+  <defs>
+    <linearGradient id="bl1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4A7FFF"/>
+      <stop offset="100%" stop-color="#1E4FD4"/>
+    </linearGradient>
+    <linearGradient id="bl2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#5B8DFF"/>
+      <stop offset="100%" stop-color="#2A5DE8"/>
+    </linearGradient>
+    <linearGradient id="bl-light" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8FB3FF"/>
+      <stop offset="100%" stop-color="#5B8DFF"/>
+    </linearGradient>
+    <linearGradient id="bl-dark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2A5DE8"/>
+      <stop offset="100%" stop-color="#1A3FB5"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 배경 (iOS는 자동으로 squircle 마스킹됨) -->
+  <rect width="1024" height="1024" fill="#FFFFFF"/>
+
+  <!-- 아이콘: 1024의 정중앙 (512, 512), 스케일 5.33x -->
+  <g transform="translate(512, 512) scale(5.33)">
+    <!-- 바닥 그림자 -->
+    <ellipse cx="0" cy="62" rx="72" ry="7" fill="#000000" opacity="0.08"/>
+
+    <!-- 왼쪽 집: 측면 -->
+    <polygon points="-58,-18 -38,-33 -38,52 -58,62" fill="url(#bl-dark)"/>
+    <!-- 왼쪽 집: 정면 -->
+    <polygon points="-38,-33 -12,-33 -12,52 -38,52" fill="url(#bl2)"/>
+    <!-- 왼쪽 집: 지붕 측면 -->
+    <polygon points="-58,-18 -38,-33 -12,-33 -32,-18" fill="url(#bl-light)"/>
+    <!-- 왼쪽 집: 지붕 정면 -->
+    <polygon points="-38,-33 -25,-47 0,-47 -12,-33" fill="url(#bl1)"/>
+    <polygon points="-32,-18 -12,-33 0,-47 -20,-33" fill="url(#bl-dark)"/>
+
+    <!-- 가운데 연결 다리 (H의 가로 획) -->
+    <polygon points="-12,10 12,5 12,24 -12,29" fill="url(#bl-light)"/>
+    <polygon points="-12,10 12,5 12,24 -12,29" fill="url(#bl2)" opacity="0.55"/>
+
+    <!-- 오른쪽 집: 측면 -->
+    <polygon points="38,-33 58,-18 58,62 38,52" fill="url(#bl-dark)"/>
+    <!-- 오른쪽 집: 정면 -->
+    <polygon points="12,-33 38,-33 38,52 12,52" fill="url(#bl2)"/>
+    <!-- 오른쪽 집: 지붕 측면 -->
+    <polygon points="38,-33 58,-18 32,-18 12,-33" fill="url(#bl-light)"/>
+    <!-- 오른쪽 집: 지붕 정면 -->
+    <polygon points="12,-33 38,-33 25,-47 0,-47" fill="url(#bl1)"/>
+    <polygon points="38,-33 58,-18 45,-33 25,-47" fill="url(#bl-dark)"/>
+
+    <!-- 창문 4개 -->
+    <rect x="-32" y="-13" width="11" height="11" fill="#FFFFFF" rx="1.5"/>
+    <rect x="-32" y="15" width="11" height="11" fill="#FFFFFF" rx="1.5"/>
+    <rect x="21" y="-13" width="11" height="11" fill="#FFFFFF" rx="1.5"/>
+    <rect x="21" y="15" width="11" height="11" fill="#FFFFFF" rx="1.5"/>
+  </g>
+</svg>
