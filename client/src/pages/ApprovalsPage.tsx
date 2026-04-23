@@ -815,9 +815,10 @@ function CreateModal({
                     </button>
                     <button
                       type="button"
-                      className="w-4 h-4 rounded-full text-ink-400 hover:text-ink-700 text-[14px] leading-none"
+                      className="w-6 h-6 rounded-full text-ink-400 hover:text-ink-700 text-[14px] leading-none grid place-items-center"
                       onClick={() => removeTemplate(t.id)}
                       title="삭제"
+                      aria-label="템플릿 삭제"
                     >×</button>
                   </span>
                 ))}
@@ -926,9 +927,10 @@ function CreateModal({
                     </button>
                     <button
                       type="button"
-                      className="w-4 h-4 rounded-full text-ink-400 hover:text-ink-700 text-[14px] leading-none"
+                      className="w-6 h-6 rounded-full text-ink-400 hover:text-ink-700 text-[14px] leading-none grid place-items-center"
                       onClick={() => removeLine(l.id)}
                       title="삭제"
+                      aria-label="결재선 삭제"
                     >×</button>
                   </span>
                 ))}
