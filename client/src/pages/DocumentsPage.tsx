@@ -1273,7 +1273,7 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
                   </td>
                   <td>
                     <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded grid place-items-center text-white text-[10px] font-bold overflow-hidden" style={{ background: d.author.avatarUrl ? "transparent" : d.author.avatarColor }}>
+                      <div className="w-6 h-6 rounded grid place-items-center text-white text-[10px] font-bold overflow-hidden" style={{ background: d.author.avatarUrl ? "transparent" : (d.author.avatarColor ?? "#6B7280") }}>
                         {d.author.avatarUrl ? (
                           <img src={d.author.avatarUrl} alt={d.author.name} className="w-full h-full object-cover" />
                         ) : (

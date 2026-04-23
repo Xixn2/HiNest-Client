@@ -529,26 +529,37 @@ function ThemePanel() {
   );
 }
 
+// 테마 미리보기 스와치는 현재 활성 테마에 관계없이
+// 항상 해당 테마의 고정 색상을 보여야 함 → inline style 로 Tailwind/다크모드 오버라이드 차단
+const LIGHT = {
+  bg: "#F5F6F8", surface: "#FFFFFF", border: "#E6E8EC",
+  ink200: "#DDE0E4", ink150: "#E6E8EC",
+};
+const DARK = {
+  bg: "#0E1014", surface: "#171A20", border: "#2A2F38",
+  ink200: "#363B45", ink150: "#2A2F38",
+};
+
 function SwatchLight() {
   return (
-    <div className="w-full h-full p-3 bg-ink-25 flex gap-2">
-      <div className="w-10 rounded-md bg-white border border-ink-150" />
+    <div className="w-full h-full p-3 flex gap-2" style={{ background: LIGHT.bg }}>
+      <div className="w-10 rounded-md" style={{ background: LIGHT.surface, border: `1px solid ${LIGHT.border}` }} />
       <div className="flex-1 space-y-1.5">
-        <div className="h-2 rounded bg-ink-200" />
-        <div className="h-2 rounded bg-ink-150 w-3/4" />
-        <div className="h-6 rounded bg-white border border-ink-150" />
+        <div className="h-2 rounded" style={{ background: LIGHT.ink200 }} />
+        <div className="h-2 rounded w-3/4" style={{ background: LIGHT.ink150 }} />
+        <div className="h-6 rounded" style={{ background: LIGHT.surface, border: `1px solid ${LIGHT.border}` }} />
       </div>
     </div>
   );
 }
 function SwatchDark() {
   return (
-    <div className="w-full h-full p-3 flex gap-2" style={{ background: "#0F1115" }}>
-      <div className="w-10 rounded-md" style={{ background: "#17191F", border: "1px solid #2A2E37" }} />
+    <div className="w-full h-full p-3 flex gap-2" style={{ background: DARK.bg }}>
+      <div className="w-10 rounded-md" style={{ background: DARK.surface, border: `1px solid ${DARK.border}` }} />
       <div className="flex-1 space-y-1.5">
-        <div className="h-2 rounded" style={{ background: "#343942" }} />
-        <div className="h-2 rounded w-3/4" style={{ background: "#2A2E37" }} />
-        <div className="h-6 rounded" style={{ background: "#17191F", border: "1px solid #2A2E37" }} />
+        <div className="h-2 rounded" style={{ background: DARK.ink200 }} />
+        <div className="h-2 rounded w-3/4" style={{ background: DARK.ink150 }} />
+        <div className="h-6 rounded" style={{ background: DARK.surface, border: `1px solid ${DARK.border}` }} />
       </div>
     </div>
   );
@@ -556,18 +567,18 @@ function SwatchDark() {
 function SwatchSystem() {
   return (
     <div className="w-full h-full flex">
-      <div className="w-1/2 p-3 bg-ink-25 flex gap-1.5">
-        <div className="w-6 rounded bg-white border border-ink-150" />
+      <div className="w-1/2 p-3 flex gap-1.5" style={{ background: LIGHT.bg }}>
+        <div className="w-6 rounded" style={{ background: LIGHT.surface, border: `1px solid ${LIGHT.border}` }} />
         <div className="flex-1 space-y-1">
-          <div className="h-1.5 rounded bg-ink-200" />
-          <div className="h-1.5 rounded bg-ink-150 w-2/3" />
+          <div className="h-1.5 rounded" style={{ background: LIGHT.ink200 }} />
+          <div className="h-1.5 rounded w-2/3" style={{ background: LIGHT.ink150 }} />
         </div>
       </div>
-      <div className="w-1/2 p-3 flex gap-1.5" style={{ background: "#0F1115" }}>
-        <div className="w-6 rounded" style={{ background: "#17191F", border: "1px solid #2A2E37" }} />
+      <div className="w-1/2 p-3 flex gap-1.5" style={{ background: DARK.bg }}>
+        <div className="w-6 rounded" style={{ background: DARK.surface, border: `1px solid ${DARK.border}` }} />
         <div className="flex-1 space-y-1">
-          <div className="h-1.5 rounded" style={{ background: "#343942" }} />
-          <div className="h-1.5 rounded w-2/3" style={{ background: "#2A2E37" }} />
+          <div className="h-1.5 rounded" style={{ background: DARK.ink200 }} />
+          <div className="h-1.5 rounded w-2/3" style={{ background: DARK.ink150 }} />
         </div>
       </div>
     </div>
