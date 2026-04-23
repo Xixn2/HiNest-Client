@@ -1771,18 +1771,28 @@ function TeamsTab({ teams, reload }: { teams: Team[]; reload: () => void }) {
 
 /* ===================== Positions ===================== */
 function PositionsTab({ positions, reload }: { positions: Position[]; reload: () => void }) {
-  const [form, setForm] = useState({ name: "", rank: 0 });
+  const [name, setName] = useState("");
+  // 서버 리스트 반영 + 드래그 중 낙관적 재정렬을 위한 로컬 상태.
+  const [list, setList] = useState<Position[]>(positions);
+  useEffect(() => {
+    setList(positions);
+  }, [positions]);
+
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+
   async function add(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name.trim()) return;
+    const n = name.trim();
+    if (!n) return;
     try {
-      await api("/api/admin/positions", { method: "POST", json: { name: form.name.trim(), rank: Number(form.rank) || 0 } });
-      setForm({ name: "", rank: 0 });
+      await api("/api/admin/positions", { method: "POST", json: { name: n } });
+      setName("");
       reload();
     } catch (e: any) { alertAsync({ title: "생성 실패", description: e.message }); }
   }
-  async function update(p: Position, data: any) {
-    await api(`/api/admin/positions/${p.id}`, { method: "PATCH", json: data });
+  async function rename(p: Position, newName: string) {
+    await api(`/api/admin/positions/${p.id}`, { method: "PATCH", json: { name: newName } });
     reload();
   }
   async function remove(p: Position) {
@@ -1799,6 +1809,27 @@ function PositionsTab({ positions, reload }: { positions: Position[]; reload: ()
     } catch (e: any) { alertAsync({ title: "삭제 실패", description: e.message }); }
   }
 
+  async function persistOrder(next: Position[]) {
+    try {
+      await api("/api/admin/positions/reorder", { method: "POST", json: { ids: next.map((p) => p.id) } });
+    } catch (e: any) {
+      alertAsync({ title: "정렬 저장 실패", description: e.message });
+      reload(); // 서버 상태로 복구
+    }
+  }
+
+  function onDrop(targetId: string) {
+    if (!dragId || dragId === targetId) return;
+    const from = list.findIndex((p) => p.id === dragId);
+    const to = list.findIndex((p) => p.id === targetId);
+    if (from < 0 || to < 0) return;
+    const next = list.slice();
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setList(next);
+    void persistOrder(next);
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
       <div className="lg:col-span-2 panel p-6">
@@ -1808,58 +1839,105 @@ function PositionsTab({ positions, reload }: { positions: Position[]; reload: ()
           </div>
           <div>
             <div className="h-sub">새 직급 생성</div>
-            <div className="t-caption">직급은 순서값이 작을수록 위에 표시됩니다.</div>
+            <div className="t-caption">새 직급은 목록 맨 아래에 추가돼요. 순서는 드래그로 바꿀 수 있어요.</div>
           </div>
         </div>
         <form onSubmit={add} className="space-y-3">
           <div>
             <label className="field-label">직급명</label>
-            {/* admin.ts capName 80자 상한과 맞춤. */}
-            <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="예: 사원, 대리, 과장, 팀장, 이사" maxLength={80} />
+            <input
+              className="input"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="예: 사원, 대리, 과장, 팀장, 이사"
+              maxLength={80}
+            />
           </div>
-          <div>
-            <label className="field-label">순서값 <span className="text-ink-500 font-normal">(작을수록 상위)</span></label>
-            <input type="number" className="input" value={form.rank} onChange={(e) => setForm({ ...form, rank: Number(e.target.value) })} />
-          </div>
-          <button className="btn-primary btn-lg w-full">직급 생성</button>
+          <button className="btn-primary btn-lg w-full" disabled={!name.trim()}>직급 생성</button>
         </form>
       </div>
 
       <div className="lg:col-span-3 panel p-0 overflow-hidden">
         <div className="section-head">
-          <div className="title">직급 목록 <span className="text-ink-400 font-medium tabular ml-1">{positions.length}</span></div>
+          <div className="title">
+            직급 목록 <span className="text-ink-400 font-medium tabular ml-1">{list.length}</span>
+          </div>
+          <div className="t-caption">위로 드래그할수록 상위 직급</div>
         </div>
         <div className="divide-y divide-ink-100">
-          {positions.map((p) => (
-            <div key={p.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-ink-25">
-              <input
-                type="number"
-                className="input text-[12px] h-[32px] w-[56px] tabular text-center"
-                defaultValue={p.rank}
-                onBlur={(e) => {
-                  const v = Number(e.target.value);
-                  if (v !== p.rank) update(p, { rank: v });
+          {list.map((p, i) => {
+            const isDragging = dragId === p.id;
+            const isOver = overId === p.id && dragId && dragId !== p.id;
+            return (
+              <div
+                key={p.id}
+                draggable
+                onDragStart={(e) => {
+                  setDragId(p.id);
+                  e.dataTransfer.effectAllowed = "move";
+                  // Firefox 는 setData 가 없으면 드래그가 아예 시작 안 됨.
+                  e.dataTransfer.setData("text/plain", p.id);
                 }}
-              />
-              <input
-                className="input text-[13px] h-[32px] font-bold flex-1"
-                defaultValue={p.name}
-                onBlur={(e) => {
-                  if (e.target.value.trim() && e.target.value !== p.name) update(p, { name: e.target.value.trim() });
+                onDragOver={(e) => {
+                  if (!dragId || dragId === p.id) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  if (overId !== p.id) setOverId(p.id);
                 }}
-              />
-              <div className="text-[11px] text-ink-500 tabular w-[88px] text-right">
-                {new Date(p.createdAt).toLocaleDateString("ko-KR")}
+                onDragLeave={() => {
+                  if (overId === p.id) setOverId(null);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  onDrop(p.id);
+                  setDragId(null);
+                  setOverId(null);
+                }}
+                onDragEnd={() => {
+                  setDragId(null);
+                  setOverId(null);
+                }}
+                className={`flex items-center gap-3 px-5 py-3.5 transition-colors ${
+                  isDragging ? "opacity-50" : "hover:bg-ink-25"
+                } ${isOver ? "bg-brand-50 ring-1 ring-inset ring-brand-300" : ""}`}
+              >
+                <span className="text-ink-300 cursor-grab active:cursor-grabbing select-none" title="드래그해서 순서 바꾸기">
+                  <DragHandleIcon />
+                </span>
+                <span className="w-7 h-7 rounded-lg bg-ink-50 text-ink-600 grid place-items-center text-[12px] font-bold tabular">
+                  {i + 1}
+                </span>
+                <input
+                  className="input text-[13px] h-[32px] font-bold flex-1"
+                  defaultValue={p.name}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    if (v && v !== p.name) rename(p, v);
+                  }}
+                />
+                <div className="text-[11px] text-ink-500 tabular w-[88px] text-right">
+                  {new Date(p.createdAt).toLocaleDateString("ko-KR")}
+                </div>
+                <button className="btn-icon" title="삭제" onClick={() => remove(p)}>
+                  <TrashIcon />
+                </button>
               </div>
-              <button className="btn-icon" title="삭제" onClick={() => remove(p)}>
-                <TrashIcon />
-              </button>
-            </div>
-          ))}
-          {positions.length === 0 && <EmptyState title="생성된 직급이 없어요" description="좌측에서 첫 직급을 만들어보세요." />}
+            );
+          })}
+          {list.length === 0 && <EmptyState title="생성된 직급이 없어요" description="좌측에서 첫 직급을 만들어보세요." />}
         </div>
       </div>
     </div>
+  );
+}
+
+function DragHandleIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" />
+      <circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" />
+      <circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" />
+    </svg>
   );
 }
 
