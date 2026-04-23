@@ -79,6 +79,58 @@ router.post("/read", async (req, res) => {
   res.json({ ok: true, unread });
 });
 
+/**
+ * 알림 환경설정 — 유저별 타입별 on/off + 방해금지 시간대(DND) + 이메일 중계.
+ * prefs JSONB 는 { [NotifyType]: boolean } 형태. 누락된 타입은 기본 true.
+ */
+router.get("/prefs", async (req, res) => {
+  const u = (req as any).user;
+  const row = await prisma.notificationPref.findUnique({ where: { userId: u.id } });
+  res.json({
+    prefs: row?.prefs ?? {},
+    dndStart: row?.dndStart ?? null,
+    dndEnd: row?.dndEnd ?? null,
+    emailOn: row?.emailOn ?? false,
+  });
+});
+
+const prefsSchema = z.object({
+  prefs: z.record(z.string(), z.boolean()).optional(),
+  // "HH:MM" 문자열. 빈 문자열/null 이면 DND 비활성.
+  dndStart: z.string().max(5).nullable().optional(),
+  dndEnd: z.string().max(5).nullable().optional(),
+  emailOn: z.boolean().optional(),
+});
+
+router.put("/prefs", async (req, res) => {
+  const u = (req as any).user;
+  const parsed = prefsSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid input" });
+  const d = parsed.data;
+  const row = await prisma.notificationPref.upsert({
+    where: { userId: u.id },
+    create: {
+      userId: u.id,
+      prefs: d.prefs ?? {},
+      dndStart: d.dndStart ?? null,
+      dndEnd: d.dndEnd ?? null,
+      emailOn: d.emailOn ?? false,
+    },
+    update: {
+      ...(d.prefs !== undefined ? { prefs: d.prefs } : {}),
+      ...(d.dndStart !== undefined ? { dndStart: d.dndStart } : {}),
+      ...(d.dndEnd !== undefined ? { dndEnd: d.dndEnd } : {}),
+      ...(d.emailOn !== undefined ? { emailOn: d.emailOn } : {}),
+    },
+  });
+  res.json({
+    prefs: row.prefs,
+    dndStart: row.dndStart,
+    dndEnd: row.dndEnd,
+    emailOn: row.emailOn,
+  });
+});
+
 router.delete("/:id", async (req, res) => {
   const u = (req as any).user;
   await prisma.notification.deleteMany({
