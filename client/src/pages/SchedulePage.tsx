@@ -79,6 +79,22 @@ export default function SchedulePage() {
     return () => { aliveRef.current = false; };
   }, [cursor]);
 
+  // 조직도 등 외부에서 "이 사람과 일정" 을 누르면 TARGETED 로 기본 대상까지 채워 모달을 연다.
+  useEffect(() => {
+    function onCreate(ev: globalThis.Event) {
+      const d = (ev as globalThis.CustomEvent).detail ?? {};
+      const targets: string[] = Array.isArray(d.targetUserIds) ? d.targetUserIds.filter((x: unknown) => typeof x === "string") : [];
+      setForm((f) => ({
+        ...f,
+        scope: d.scope === "COMPANY" || d.scope === "TEAM" || d.scope === "PROJECT" || d.scope === "PERSONAL" || d.scope === "TARGETED" ? d.scope : "TARGETED",
+        targetUserIds: targets,
+      }));
+      setOpen(true);
+    }
+    window.addEventListener("schedule:create", onCreate);
+    return () => window.removeEventListener("schedule:create", onCreate);
+  }, []);
+
   // 모달에서 PROJECT 스코프를 선택했을 때 보여줄 프로젝트 목록. 한 번만 로드.
   useEffect(() => {
     let alive = true;
