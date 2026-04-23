@@ -21,6 +21,7 @@ import notificationRouter from "./routes/notification.js";
 import searchRouter from "./routes/search.js";
 import documentRouter from "./routes/document.js";
 import approvalRouter from "./routes/approval.js";
+import approvalExtrasRouter from "./routes/approvalExtras.js";
 import passkeyRouter from "./routes/passkey.js";
 import profileRouter from "./routes/profile.js";
 import versionRouter from "./routes/version.js";
@@ -146,6 +147,9 @@ app.use("/api/upload", uploadLimiter, uploadRouter);
 app.use("/api/notification", notificationRouter);
 app.use("/api/search", searchRouter);
 app.use("/api/document", documentRouter);
+// extras(templates/lines) 를 approval 보다 먼저 마운트 — approval 의 /:id 와 경로가 겹치는
+// 걸 피하려고 별도 prefix 로 분리. 클라는 /api/approval-extras/templates 로 접근.
+app.use("/api/approval-extras", approvalExtrasRouter);
 app.use("/api/approval", approvalRouter);
 app.use("/api/passkey", passkeyRouter);
 app.use("/api/profile", profileRouter);

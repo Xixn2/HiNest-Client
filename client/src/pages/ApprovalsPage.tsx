@@ -60,6 +60,23 @@ type CreatePrefill = {
   reviewerIds?: string[];
 };
 
+type ApprovalTemplate = {
+  id: string;
+  name: string;
+  type: ApprovalType;
+  scope: "ALL" | "TEAM" | "ME";
+  scopeTeam?: string | null;
+  body: {
+    title?: string;
+    content?: string;
+    fields?: { destination?: string; amount?: number };
+    defaultLine?: string[];
+  };
+  createdById: string;
+};
+
+type ApprovalLineFav = { id: string; name: string; reviewerIds: string[] };
+
 const TYPE_META: Record<ApprovalType, { label: string; color: string; icon: JSX.Element }> = {
   TRIP:     { label: "출장 신청",   color: "#0EA5E9", icon: <IconSvg><><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" /></></IconSvg> },
   OFFSITE:  { label: "외근 신청",   color: "#16A34A", icon: <IconSvg><><rect x="2" y="8" width="16" height="8" rx="2" /><path d="M6 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><circle cx="6" cy="17" r="2" /><circle cx="14" cy="17" r="2" /></></IconSvg> },
@@ -663,6 +680,81 @@ function CreateModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [templates, setTemplates] = useState<ApprovalTemplate[]>([]);
+  const [lines, setLines] = useState<ApprovalLineFav[]>([]);
+  useEffect(() => {
+    // 재상신 모드에서는 원본 그대로 쓰는 게 주 용도라 템플릿/라인을 로드할 필요 적음.
+    // 그래도 결재선을 다른 즐겨찾기로 바꾸고 싶을 수 있어 로드는 해둔다.
+    api<{ templates: ApprovalTemplate[] }>("/api/approval-extras/templates").then((r) => setTemplates(r.templates)).catch(() => {});
+    api<{ lines: ApprovalLineFav[] }>("/api/approval-extras/lines").then((r) => setLines(r.lines)).catch(() => {});
+  }, []);
+
+  function applyTemplate(t: ApprovalTemplate) {
+    setForm((f) => ({
+      ...f,
+      type: t.type,
+      title: t.body.title ?? f.title,
+      content: t.body.content ?? f.content,
+      destination: t.body.fields?.destination ?? f.destination,
+      amount: typeof t.body.fields?.amount === "number" ? String(t.body.fields.amount) : f.amount,
+      reviewerIds: t.body.defaultLine && t.body.defaultLine.length > 0 ? t.body.defaultLine : f.reviewerIds,
+    }));
+  }
+
+  async function saveAsTemplate() {
+    const name = window.prompt("템플릿 이름", form.title || "내 결재 템플릿");
+    if (!name) return;
+    const scope = window.prompt("공유 범위: ALL(전사) / TEAM(팀) / ME(개인)", "ME");
+    if (!scope || !["ALL", "TEAM", "ME"].includes(scope)) return;
+    try {
+      const body: ApprovalTemplate["body"] = {
+        title: form.title || undefined,
+        content: form.content || undefined,
+        fields: {
+          destination: form.destination || undefined,
+          amount: form.amount ? Number(form.amount) : undefined,
+        },
+        defaultLine: form.reviewerIds,
+      };
+      const r = await api<{ template: ApprovalTemplate }>("/api/approval-extras/templates", {
+        method: "POST",
+        json: { name, type: form.type, scope, body },
+      });
+      setTemplates((ts) => [r.template, ...ts]);
+    } catch (e: any) {
+      alertAsync({ title: "템플릿 저장 실패", description: e?.message ?? "다시 시도해주세요" });
+    }
+  }
+
+  async function removeTemplate(id: string) {
+    try {
+      await api(`/api/approval-extras/templates/${id}`, { method: "DELETE" });
+      setTemplates((ts) => ts.filter((t) => t.id !== id));
+    } catch {}
+  }
+
+  async function saveAsLine() {
+    if (form.reviewerIds.length === 0) return;
+    const name = window.prompt("결재라인 이름", `내 결재선 (${form.reviewerIds.length}명)`);
+    if (!name) return;
+    try {
+      const r = await api<{ line: ApprovalLineFav }>("/api/approval-extras/lines", {
+        method: "POST",
+        json: { name, reviewerIds: form.reviewerIds },
+      });
+      setLines((ls) => [r.line, ...ls]);
+    } catch (e: any) {
+      alertAsync({ title: "저장 실패", description: e?.message ?? "다시 시도해주세요" });
+    }
+  }
+
+  async function removeLine(id: string) {
+    try {
+      await api(`/api/approval-extras/lines/${id}`, { method: "DELETE" });
+      setLines((ls) => ls.filter((l) => l.id !== id));
+    } catch {}
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (saving) return;
@@ -707,6 +799,32 @@ function CreateModal({
           </button>
         </div>
         <form onSubmit={submit} className="p-5 space-y-3 max-h-[80vh] overflow-auto">
+          {templates.length > 0 && (
+            <div>
+              <label className="field-label">템플릿</label>
+              <div className="flex flex-wrap gap-1.5">
+                {templates.map((t) => (
+                  <span key={t.id} className="inline-flex items-center gap-1 bg-ink-100 rounded-full pl-2.5 pr-1 py-0.5">
+                    <button
+                      type="button"
+                      className="text-[12px] font-bold text-ink-800 hover:text-brand-600"
+                      onClick={() => applyTemplate(t)}
+                      title={`${TYPE_META[t.type].label}${t.scope !== "ALL" ? ` · ${t.scope === "TEAM" ? t.scopeTeam ?? "팀" : "개인"}` : ""}`}
+                    >
+                      {t.name}
+                    </button>
+                    <button
+                      type="button"
+                      className="w-4 h-4 rounded-full text-ink-400 hover:text-ink-700 text-[14px] leading-none"
+                      onClick={() => removeTemplate(t.id)}
+                      title="삭제"
+                    >×</button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="field-label">결재 종류</label>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -785,7 +903,37 @@ function CreateModal({
           )}
 
           <div>
-            <label className="field-label">결재선 <span className="text-ink-500 font-normal">(순서대로 결재됨 · {form.reviewerIds.length}명)</span></label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="field-label !mb-0">결재선 <span className="text-ink-500 font-normal">(순서대로 결재됨 · {form.reviewerIds.length}명)</span></label>
+              <div className="flex items-center gap-2">
+                {form.reviewerIds.length > 0 && (
+                  <button type="button" className="text-[11px] font-bold text-brand-600 hover:text-brand-700" onClick={saveAsLine}>
+                    ★ 이 라인 저장
+                  </button>
+                )}
+              </div>
+            </div>
+            {lines.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {lines.map((l) => (
+                  <span key={l.id} className="inline-flex items-center gap-1 bg-brand-50 rounded-full pl-2.5 pr-1 py-0.5">
+                    <button
+                      type="button"
+                      className="text-[12px] font-bold text-brand-700 hover:text-brand-800"
+                      onClick={() => setForm((f) => ({ ...f, reviewerIds: l.reviewerIds.filter((id) => id !== meId) }))}
+                    >
+                      {l.name} <span className="text-ink-500 font-normal tabular">({l.reviewerIds.length})</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="w-4 h-4 rounded-full text-ink-400 hover:text-ink-700 text-[14px] leading-none"
+                      onClick={() => removeLine(l.id)}
+                      title="삭제"
+                    >×</button>
+                  </span>
+                ))}
+              </div>
+            )}
             <div className="max-h-48 overflow-auto rounded-xl border border-ink-150 divide-y divide-ink-100">
               {directory.filter((d) => d.id !== meId).map((d) => {
                 const idx = form.reviewerIds.indexOf(d.id);
@@ -824,6 +972,10 @@ function CreateModal({
           )}
 
           <div className="flex justify-end gap-2 pt-1">
+            <button type="button" className="btn-ghost text-ink-600" disabled={saving || !form.title.trim()} onClick={saveAsTemplate} title="현재 내용을 템플릿으로 저장">
+              템플릿으로 저장
+            </button>
+            <div className="flex-1" />
             <button type="button" className="btn-ghost" disabled={saving} onClick={onClose}>취소</button>
             <button className="btn-primary" disabled={saving}>
               {saving ? "상신 중…" : reviseFromId ? "재상신" : "상신"}
