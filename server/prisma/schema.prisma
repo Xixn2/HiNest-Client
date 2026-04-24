@@ -810,7 +810,10 @@ model ServiceAccount {
   category    String   @default("OTHER") // CLOUD | HOSTING | VCS | PAYMENT | DOMAIN | EMAIL | MONITOR | DB | AI | TESTING | OTHER
   loginId     String? // 로그인 이메일 또는 사용자명
   url         String? // 콘솔/대시보드 URL
-  notes       String? // 접근 방법, MFA 사용 여부 등 자유 메모 (비밀번호 금지)
+  notes       String? // 접근 방법, MFA 사용 여부 등 자유 메모
+  // 비밀번호 — AES-256-GCM 로 암호화된 blob (포맷 v1:iv:tag:ct, base64).
+  // 서버의 ACCOUNT_ENC_KEY 로만 복호화. 목록 GET 에선 반환하지 않음 — 상세 reveal 시에만 복호화.
+  passwordEnc String?
   // 공개 범위 — ALL(전사) | TEAM(팀) | PROJECT(프로젝트). 문서/회의록과 일관.
   scope       String   @default("ALL")
   scopeTeam   String? // scope=TEAM 일 때 팀 이름

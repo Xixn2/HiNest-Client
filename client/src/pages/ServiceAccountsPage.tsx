@@ -55,6 +55,7 @@ type Account = {
   project: ProjectChip | null;
   ownerUser: OwnerUser | null;
   ownerName: string | null;
+  hasPassword: boolean;
   createdBy: { id: string; name: string };
   createdAt: string;
   updatedAt: string;
@@ -73,6 +74,9 @@ type FormState = {
   scope: Scope;
   scopeTeam: string;
   scopeProjectId: string;
+  // 비밀번호 입력 — 편집 시 빈 값은 "변경 없음", "CLEAR" sentinel 은 제거, 문자열은 새 값.
+  password: string;
+  clearPassword: boolean;
 };
 
 const emptyForm = (defaultTeam: string): FormState => ({
@@ -86,6 +90,8 @@ const emptyForm = (defaultTeam: string): FormState => ({
   scope: "ALL",
   scopeTeam: defaultTeam ?? "",
   scopeProjectId: "",
+  password: "",
+  clearPassword: false,
 });
 
 export default function ServiceAccountsPage() {
@@ -185,6 +191,8 @@ export default function ServiceAccountsPage() {
       scope: a.scope,
       scopeTeam: a.scopeTeam ?? myTeam,
       scopeProjectId: a.projectId ?? "",
+      password: "",
+      clearPassword: false,
     });
     setFormErr(null);
     setEditing(a.id);
@@ -225,6 +233,14 @@ export default function ServiceAccountsPage() {
         scopeTeam: form.scope === "TEAM" ? form.scopeTeam.trim() : null,
         projectId: form.scope === "PROJECT" ? form.scopeProjectId : null,
       };
+      // 비밀번호: 명시적으로 지우기 선택 시 null, 새 값 있으면 보냄, 빈 값이면 변경 없음(PATCH).
+      if (form.clearPassword) {
+        payload.password = null;
+      } else if (form.password) {
+        payload.password = form.password;
+      } else if (editing === "new") {
+        // 생성 시 빈 값이면 저장하지 않는다 (undefined 동등).
+      }
       if (editing === "new") {
         await api("/api/service-accounts", { method: "POST", json: payload });
       } else if (typeof editing === "string") {
@@ -286,8 +302,8 @@ export default function ServiceAccountsPage() {
       <div className="panel p-3 mb-4 bg-amber-50 border border-amber-200 text-[12px] text-amber-800 flex items-start gap-2">
         <span className="text-base leading-none">🔐</span>
         <div>
-          <div className="font-bold">비밀번호·토큰·액세스키는 여기에 저장하지 않아요.</div>
-          <div className="mt-0.5 text-amber-700">실제 크레덴셜은 1Password · Bitwarden 같은 전용 비밀번호 관리자에 두고, 여기에는 "어떤 서비스를 누가 쓰는지" 만 기록하세요.</div>
+          <div className="font-bold">비밀번호는 암호화해서 저장돼요 (AES-256-GCM).</div>
+          <div className="mt-0.5 text-amber-700">공용 계정의 비밀번호만 여기에 기록하고, 개인 비번·루트 키·2차 인증 백업 코드는 1Password / Bitwarden 같은 전용 도구를 쓰세요. 비번 열람은 작성자와 관리자만 가능해요.</div>
         </div>
       </div>
 
@@ -400,6 +416,23 @@ export default function ServiceAccountsPage() {
                       onEdit={() => openEdit(a)}
                       onDelete={() => remove(a)}
                       onCopy={() => a.loginId && copyId(a.loginId)}
+                      onCopyPassword={async () => {
+                        try {
+                          const r = await api<{ password: string | null }>(`/api/service-accounts/${a.id}/password`);
+                          if (!r.password) {
+                            await alertAsync({ title: "저장된 비밀번호가 없어요" });
+                            return;
+                          }
+                          try {
+                            await navigator.clipboard.writeText(r.password);
+                            alertAsync({ title: "복사됨", description: "비밀번호를 클립보드에 복사했어요. 사용 후 다른 내용을 복사해 지우세요." });
+                          } catch {
+                            window.prompt("비밀번호", r.password);
+                          }
+                        } catch (e: any) {
+                          alertAsync({ title: "열람 실패", description: e?.message ?? "권한이 없거나 서버 키가 설정되어 있지 않아요." });
+                        }
+                      }}
                     />
                   ))}
                 </div>
@@ -444,13 +477,14 @@ function ScopeBadge({ a }: { a: Account }) {
 }
 
 function AccountCard({
-  a, canEdit, onEdit, onDelete, onCopy,
+  a, canEdit, onEdit, onDelete, onCopy, onCopyPassword,
 }: {
   a: Account;
   canEdit: boolean;
   onEdit: () => void;
   onDelete: () => void;
   onCopy: () => void;
+  onCopyPassword: () => void;
 }) {
   const meta = CATEGORY_META[a.category];
   return (
@@ -482,6 +516,23 @@ function AccountCard({
                 <span className="text-ink-400 w-14 flex-shrink-0">로그인</span>
                 <span className="tabular truncate font-medium">{a.loginId}</span>
                 <button className="btn-ghost !px-1.5 !py-0.5 text-[10px]" onClick={onCopy} title="복사">복사</button>
+              </div>
+            )}
+            {a.hasPassword && (
+              <div className="flex items-center gap-1.5 text-ink-700">
+                <span className="text-ink-400 w-14 flex-shrink-0">비밀번호</span>
+                <span className="tabular truncate font-medium text-ink-500">••••••••</span>
+                {canEdit ? (
+                  <button
+                    className="btn-ghost !px-1.5 !py-0.5 text-[10px]"
+                    onClick={onCopyPassword}
+                    title="비밀번호 복사"
+                  >
+                    복사
+                  </button>
+                ) : (
+                  <span className="text-[10px] text-ink-400">(작성자·관리자만 열람)</span>
+                )}
               </div>
             )}
             {a.url && (
@@ -642,6 +693,35 @@ function AccountModal({
             />
           </label>
 
+          {/* 비밀번호 — 저장은 서버에서 AES-256-GCM 암호화. MFA 우회 및 키 탈취 위험 인지 전제. */}
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-bold text-ink-500 flex items-center justify-between">
+              <span>비밀번호 <span className="text-rose-600 font-normal">(암호화 저장)</span></span>
+              {mode === "edit" && (
+                <button
+                  type="button"
+                  className="text-[10px] font-bold text-ink-500 hover:text-rose-600 underline"
+                  onClick={() => setForm({ ...form, clearPassword: !form.clearPassword, password: form.clearPassword ? form.password : "" })}
+                >
+                  {form.clearPassword ? "지우기 취소" : "저장된 비번 지우기"}
+                </button>
+              )}
+            </span>
+            <input
+              className="input"
+              type="password"
+              autoComplete="new-password"
+              placeholder={mode === "edit" ? "변경 시에만 입력 (비워두면 유지)" : "선택 — 비워두면 저장 안 함"}
+              value={form.password}
+              maxLength={256}
+              disabled={form.clearPassword}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+            />
+            <span className="text-[10px] text-amber-700">
+              ⚠️ 공용 크레덴셜만 — 개인 비번·2차 인증 백업 코드·root 키는 1Password 같은 전용 도구를 쓰세요.
+            </span>
+          </label>
+
           <label className="flex flex-col gap-1">
             <span className="text-[11px] font-bold text-ink-500">콘솔 URL</span>
             <input
@@ -684,7 +764,7 @@ function AccountModal({
           </div>
 
           <label className="flex flex-col gap-1">
-            <span className="text-[11px] font-bold text-ink-500">메모 <span className="text-rose-600 font-normal">(비밀번호 금지)</span></span>
+            <span className="text-[11px] font-bold text-ink-500">메모</span>
             <textarea
               className="input"
               rows={3}
