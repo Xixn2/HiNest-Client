@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import bcrypt from "bcryptjs";
 import { prisma } from "../lib/db.js";
 import { requireAuth } from "../lib/auth.js";
 import { encryptSecret, decryptSecret, hasSecretKey } from "../lib/secretCrypto.js";
@@ -145,9 +146,23 @@ router.get("/", async (req, res) => {
   res.json({ accounts });
 });
 
-/** 저장된 비밀번호 복호화 — 편집 권한자(작성자/ADMIN) 만. 감사 로그 기본 console. */
-router.get("/:id/password", async (req, res) => {
+/**
+ * 저장된 비밀번호 복호화 — 편집 권한자(작성자/ADMIN) 만, 그리고 본인 로그인 비번 재확인 필수.
+ * POST 로 바꾼 건 body 에 재확인용 평문 비번이 실려 URL/로그에 남지 않게 하기 위함.
+ * 열람은 서버 로그에 감사 흔적을 남긴다.
+ */
+const revealSchema = z.object({ password: z.string().min(1).max(128) });
+router.post("/:id/password", async (req, res) => {
+  const parsed = revealSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "로그인 비밀번호를 입력해주세요." });
   const user = (req as any).user as { id: string; role?: string; superAdmin?: boolean };
+
+  // 본인 로그인 비번 재확인. bcrypt.compare 자체가 느려 브루트포스 방어 역할도 겸함.
+  const me = await prisma.user.findUnique({ where: { id: user.id }, select: { passwordHash: true } });
+  if (!me?.passwordHash) return res.status(403).json({ error: "재인증이 필요해요." });
+  const ok = await bcrypt.compare(parsed.data.password, me.passwordHash);
+  if (!ok) return res.status(403).json({ error: "로그인 비밀번호가 일치하지 않아요." });
+
   const row = await prisma.serviceAccount.findUnique({
     where: { id: req.params.id },
     select: { id: true, createdById: true, passwordEnc: true, serviceName: true },
@@ -159,7 +174,6 @@ router.get("/:id/password", async (req, res) => {
   if (!row.passwordEnc) return res.json({ password: null });
   try {
     const password = decryptSecret(row.passwordEnc);
-    // 감사 로그 — 누가 어떤 계정의 비번을 열람했는지 최소한 서버 로그에 남김.
     console.log(`[serviceAccount] reveal by user=${user.id} target=${row.id}(${row.serviceName})`);
     res.json({ password });
   } catch (e: any) {

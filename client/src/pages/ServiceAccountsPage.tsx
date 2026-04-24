@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
-import { confirmAsync, alertAsync } from "../components/ConfirmHost";
+import { confirmAsync, alertAsync, promptAsync } from "../components/ConfirmHost";
 
 /**
  * 서비스 계정 레지스트리 — 회사에서 쓰는 AWS/Vercel/GitHub/테스트 계정을 한 곳에 모으는 페이지.
@@ -417,8 +417,20 @@ export default function ServiceAccountsPage() {
                       onDelete={() => remove(a)}
                       onCopy={() => a.loginId && copyId(a.loginId)}
                       onCopyPassword={async () => {
+                        // 본인 로그인 비번 재확인 — promptAsync 의 password 타입으로 화면에 안 보이게 입력받음.
+                        const myPw = await promptAsync({
+                          title: "본인 확인",
+                          description: `"${a.serviceName}" 의 비밀번호를 보려면 로그인 비밀번호를 다시 입력해주세요.`,
+                          placeholder: "로그인 비밀번호",
+                          inputType: "password",
+                          confirmLabel: "확인",
+                        });
+                        if (!myPw) return;
                         try {
-                          const r = await api<{ password: string | null }>(`/api/service-accounts/${a.id}/password`);
+                          const r = await api<{ password: string | null }>(`/api/service-accounts/${a.id}/password`, {
+                            method: "POST",
+                            json: { password: myPw },
+                          });
                           if (!r.password) {
                             await alertAsync({ title: "저장된 비밀번호가 없어요" });
                             return;
@@ -430,7 +442,7 @@ export default function ServiceAccountsPage() {
                             window.prompt("비밀번호", r.password);
                           }
                         } catch (e: any) {
-                          alertAsync({ title: "열람 실패", description: e?.message ?? "권한이 없거나 서버 키가 설정되어 있지 않아요." });
+                          alertAsync({ title: "열람 실패", description: e?.message ?? "권한이 없거나 비밀번호가 일치하지 않아요." });
                         }
                       }}
                     />

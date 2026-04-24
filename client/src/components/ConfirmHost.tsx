@@ -41,6 +41,8 @@ type PromptOpts = {
   defaultValue?: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  /** 비밀번호 등 마스킹이 필요한 입력은 "password" 로. 기본은 "text". */
+  inputType?: "text" | "password";
 };
 
 type ConfirmResult = boolean | "secondary";
@@ -185,6 +187,8 @@ export default function ConfirmHost() {
             <input
               ref={inputRef}
               className="input"
+              type={dialog.opts.inputType ?? "text"}
+              autoComplete={dialog.opts.inputType === "password" ? "current-password" : undefined}
               value={value}
               onChange={(e) => setValue(e.target.value)}
               placeholder={dialog.opts.placeholder}
