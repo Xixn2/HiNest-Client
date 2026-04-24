@@ -727,6 +727,12 @@ function QaRow({
               }}
               maxLength={200}
               onClick={(e) => e.stopPropagation()}
+              /* 한글 제목에 빨간 점선 맞춤법 밑줄이 뜨지 않도록 브라우저
+                 자동완성/맞춤법 검사 전부 끈다. 자동 대문자 변환도 제목엔 불필요. */
+              spellCheck={false}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
             />
             {/* 메모/첨부 개수 뱃지 — 있으면 행에서 바로 보이게.
                 OS 네이티브 📝/📎 이모지는 컬러풀해서 미니멀 UI 와 톤이 안 맞아
@@ -955,6 +961,10 @@ function QaRow({
                   if ((v || null) !== item.screen) onPatch({ screen: v || null });
                 }}
                 maxLength={200}
+                spellCheck={false}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
               />
             </PropertyRow>
           </div>
@@ -973,6 +983,10 @@ function QaRow({
                 if ((noteDraft || null) !== item.note) onPatch({ note: noteDraft || null });
               }}
               maxLength={4000}
+              spellCheck={false}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
             />
           </div>
 

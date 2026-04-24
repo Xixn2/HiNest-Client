@@ -151,6 +151,7 @@ model ProjectQaItem {
   @@index([projectId, status])
   @@index([projectId, sortOrder])
   @@index([projectId, assigneeId])
+  @@index([projectId, dueDate])
 }
 
 /// QA 항목에 첨부된 이미지/영상/파일. 업로드는 공용 `/api/upload` 를 거쳐

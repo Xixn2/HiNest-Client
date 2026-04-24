@@ -401,6 +401,8 @@ const qaCreateSchema = z.object({
   assigneeId: z.string().max(50).optional().nullable(),
   priority: z.enum(QA_PRIORITY).optional(),
   status: z.enum(QA_STATUS).optional(),
+  // 마감기한 — ISO 문자열 또는 null(해지). 빈 문자열은 들어오지 않도록 정규화는 클라이언트에서.
+  dueDate: z.string().datetime().optional().nullable(),
   attachments: z.array(qaAttachmentInput).max(20).optional(),
 });
 
@@ -459,6 +461,7 @@ router.post("/:id/qa", async (req, res) => {
       status,
       priority: d.priority ?? "NORMAL",
       sortOrder: nextOrder,
+      dueDate: d.dueDate ? new Date(d.dueDate) : null,
       createdById: u.id,
       ...resolvedPatch,
       ...(d.attachments && d.attachments.length
