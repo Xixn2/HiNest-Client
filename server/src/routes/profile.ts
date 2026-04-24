@@ -64,7 +64,7 @@ router.post("/password", passwordChangeLimiter, async (req, res) => {
     await writeLog(u.id, "PASSWORD_CHANGE_FAIL", undefined, undefined, req.ip);
     return res.status(401).json({ error: "현재 비밀번호가 일치하지 않습니다" });
   }
-  const hash = await bcrypt.hash(parsed.data.next, 10);
+  const hash = await bcrypt.hash(parsed.data.next, 12);
   await prisma.user.update({ where: { id: user.id }, data: { passwordHash: hash } });
   await writeLog(u.id, "PASSWORD_CHANGE", undefined, undefined, req.ip);
   res.json({ ok: true });

@@ -50,10 +50,14 @@ if (IS_PROD) {
 }
 
 // 기본 보안 헤더 — CSP 는 프런트 개발 편의상 기본만.
+// 프로덕션에선 HSTS 2년 + preload 활성화 — HTTPS→HTTP 다운그레이드 공격 차단.
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" }, // /uploads 타 origin 로드 허용
     contentSecurityPolicy: false, // API 서버라 HTML 안 서빙. 필요 시 활성화.
+    hsts: IS_PROD
+      ? { maxAge: 63072000, includeSubDomains: true, preload: true }
+      : false,
   })
 );
 
@@ -83,6 +87,27 @@ app.use(
 );
 app.use(express.json({ limit: "2mb" }));
 app.use(cookieParser());
+
+// CSRF 방어 — 쿠키 인증 + SameSite=lax 만으론 크로스 오리진 상태변경 요청에 완전히 안전하지 않음.
+// Origin / Referer 헤더를 허용 오리진 목록과 대조해 안 맞으면 403.
+// GET/HEAD/OPTIONS 는 상태변경이 아니므로 통과. 웹훅(/api/webhook/*)은 자체 토큰 검증이라 예외.
+const STATE_CHANGING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+app.use((req, res, next) => {
+  if (!STATE_CHANGING.has(req.method)) return next();
+  if (req.path.startsWith("/api/webhook/")) return next();
+  if (req.path === "/api/health") return next();
+  const origin = String(req.headers.origin || "");
+  const referer = String(req.headers.referer || "");
+  // Origin 이 있으면 그걸로 검증. 없으면 Referer 의 origin 을 뽑아 검증.
+  // 둘 다 없으면 브라우저 외 클라이언트(스크립트/네이티브 앱)로 간주해 통과 — 쿠키/JWT 체크는 그대로 작동.
+  let sender = origin;
+  if (!sender && referer) {
+    try { sender = new URL(referer).origin; } catch { sender = ""; }
+  }
+  if (!sender) return next();
+  if (CORS_ORIGINS.includes(sender)) return next();
+  return res.status(403).json({ error: "origin not allowed" });
+});
 
 // 레이트 리밋 — 브루트포스/DoS 방어.
 const loginLimiter = rateLimit({
