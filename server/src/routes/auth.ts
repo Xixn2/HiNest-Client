@@ -97,7 +97,8 @@ router.post("/signup", async (req, res) => {
   const dup = await prisma.user.findUnique({ where: { email } });
   if (dup) return res.status(400).json({ error: "이미 가입된 이메일" });
 
-  const passwordHash = await bcrypt.hash(password, 10);
+  // 2026 기준 bcrypt rounds 12 — 로그인/가입 지연은 체감 없고 GPU 공격 비용은 4x 증가.
+  const passwordHash = await bcrypt.hash(password, 12);
   // 사번은 서버가 자동 부여 — 사용자가 입력하지 않음. 중복 절대 없음 (유니크 체크 반복).
   const employeeNo = await generateUniqueEmployeeNo();
   const user = await prisma.user.create({
