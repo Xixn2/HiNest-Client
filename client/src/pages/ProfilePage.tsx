@@ -286,6 +286,8 @@ export default function ProfilePage() {
           <PresencePanel />
           <ThemePanel />
           <DesktopNotifyPanel />
+          <ShortcutsPanel />
+          <SessionInfoPanel />
 
           <div className="panel p-6">
             <div className="h-sub mb-4">비밀번호 변경</div>
@@ -608,6 +610,106 @@ function InlineAlert({ tone, children }: { tone: "error" | "success"; children: 
     <div className={`flex items-start gap-2 p-2.5 rounded-md border text-[12px] font-semibold ${cls}`}>
       <span className="mt-0.5 flex-shrink-0">{Icon}</span>
       {children}
+    </div>
+  );
+}
+
+/* ===== 단축키 도움말 — 내부 도구라 키보드 사용자가 많아 눈에 띄는 자리에 노출 ===== */
+// 단축키는 전부 각 페이지/모달 쪽에서 실제로 구현돼 있음. 여기는 문서화 뿐.
+// 실제 등록 위치: ProjectQaList (⌘K), useModalDismiss (Esc), ApprovalsPage (⌘↵).
+const SHORTCUTS: { keys: string[]; label: string; scope: string }[] = [
+  { keys: ["⌘", "K"], label: "QA 체크리스트 검색창으로 포커스 이동", scope: "QA" },
+  { keys: ["⌘", "↵"], label: "결재 댓글 등록 · 폼 제출", scope: "결재" },
+  { keys: ["Esc"], label: "열린 모달·오버레이 닫기", scope: "전역" },
+  { keys: ["/"], label: "상단 글로벌 검색창으로 포커스", scope: "전역" },
+];
+function ShortcutsPanel() {
+  const isMac = typeof navigator !== "undefined" && /mac/i.test(navigator.platform || navigator.userAgent);
+  // Windows/Linux 에서는 ⌘ 대신 Ctrl 로 표기. 키 코드 자체는 metaKey || ctrlKey 로 둘 다 잡음.
+  const render = (k: string) => (k === "⌘" && !isMac ? "Ctrl" : k);
+  return (
+    <div className="panel p-6">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div>
+          <div className="h-sub">키보드 단축키</div>
+          <div className="t-caption mt-0.5">자주 쓰는 작업은 키보드가 빨라요.</div>
+        </div>
+      </div>
+      <ul className="space-y-2">
+        {SHORTCUTS.map((s, i) => (
+          <li key={i} className="flex items-center justify-between gap-3 py-1.5 border-b border-ink-100 last:border-0">
+            <div className="min-w-0">
+              <div className="text-[13px] font-semibold text-ink-900 truncate">{s.label}</div>
+              <div className="text-[11px] text-ink-500 mt-0.5">{s.scope}</div>
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {s.keys.map((k, j) => (
+                <kbd
+                  key={j}
+                  className="inline-flex items-center justify-center min-w-[26px] h-[24px] px-1.5 rounded-md bg-ink-50 border border-ink-200 text-[11px] font-mono font-bold text-ink-700"
+                >
+                  {render(k)}
+                </kbd>
+              ))}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/* ===== 세션 정보 — 내 로그인 환경 한눈에 (디버깅/보안 확인용) ===== */
+function SessionInfoPanel() {
+  // 최초 마운트 시점에 한 번만 스냅샷 — 리렌더마다 navigator 를 읽을 이유가 없음.
+  const [info] = useState(() => {
+    if (typeof navigator === "undefined") return null;
+    let tz = "—";
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "—"; } catch {}
+    const ua = navigator.userAgent;
+    // 간단한 브라우저/OS 파싱 — 정확도보다 가독성.
+    const browser = /Edg\//.test(ua)
+      ? "Edge"
+      : /Chrome\//.test(ua) && !/Edg\//.test(ua)
+      ? "Chrome"
+      : /Firefox\//.test(ua)
+      ? "Firefox"
+      : /Safari\//.test(ua) && !/Chrome\//.test(ua)
+      ? "Safari"
+      : "기타";
+    const os = /Windows/.test(ua)
+      ? "Windows"
+      : /Mac OS X/.test(ua)
+      ? "macOS"
+      : /Linux/.test(ua)
+      ? "Linux"
+      : /Android/.test(ua)
+      ? "Android"
+      : /iPhone|iPad/.test(ua)
+      ? "iOS"
+      : "기타";
+    const lang = navigator.language || "—";
+    return { tz, browser, os, lang };
+  });
+
+  if (!info) return null;
+  return (
+    <div className="panel p-6">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div>
+          <div className="h-sub">현재 세션</div>
+          <div className="t-caption mt-0.5">이 기기·브라우저 정보입니다.</div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <InfoField label="브라우저" value={info.browser} />
+        <InfoField label="OS" value={info.os} />
+        <InfoField label="언어" value={info.lang} />
+        <InfoField label="시간대" value={info.tz} mono />
+      </div>
+      <div className="text-[11px] text-ink-500 mt-3">
+        세션이 의심스러우면 비밀번호를 변경해 모든 기기에서 로그아웃할 수 있어요.
+      </div>
     </div>
   );
 }
