@@ -58,36 +58,38 @@ model User {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  inviteKey             InviteKey?             @relation("UsedKey")
-  events                Event[]
-  leaves                Leave[]
-  attendances           Attendance[]
-  journals              Journal[]
-  notices               Notice[]
-  messagesSent          ChatMessage[]          @relation("Sender")
-  memberships           RoomMember[]
-  logs                  AuditLog[]
-  cardExpenses          CardExpense[]
-  notifications         Notification[]
-  documents             Document[]             @relation("DocumentAuthor")
-  approvalsRequested    Approval[]             @relation("ApprovalRequester")
-  approvalReviews       ApprovalStep[]         @relation("ApprovalReviewer")
-  passkeys              Passkey[]
-  desktopBios           DesktopBiometric[]
-  reactions             MessageReaction[]
-  projects              ProjectMember[]
-  projectsCreated       Project[]              @relation("ProjectCreator")
-  meetings              Meeting[]              @relation("MeetingAuthor")
-  meetingViews          MeetingViewer[]
-  noticeReactions       NoticeReaction[]
-  pins                  Pin[]
-  notifPref             NotificationPref?
-  approvalLineFavorites ApprovalLineFavorite[]
-  approvalComments      ApprovalComment[]
-  meetingRevisions      MeetingRevision[]
-  documentRevisions     DocumentRevision[]
-  shareLinksCreated     DocumentShareLink[]    @relation("ShareLinkCreator")
-  folderShareLinksCreated FolderShareLink[]    @relation("FolderShareLinkCreator")
+  inviteKey               InviteKey?             @relation("UsedKey")
+  events                  Event[]
+  leaves                  Leave[]
+  attendances             Attendance[]
+  journals                Journal[]
+  notices                 Notice[]
+  messagesSent            ChatMessage[]          @relation("Sender")
+  memberships             RoomMember[]
+  logs                    AuditLog[]
+  cardExpenses            CardExpense[]
+  notifications           Notification[]
+  documents               Document[]             @relation("DocumentAuthor")
+  approvalsRequested      Approval[]             @relation("ApprovalRequester")
+  approvalReviews         ApprovalStep[]         @relation("ApprovalReviewer")
+  passkeys                Passkey[]
+  desktopBios             DesktopBiometric[]
+  reactions               MessageReaction[]
+  projects                ProjectMember[]
+  projectsCreated         Project[]              @relation("ProjectCreator")
+  meetings                Meeting[]              @relation("MeetingAuthor")
+  meetingViews            MeetingViewer[]
+  noticeReactions         NoticeReaction[]
+  pins                    Pin[]
+  notifPref               NotificationPref?
+  approvalLineFavorites   ApprovalLineFavorite[]
+  approvalComments        ApprovalComment[]
+  meetingRevisions        MeetingRevision[]
+  documentRevisions       DocumentRevision[]
+  shareLinksCreated       DocumentShareLink[]    @relation("ShareLinkCreator")
+  folderShareLinksCreated FolderShareLink[]      @relation("FolderShareLinkCreator")
+  serviceAccountsOwned    ServiceAccount[]       @relation("ServiceAccountOwner")
+  serviceAccountsCreated  ServiceAccount[]       @relation("ServiceAccountCreator")
 }
 
 /// 팀/프로젝트 — 사이드바 "팀" 카테고리 아래에 자신이 참여중인 프로젝트가 표시됨.
@@ -675,7 +677,7 @@ model Folder {
   project      Project?   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdAt    DateTime   @default(now())
 
-  shareLinks   FolderShareLink[]
+  shareLinks FolderShareLink[]
 
   @@index([projectId])
 }
@@ -796,4 +798,27 @@ model MeetingViewer {
 
   @@unique([meetingId, userId])
   @@index([userId])
+}
+
+/// 서비스 계정 레지스트리 — AWS/Vercel/GitHub/외부 SaaS 등의 "누가 어떤 계정을 쓰는지" 기록.
+/// 보안상 비밀번호는 저장하지 않음(1Password 등 전용 도구 사용 전제).
+/// 로그인 ID(이메일/사용자명)·콘솔 URL·담당자·분류·메모만 보관.
+model ServiceAccount {
+  id          String   @id @default(cuid())
+  serviceName String // "AWS 프로덕션", "Vercel - hinest", "GitHub Org" 등 식별용 이름
+  category    String   @default("OTHER") // CLOUD | HOSTING | VCS | PAYMENT | DOMAIN | EMAIL | MONITOR | DB | AI | TESTING | OTHER
+  loginId     String? // 로그인 이메일 또는 사용자명
+  url         String? // 콘솔/대시보드 URL
+  notes       String? // 접근 방법, MFA 사용 여부 등 자유 메모 (비밀번호 금지)
+  // 담당자 — 사용자 연결이 있으면 ownerUserId, 외부 담당자는 ownerName 으로 기록.
+  ownerUserId String?
+  ownerUser   User?    @relation("ServiceAccountOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  ownerName   String? // ownerUserId 가 없을 때 수기 이름 (예: 외주 개발자)
+  createdById String
+  createdBy   User     @relation("ServiceAccountCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category, serviceName])
+  @@index([ownerUserId])
 }

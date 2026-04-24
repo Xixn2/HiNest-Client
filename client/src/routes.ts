@@ -21,6 +21,7 @@ export const loadExpense = () => import("./pages/ExpensePage");
 export const loadProject = () => import("./pages/ProjectPage");
 export const loadMeetings = () => import("./pages/MeetingsPage");
 export const loadMeetingDetail = () => import("./pages/MeetingDetailPage");
+export const loadAccounts = () => import("./pages/ServiceAccountsPage");
 export const loadAdmin = () => import("./pages/AdminPage");
 export const loadSuperAdmin = () => import("./pages/SuperAdminPage");
 
@@ -37,6 +38,7 @@ export const ExpensePage = lazy(loadExpense);
 export const ProjectPage = lazy(loadProject);
 export const MeetingsPage = lazy(loadMeetings);
 export const MeetingDetailPage = lazy(loadMeetingDetail);
+export const ServiceAccountsPage = lazy(loadAccounts);
 export const AdminPage = lazy(loadAdmin);
 export const SuperAdminPage = lazy(loadSuperAdmin);
 
@@ -55,4 +57,5 @@ export const ROUTE_PREFETCH: Record<string, () => Promise<unknown>> = {
   "/admin": loadAdmin,
   "/super-admin": loadSuperAdmin,
   "/meetings": loadMeetings,
+  "/accounts": loadAccounts,
 };
