@@ -637,7 +637,7 @@ function AccountCard({
           style={{
             borderRadius: a.iconShape === "CIRCLE" ? "9999px" : "22%",
             background: iconSrc
-              ? "linear-gradient(180deg, #FFFFFF 0%, #F3F4F7 100%)"
+              ? "linear-gradient(180deg, var(--c-surface) 0%, var(--c-surface-3) 100%)"
               : `linear-gradient(180deg, ${meta.color} 0%, ${meta.color}dd 100%)`,
             color: "#fff",
           }}
@@ -1076,7 +1076,7 @@ function AccountModal({
                 style={{
                   borderRadius: form.iconShape === "CIRCLE" ? "9999px" : "22%",
                   background: previewSrc
-                    ? "linear-gradient(180deg, #FFFFFF 0%, #F3F4F7 100%)"
+                    ? "linear-gradient(180deg, var(--c-surface) 0%, var(--c-surface-3) 100%)"
                     : `linear-gradient(180deg, ${CATEGORY_META[form.category].color} 0%, ${CATEGORY_META[form.category].color}dd 100%)`,
                   color: "#fff",
                 }}
