@@ -36,6 +36,80 @@ const CATEGORY_META: Record<Category, { label: string; color: string; emoji: str
 };
 const CATEGORY_ORDER: Category[] = ["CLOUD", "HOSTING", "VCS", "DB", "PAYMENT", "DOMAIN", "EMAIL", "MONITOR", "AI", "TESTING", "OTHER"];
 
+/**
+ * URL/서비스 이름에서 파비콘용 도메인 추정.
+ * - URL 이 있으면 hostname 그대로.
+ * - 없으면 서비스 이름에서 유명 브랜드를 매칭 (BRAND_HOSTS).
+ * - 그래도 매칭 실패하면 한 단어로 된 이름에 한해 <slug>.com 추정.
+ *   다국어 이름(예: "팀 드라이브") 이나 복합 이름(예: "AWS 프로덕션")은 추정을 피함 —
+ *   엉뚱한 도메인으로 흘러 보안상 리퍼러가 새는 걸 막기 위함.
+ */
+const BRAND_HOSTS: Array<[RegExp, string]> = [
+  [/(^|\W)aws|amazon\s*web/i, "aws.amazon.com"],
+  [/vercel/i, "vercel.com"],
+  [/netlify/i, "netlify.com"],
+  [/cloudflare/i, "cloudflare.com"],
+  [/github/i, "github.com"],
+  [/gitlab/i, "gitlab.com"],
+  [/bitbucket/i, "bitbucket.org"],
+  [/notion/i, "notion.so"],
+  [/figma/i, "figma.com"],
+  [/slack/i, "slack.com"],
+  [/discord/i, "discord.com"],
+  [/google\s*cloud|gcp/i, "cloud.google.com"],
+  [/google\s*workspace|gsuite|g\s*suite/i, "workspace.google.com"],
+  [/google/i, "google.com"],
+  [/microsoft|office\s*365|m365/i, "microsoft.com"],
+  [/azure/i, "azure.microsoft.com"],
+  [/apple/i, "apple.com"],
+  [/instagram|insta/i, "instagram.com"],
+  [/facebook|meta\b/i, "facebook.com"],
+  [/twitter|^x\b/i, "twitter.com"],
+  [/tiktok/i, "tiktok.com"],
+  [/youtube/i, "youtube.com"],
+  [/linkedin/i, "linkedin.com"],
+  [/naver/i, "naver.com"],
+  [/kakao/i, "kakao.com"],
+  [/toss/i, "toss.im"],
+  [/stripe/i, "stripe.com"],
+  [/paypal/i, "paypal.com"],
+  [/openai|chatgpt/i, "openai.com"],
+  [/anthropic|claude/i, "anthropic.com"],
+  [/supabase/i, "supabase.com"],
+  [/firebase/i, "firebase.google.com"],
+  [/mongodb|mongo\s*atlas/i, "mongodb.com"],
+  [/planetscale/i, "planetscale.com"],
+  [/datadog/i, "datadoghq.com"],
+  [/sentry/i, "sentry.io"],
+  [/new\s*relic/i, "newrelic.com"],
+  [/mailgun/i, "mailgun.com"],
+  [/sendgrid/i, "sendgrid.com"],
+  [/resend/i, "resend.com"],
+  [/twilio/i, "twilio.com"],
+  [/dropbox/i, "dropbox.com"],
+  [/zoom/i, "zoom.us"],
+  [/linear/i, "linear.app"],
+  [/jira|atlassian/i, "atlassian.com"],
+  [/cloudinary/i, "cloudinary.com"],
+];
+
+function guessHost(url: string | null, name: string): string | null {
+  if (url) {
+    try { return new URL(url).hostname; } catch {}
+  }
+  const n = name.trim();
+  if (!n) return null;
+  for (const [re, host] of BRAND_HOSTS) {
+    if (re.test(n)) return host;
+  }
+  // 마지막 수단 — 공백/특수문자 없고 ascii 만 있는 단일 단어면 .com 추정.
+  const slug = n.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (slug.length >= 3 && /^[a-z0-9]+$/.test(slug) && slug === n.toLowerCase()) {
+    return `${slug}.com`;
+  }
+  return null;
+}
+
 type Scope = "ALL" | "TEAM" | "PROJECT";
 const SCOPE_LABEL: Record<Scope, string> = { ALL: "전사", TEAM: "팀", PROJECT: "프로젝트" };
 type ScopeTab = "ALL_TAB" | Scope;
@@ -499,12 +573,12 @@ function AccountCard({
   onCopyPassword: () => void;
 }) {
   const meta = CATEGORY_META[a.category];
-  // URL 이 있으면 해당 사이트의 파비콘을 우선 사용 (Google s2 — CORS 없이 바로 <img> 에 주입 가능).
-  // 로드 실패 시 onError 에서 fallback 플래그를 켜서 카테고리 이모지로 대체.
-  const host = useMemo(() => {
-    if (!a.url) return null;
-    try { return new URL(a.url).hostname; } catch { return null; }
-  }, [a.url]);
+  // 파비콘 해상 순서:
+  //   1) URL 이 있으면 그 도메인
+  //   2) 서비스 이름에서 유명 브랜드 매칭 (instagram, microsoft 등) — 화이트리스트
+  //   3) 서비스 이름을 ascii 슬러그로 바꿔 <slug>.com 추정 시도
+  //   4) 그래도 실패하면 카테고리 이모지
+  const host = useMemo(() => guessHost(a.url, a.serviceName), [a.url, a.serviceName]);
   const [iconErr, setIconErr] = useState(false);
   const favicon = host && !iconErr ? `https://www.google.com/s2/favicons?domain=${host}&sz=64` : null;
   return (
