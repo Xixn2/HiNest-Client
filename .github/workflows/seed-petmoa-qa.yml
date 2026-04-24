@@ -74,7 +74,7 @@ jobs:
           OVERRIDES=$(jq -cn --arg c "$CONTAINER" --arg b "$SEED_B64" '{
             containerOverrides: [{
               name: $c,
-              command: ["sh","-c", "cd /app && echo \($b) | base64 -d | gunzip > seed.cjs && node seed.cjs"]
+              command: ["sh","-c", "echo \($b) | base64 -d | gunzip > /tmp/seed.cjs && cd /app && NODE_PATH=/app/node_modules node /tmp/seed.cjs"]
             }]
           }')
           echo "Overrides prepared"
