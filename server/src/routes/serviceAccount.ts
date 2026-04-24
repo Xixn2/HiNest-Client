@@ -1,7 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
+import bcrypt from "bcryptjs";
 import { prisma } from "../lib/db.js";
 import { requireAuth } from "../lib/auth.js";
+import { encryptSecret, decryptSecret, hasSecretKey } from "../lib/secretCrypto.js";
 
 /**
  * 서비스 계정 레지스트리 — AWS/Vercel/GitHub 등 외부 서비스의 "누가 어떤 계정을 쓰는지" 기록.
@@ -40,6 +42,9 @@ const baseSchema = z.object({
   projectId: z.string().optional().nullable(),
   ownerUserId: z.string().optional().nullable(),
   ownerName: z.string().trim().max(80).optional().nullable(),
+  // 평문 비밀번호 — 서버에서 즉시 암호화해 passwordEnc 에만 저장.
+  // null 로 보내면 기존 저장된 값 삭제, undefined 면 변경 없음(PATCH).
+  password: z.string().max(512).nullable().optional(),
 });
 
 const createSchema = baseSchema;
@@ -136,7 +141,44 @@ router.get("/", async (req, res) => {
     },
   });
 
-  res.json({ accounts: rows });
+  // 목록 응답엔 암호문을 담지 않는다 — 존재 여부만 알리고, 조회는 별도 reveal 엔드포인트로.
+  const accounts = rows.map(({ passwordEnc, ...rest }) => ({ ...rest, hasPassword: !!passwordEnc }));
+  res.json({ accounts });
+});
+
+/**
+ * 저장된 비밀번호 복호화 — 편집 권한자(작성자/ADMIN) 만, 그리고 본인 로그인 비번 재확인 필수.
+ * POST 로 바꾼 건 body 에 재확인용 평문 비번이 실려 URL/로그에 남지 않게 하기 위함.
+ * 열람은 서버 로그에 감사 흔적을 남긴다.
+ */
+const revealSchema = z.object({ password: z.string().min(1).max(128) });
+router.post("/:id/password", async (req, res) => {
+  const parsed = revealSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "로그인 비밀번호를 입력해주세요." });
+  const user = (req as any).user as { id: string; role?: string; superAdmin?: boolean };
+
+  // 본인 로그인 비번 재확인. bcrypt.compare 자체가 느려 브루트포스 방어 역할도 겸함.
+  const me = await prisma.user.findUnique({ where: { id: user.id }, select: { passwordHash: true } });
+  if (!me?.passwordHash) return res.status(403).json({ error: "재인증이 필요해요." });
+  const ok = await bcrypt.compare(parsed.data.password, me.passwordHash);
+  if (!ok) return res.status(403).json({ error: "로그인 비밀번호가 일치하지 않아요." });
+
+  const row = await prisma.serviceAccount.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, createdById: true, passwordEnc: true, serviceName: true },
+  });
+  if (!row) return res.status(404).json({ error: "존재하지 않는 계정이에요." });
+  if (!canEdit(user, row)) {
+    return res.status(403).json({ error: "이 계정의 비밀번호를 볼 권한이 없어요." });
+  }
+  if (!row.passwordEnc) return res.json({ password: null });
+  try {
+    const password = decryptSecret(row.passwordEnc);
+    console.log(`[serviceAccount] reveal by user=${user.id} target=${row.id}(${row.serviceName})`);
+    res.json({ password });
+  } catch (e: any) {
+    res.status(500).json({ error: "복호화 실패: " + (e?.message ?? "") });
+  }
 });
 
 /** 프로젝트 칩 — 이 페이지 필터에 노출할, 내가 속한 프로젝트 목록. */
@@ -202,6 +244,16 @@ router.post("/", async (req, res) => {
     if (!exists) return res.status(400).json({ error: "담당자로 지정한 사용자를 찾을 수 없어요." });
   }
 
+  // 비밀번호는 저장 직전 암호화. 키 없으면 거절.
+  let passwordEnc: string | null = null;
+  if (input.password) {
+    if (!hasSecretKey()) {
+      return res.status(400).json({ error: "서버에 암호화 키가 설정되어 있지 않아 비밀번호를 저장할 수 없어요." });
+    }
+    try { passwordEnc = encryptSecret(input.password); }
+    catch (e: any) { return res.status(400).json({ error: e?.message ?? "암호화 실패" }); }
+  }
+
   const scope = input.scope ?? "ALL";
   const row = await prisma.serviceAccount.create({
     data: {
@@ -215,6 +267,7 @@ router.post("/", async (req, res) => {
       projectId: scope === "PROJECT" ? (input.projectId || null) : null,
       ownerUserId,
       ownerName: input.ownerName || null,
+      passwordEnc,
       createdById: user.id,
     },
     include: {
@@ -224,7 +277,8 @@ router.post("/", async (req, res) => {
     },
   });
 
-  res.json({ account: row });
+  const { passwordEnc: _pw, ...rest } = row;
+  res.json({ account: { ...rest, hasPassword: !!_pw } });
 });
 
 router.patch("/:id", async (req, res) => {
@@ -275,6 +329,18 @@ router.patch("/:id", async (req, res) => {
     data.scopeTeam = nextScope === "TEAM" ? (nextScopeTeam || null) : null;
     data.projectId = nextScope === "PROJECT" ? (nextProjectId || null) : null;
   }
+  // 비밀번호 — undefined 면 변경 없음, null/빈 문자열은 제거, 값이 있으면 암호화.
+  if (input.password !== undefined) {
+    if (input.password === null || input.password === "") {
+      data.passwordEnc = null;
+    } else {
+      if (!hasSecretKey()) {
+        return res.status(400).json({ error: "서버에 암호화 키가 설정되어 있지 않아 비밀번호를 저장할 수 없어요." });
+      }
+      try { data.passwordEnc = encryptSecret(input.password); }
+      catch (e: any) { return res.status(400).json({ error: e?.message ?? "암호화 실패" }); }
+    }
+  }
 
   const row = await prisma.serviceAccount.update({
     where: { id },
@@ -285,7 +351,8 @@ router.patch("/:id", async (req, res) => {
       project: { select: { id: true, name: true, color: true } },
     },
   });
-  res.json({ account: row });
+  const { passwordEnc: _pw, ...rest } = row;
+  res.json({ account: { ...rest, hasPassword: !!_pw } });
 });
 
 router.delete("/:id", async (req, res) => {
