@@ -162,7 +162,7 @@ function AppLayoutInner() {
           <div className="border-t border-ink-150 px-2 pt-2">
             <NavLink
               to="/download"
-              className="flex items-center gap-2.5 h-[32px] px-3 rounded-full text-[12.5px] font-semibold text-ink-500 hover:bg-ink-100 hover:text-ink-900 transition"
+              className="flex items-center gap-2.5 h-[40px] md:h-[32px] px-3 rounded-full text-[13px] md:text-[12.5px] font-semibold text-ink-500 hover:bg-ink-100 hover:text-ink-900 transition"
               title="데스크톱 · 모바일 앱 다운로드"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
