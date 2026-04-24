@@ -147,15 +147,21 @@ router.get("/", async (req, res) => {
 });
 
 /**
- * 저장된 비밀번호 복호화 — 편집 권한자(작성자/ADMIN) 만, 그리고 본인 로그인 비번 재확인 필수.
- * POST 로 바꾼 건 body 에 재확인용 평문 비번이 실려 URL/로그에 남지 않게 하기 위함.
- * 열람은 서버 로그에 감사 흔적을 남긴다.
+ * 저장된 비밀번호 복호화.
+ *
+ * 권한 모델:
+ *  - "볼 수 있는 사람 = 페이지에서 항목을 볼 수 있는 사람" — visibleWhere 로 가시성 재확인.
+ *    즉 scope=ALL 은 전원, TEAM 은 동팀, PROJECT 는 멤버, ADMIN 은 전체.
+ *  - 추가 안전장치로 **본인 로그인 비번 재확인** 필수 (bcrypt.compare).
+ *  - 열람은 서버 로그에 감사 흔적을 남긴다.
+ *
+ * POST 로 놓은 건 body 에 재확인용 평문 비번이 실려 URL/access log 에 남지 않게 하기 위함.
  */
 const revealSchema = z.object({ password: z.string().min(1).max(128) });
 router.post("/:id/password", async (req, res) => {
   const parsed = revealSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "로그인 비밀번호를 입력해주세요." });
-  const user = (req as any).user as { id: string; role?: string; superAdmin?: boolean };
+  const user = (req as any).user as { id: string; role?: string; superAdmin?: boolean; team?: string | null };
 
   // 본인 로그인 비번 재확인. bcrypt.compare 자체가 느려 브루트포스 방어 역할도 겸함.
   const me = await prisma.user.findUnique({ where: { id: user.id }, select: { passwordHash: true } });
@@ -163,14 +169,13 @@ router.post("/:id/password", async (req, res) => {
   const ok = await bcrypt.compare(parsed.data.password, me.passwordHash);
   if (!ok) return res.status(403).json({ error: "로그인 비밀번호가 일치하지 않아요." });
 
-  const row = await prisma.serviceAccount.findUnique({
-    where: { id: req.params.id },
-    select: { id: true, createdById: true, passwordEnc: true, serviceName: true },
+  // 가시성 검증 — 목록에서 보이지 않는 항목은 비번도 볼 수 없다.
+  const visible = await visibleWhere(user);
+  const row = await prisma.serviceAccount.findFirst({
+    where: { AND: [{ id: req.params.id }, visible] },
+    select: { id: true, passwordEnc: true, serviceName: true },
   });
-  if (!row) return res.status(404).json({ error: "존재하지 않는 계정이에요." });
-  if (!canEdit(user, row)) {
-    return res.status(403).json({ error: "이 계정의 비밀번호를 볼 권한이 없어요." });
-  }
+  if (!row) return res.status(404).json({ error: "해당 계정을 찾을 수 없거나 열람 권한이 없어요." });
   if (!row.passwordEnc) return res.json({ password: null });
   try {
     const password = decryptSecret(row.passwordEnc);

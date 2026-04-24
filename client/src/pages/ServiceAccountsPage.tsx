@@ -534,17 +534,13 @@ function AccountCard({
               <div className="flex items-center gap-1.5 text-ink-700">
                 <span className="text-ink-400 w-14 flex-shrink-0">비밀번호</span>
                 <span className="tabular truncate font-medium text-ink-500">••••••••</span>
-                {canEdit ? (
-                  <button
-                    className="btn-ghost !px-1.5 !py-0.5 text-[10px]"
-                    onClick={onCopyPassword}
-                    title="비밀번호 복사"
-                  >
-                    복사
-                  </button>
-                ) : (
-                  <span className="text-[10px] text-ink-400">(작성자·관리자만 열람)</span>
-                )}
+                <button
+                  className="btn-ghost !px-1.5 !py-0.5 text-[10px]"
+                  onClick={onCopyPassword}
+                  title="비밀번호 복사 (본인 비번 재확인)"
+                >
+                  복사
+                </button>
               </div>
             )}
             {a.url && (
