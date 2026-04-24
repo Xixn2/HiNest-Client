@@ -781,7 +781,7 @@ function AccountModal({
               maxLength={2000}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
             />
-            <span className="text-[10px] text-ink-400">⚠️ 비밀번호·액세스키·API 토큰은 여기에 쓰지 마세요. 전용 비밀번호 관리자에 두세요.</span>
+            <span className="text-[10px] text-ink-400">⚠️ 메모 칸은 암호화되지 않아요. 비밀번호는 위 "비밀번호" 입력란에, 액세스키·API 토큰은 1Password 등 전용 도구에 두세요.</span>
           </label>
 
           {err && <div className="text-[12px] text-rose-600 p-2 rounded-lg bg-rose-50 border border-rose-200">{err}</div>}

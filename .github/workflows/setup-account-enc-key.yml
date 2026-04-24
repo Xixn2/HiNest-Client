@@ -1,0 +1,154 @@
+# ACCOUNT_ENC_KEY 를 ECS Fargate 태스크 정의에 주입하는 일회성 워크플로우.
+#
+# 배경:
+#   - ServiceAccount.passwordEnc 는 AES-256-GCM 으로 암호화되는데,
+#     키(`ACCOUNT_ENC_KEY`) 가 태스크 env 에 없으면 저장·열람이 막힌다.
+#   - 키가 유실되면 기존 암호문은 복구 불가 — 여기서 만든 키를
+#     AWS Secrets Manager (`hinest/account-enc-key`) 에도 백업한다.
+#
+# 동작:
+#   1) 현재 hinest-server 태스크 정의를 조회
+#   2) 이미 ACCOUNT_ENC_KEY 가 설정돼 있으면 아무 것도 하지 않고 종료
+#   3) 없다면:
+#        - openssl 로 32바이트 base64 키 생성
+#        - Secrets Manager 에 `hinest/account-enc-key` 로 저장 (없으면 생성)
+#        - 태스크 정의 컨테이너의 environment 에 키를 더한 새 리비전 등록
+#        - 서비스가 새 리비전을 쓰도록 업데이트 + 안정화 대기
+#
+# 운영자 주의:
+#   - 키가 서비스 재배포 이후에도 유실되지 않도록 Secrets Manager 백업은 절대 지우지 말 것.
+#   - 키를 회전하려면 기존 암호문을 전부 복호화 → 새 키로 재암호화하는 데이터 마이그레이션이 필요.
+
+name: Setup ACCOUNT_ENC_KEY on Fargate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECS_CLUSTER: hinest-prod
+  ECS_SERVICE: hinest-server
+  TASK_FAMILY: hinest-server
+  CONTAINER_NAME: hinest-server
+  SECRET_NAME: hinest/account-enc-key
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::149536482210:role/github-deploy-hinest
+          role-session-name: gha-enckey-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Describe current task definition
+        id: describe
+        run: |
+          TD=$(aws ecs describe-task-definition \
+            --task-definition "$TASK_FAMILY" \
+            --region "$AWS_REGION" \
+            --query 'taskDefinition')
+          echo "$TD" > current-td.json
+          # 이미 키가 있으면 종료.
+          ALREADY=$(echo "$TD" | jq --arg c "$CONTAINER_NAME" '
+            .containerDefinitions[]
+            | select(.name == $c)
+            | ((.environment // []) + (.secrets // []))
+            | map(.name) | index("ACCOUNT_ENC_KEY")
+          ')
+          if [ "$ALREADY" != "null" ] && [ -n "$ALREADY" ]; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "ACCOUNT_ENC_KEY 가 이미 설정돼 있어요. 새 리비전을 만들지 않아요."
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ensure Secrets Manager backup + generate key
+        if: steps.describe.outputs.already == 'false'
+        id: keygen
+        run: |
+          # Secrets Manager 에 이미 있으면 그 값 재사용, 없으면 새로 생성.
+          if aws secretsmanager describe-secret --secret-id "$SECRET_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
+            KEY=$(aws secretsmanager get-secret-value \
+              --secret-id "$SECRET_NAME" \
+              --region "$AWS_REGION" \
+              --query 'SecretString' --output text)
+            echo "기존 Secrets Manager 값을 재사용합니다."
+          else
+            KEY=$(openssl rand -base64 32)
+            aws secretsmanager create-secret \
+              --name "$SECRET_NAME" \
+              --description "HiNest ServiceAccount.passwordEnc 암호화 키 (AES-256-GCM)" \
+              --secret-string "$KEY" \
+              --region "$AWS_REGION" >/dev/null
+            echo "Secrets Manager 에 새 키를 저장했어요: $SECRET_NAME"
+          fi
+          # 키를 로그에서 마스킹. 이후 스텝에서 env.ACCOUNT_ENC_KEY 로만 참조.
+          echo "::add-mask::$KEY"
+          {
+            echo "ACCOUNT_ENC_KEY<<__EOF__"
+            echo "$KEY"
+            echo "__EOF__"
+          } >> "$GITHUB_ENV"
+
+      - name: Register new task definition revision
+        if: steps.describe.outputs.already == 'false'
+        id: register
+        run: |
+          # 현재 태스크 정의에서 컨테이너 env 에 ACCOUNT_ENC_KEY 를 추가하고, 등록 불가 필드를 제거한다.
+          jq --arg c "$CONTAINER_NAME" --arg key "$ACCOUNT_ENC_KEY" '
+            .containerDefinitions |= map(
+              if .name == $c then
+                .environment = ((.environment // []) + [{"name":"ACCOUNT_ENC_KEY","value":$key}])
+              else . end
+            )
+            | del(
+                .taskDefinitionArn, .revision, .status, .requiresAttributes,
+                .compatibilities, .registeredAt, .registeredBy
+              )
+          ' current-td.json > new-td.json
+
+          NEW_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://new-td.json \
+            --region "$AWS_REGION" \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "새 태스크 정의: $NEW_ARN"
+          echo "new_arn=$NEW_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Update service to new task definition
+        if: steps.describe.outputs.already == 'false'
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --task-definition "${{ steps.register.outputs.new_arn }}" \
+            --force-new-deployment \
+            --region "$AWS_REGION" >/dev/null
+          echo "서비스 업데이트 트리거 완료 — 새 리비전 롤아웃 중."
+
+      - name: Wait for service to stabilize
+        if: steps.describe.outputs.already == 'false'
+        run: |
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --region "$AWS_REGION"
+          echo "롤아웃 안정화 완료."
+
+      - name: Post-deploy health probe
+        if: steps.describe.outputs.already == 'false'
+        run: |
+          for i in 1 2 3 4 5; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" https://api.nest.hi-vits.com/api/health || true)
+            echo "attempt $i: HTTP=$code"
+            [ "$code" = "200" ] && exit 0
+            sleep 5
+          done
+          echo "health check 실패"; exit 1
