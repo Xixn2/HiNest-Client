@@ -441,17 +441,11 @@ export default function ProjectQaList({
     }
     return true;
   });
-  const openWeight: Record<Status, number> = {
-    BUG: 0,
-    NEEDS_FIX: 1,
-    IN_PROGRESS: 2,
-    NEEDS_TEST: 3,
-    ON_HOLD: 4,
-    DONE: 5,
-  };
+  // ALL 뷰 정렬: 작성 순서 유지하되 완료(DONE) 항목만 맨 아래로.
+  // 서버가 이미 sortOrder→createdAt 으로 정렬해서 내려주므로 안정 정렬로 DONE 가중치만 더한다.
   const visible =
     filter === "ALL"
-      ? [...filtered].sort((a, b) => openWeight[a.status] - openWeight[b.status])
+      ? [...filtered].sort((a, b) => (a.status === "DONE" ? 1 : 0) - (b.status === "DONE" ? 1 : 0))
       : filtered;
   const mineCount = currentUserId
     ? items.filter((i) => i.assigneeId === currentUserId).length
