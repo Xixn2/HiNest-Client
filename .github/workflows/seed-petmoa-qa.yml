@@ -4,7 +4,14 @@ on:
   workflow_dispatch:
 
 permissions:
+  id-token: write
   contents: read
+
+env:
+  AWS_REGION: ap-northeast-2
+  CLUSTER: hinest-prod
+  SERVICE: hinest-server
+  CONTAINER: server
 
 jobs:
   seed:
@@ -13,16 +20,60 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
-          node-version: 20
+          role-to-assume: arn:aws:iam::149536482210:role/github-deploy-hinest
+          role-session-name: gha-seed-qa-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Install deps
-        working-directory: server
-        run: npm ci && npx prisma generate
+      - name: Install Session Manager plugin
+        run: |
+          curl -s "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o sm.deb
+          sudo dpkg -i sm.deb
 
-      - name: Run seed
-        working-directory: server
-        env:
-          DATABASE_URL: ${{ secrets.HINEST_PROD_DATABASE_URL }}
-        run: npx tsx scripts/seedPetmoaQa.ts
+      - name: Build inline seed script
+        run: |
+          # CommonJS 단일 스크립트로 만들어서 컨테이너 /app 에서 실행 가능하게.
+          node -e "
+          const fs = require('fs');
+          const ts = fs.readFileSync('server/scripts/seedPetmoaQa.ts','utf8');
+          // RAW 배열과 헬퍼만 뽑아 CJS 로 재조립.
+          const rawMatch = ts.match(/const RAW[^=]*=\s*(\[[\s\S]*?\n\]);/);
+          if(!rawMatch){ console.error('RAW not found'); process.exit(1); }
+          const RAW = rawMatch[1];
+          const script = \`
+          const { PrismaClient } = require('@prisma/client');
+          const prisma = new PrismaClient();
+          const RAW = \${RAW};
+          function mapStatus(s){ if(s==='완료')return'DONE'; if(s==='수정필요'||s==='테스트 요망')return'IN_PROGRESS'; return'BUG'; }
+          function mapPriority(title,note){ const t=(title+' '+(note||'')).toLowerCase(); if(t.includes('오류')||t.includes('불가')||t.includes('안됨')||t.includes('crash'))return'HIGH'; return'NORMAL'; }
+          (async()=>{
+            const project = await prisma.project.findFirst({ where:{ name:{ contains:'petmoa', mode:'insensitive' } }, include:{ members:{ orderBy:{ joinedAt:'asc' }, take:1 } } });
+            if(!project){ console.error('no project'); process.exit(1); }
+            let createdById = project.members[0]?.userId;
+            if(!createdById){ const admin = await prisma.user.findFirst({ where:{ OR:[{ superAdmin:true },{ role:'ADMIN' }] }, orderBy:{ createdAt:'asc' } }); createdById = admin?.id; }
+            if(!createdById){ console.error('no user'); process.exit(1); }
+            const d = await prisma.projectQaItem.deleteMany({ where:{ projectId: project.id } });
+            console.log('deleted', d.count);
+            await prisma.projectQaItem.createMany({ data: RAW.map((r,i)=>({ projectId: project.id, title: r.title, screen: r.screen||null, note: r.note ? '['+r.section+'] '+r.note : (r.section ? '['+r.section+']' : null), platform:'IOS', status: mapStatus(r.status), priority: mapPriority(r.title, r.note), sortOrder: i+1, createdById })) });
+            console.log('seeded', RAW.length);
+            await prisma.\\\$disconnect();
+          })().catch(e=>{ console.error(e); process.exit(1); });
+          \`;
+          fs.writeFileSync('seed.cjs', script);
+          console.log('bytes:', script.length);
+          "
+
+      - name: Run seed via ECS execute-command
+        run: |
+          TASK_ARN=$(aws ecs list-tasks --cluster "$CLUSTER" --service-name "$SERVICE" --region "$AWS_REGION" --query 'taskArns[0]' --output text)
+          echo "Task: $TASK_ARN"
+          B64=$(base64 -w0 seed.cjs)
+          # /app 이 WORKDIR. base64 로 실어서 node 로 실행.
+          aws ecs execute-command \
+            --cluster "$CLUSTER" \
+            --task "$TASK_ARN" \
+            --container "$CONTAINER" \
+            --interactive \
+            --command "sh -c 'echo $B64 | base64 -d > /tmp/seed.cjs && node /tmp/seed.cjs'" \
+            --region "$AWS_REGION"
