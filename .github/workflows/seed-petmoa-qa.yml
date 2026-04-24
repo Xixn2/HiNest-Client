@@ -4,13 +4,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  id-token: write
   contents: read
-
-env:
-  AWS_REGION: ap-northeast-2
-  TASK_FAMILY: hinest-server
-  CONTAINER_NAME: server
 
 jobs:
   seed:
@@ -19,31 +13,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::149536482210:role/github-deploy-hinest
-          role-session-name: gha-seed-qa-${{ github.run_id }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Fetch DATABASE_URL from SSM Parameter Store
-        run: |
-          DB_URL=$(aws ssm get-parameter \
-            --name "/hinest/prod/DATABASE_URL" \
-            --with-decryption \
-            --region "$AWS_REGION" \
-            --query "Parameter.Value" \
-            --output text)
-          echo "::add-mask::$DB_URL"
-          echo "DATABASE_URL=$DB_URL" >> "$GITHUB_ENV"
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
 
       - name: Install deps
         working-directory: server
-        run: npm ci --omit=dev && npx prisma generate
+        run: npm ci && npx prisma generate
 
       - name: Run seed
         working-directory: server
+        env:
+          DATABASE_URL: ${{ secrets.HINEST_PROD_DATABASE_URL }}
         run: npx tsx scripts/seedPetmoaQa.ts
