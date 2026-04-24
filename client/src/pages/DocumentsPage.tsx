@@ -933,15 +933,21 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
       {!inProject && (
         <div className="flex items-center gap-1 mb-3 border-b border-ink-150">
           {SCOPE_TABS.map((t) => {
-            // 드래그로 스코프 이동 가능한 탭만 드롭 허용. CUSTOM 은 대상 유저를 정해야 해서 제외.
-            // "전체"(all) 는 가시성 필터가 OR 합집합이라 특정 스코프값이 없어 → ALL 로 매핑.
-            const scopeTarget: "ALL" | "TEAM" | "PRIVATE" | null =
+            // 드래그로 스코프 이동 가능한 탭.
+            //  - 폴더: ALL/TEAM/PRIVATE 로만. CUSTOM 은 대상 유저를 정해야 해서 폴더 드롭은 미지원.
+            //  - 문서: ALL/TEAM/PRIVATE 는 바로. CUSTOM 은 기존에 scopeUserIds 가 있으면 그 값을 재사용,
+            //          없으면 편집 모달에서 대상 지정하라고 안내.
+            // "전체"(all) 는 가시성 필터 OR 합집합이라 스코프값이 없어 → ALL 로 매핑.
+            const scopeTarget: "ALL" | "TEAM" | "PRIVATE" | "CUSTOM" | null =
               t.key === "all" || t.key === "public" ? "ALL"
               : t.key === "team" ? "TEAM"
               : t.key === "private" ? "PRIVATE"
+              : t.key === "custom" ? "CUSTOM"
               : null;
             const tabKey = `scope:${t.key}`;
-            const canDrop = !!draggingFolderId && scopeTarget !== null && !inProject;
+            const folderCanDrop = !!draggingFolderId && scopeTarget !== null && scopeTarget !== "CUSTOM" && !inProject;
+            const docCanDrop = !!draggingDocId && scopeTarget !== null && !inProject;
+            const canDrop = folderCanDrop || docCanDrop;
             return (
               <button
                 key={t.key}
@@ -955,10 +961,37 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
                 onDrop={(e) => {
                   if (!canDrop || !scopeTarget) return;
                   e.preventDefault();
-                  const fid = draggingFolderId!;
                   setDragOverKey(null);
-                  setDraggingFolderId(null);
-                  void moveFolderTo(fid, { project: null, scope: scopeTarget });
+                  if (draggingFolderId && scopeTarget !== "CUSTOM") {
+                    const fid = draggingFolderId;
+                    setDraggingFolderId(null);
+                    void moveFolderTo(fid, { project: null, scope: scopeTarget as "ALL" | "TEAM" | "PRIVATE" });
+                  } else if (draggingDocId) {
+                    const did = draggingDocId;
+                    const doc = docs.find((x) => x.id === did);
+                    setDraggingDocId(null);
+                    if (scopeTarget === "CUSTOM") {
+                      // 기존 사용자 지정 목록이 없으면 편집 모달에서 지정하라고 안내.
+                      const existing = (doc?.scopeUserIds ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+                      if (existing.length === 0) {
+                        void alertAsync({
+                          title: "사용자지정으로 옮기려면 대상이 필요해요",
+                          description: "문서를 편집해 사용자지정 범위에서 공유할 구성원을 선택해주세요.",
+                        });
+                        return;
+                      }
+                      void api(`/api/document/${did}`, {
+                        method: "PATCH",
+                        json: { scope: "CUSTOM", scopeUserIds: existing },
+                      })
+                        .then(load)
+                        .catch((err: any) => alertAsync({ title: "이동 실패", description: err?.message ?? "" }));
+                    } else {
+                      void api(`/api/document/${did}`, { method: "PATCH", json: { scope: scopeTarget } })
+                        .then(load)
+                        .catch((err: any) => alertAsync({ title: "이동 실패", description: err?.message ?? "" }));
+                    }
+                  }
                 }}
                 className={`px-3 h-9 text-[13px] font-bold border-b-2 transition ${
                   dragOverKey === tabKey ? "bg-brand-50 " : ""
