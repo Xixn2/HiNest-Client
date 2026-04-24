@@ -811,6 +811,8 @@ model ServiceAccount {
   loginId     String? // 로그인 이메일 또는 사용자명
   url         String? // 콘솔/대시보드 URL
   notes       String? // 접근 방법, MFA 사용 여부 등 자유 메모
+  // 커스텀 로고 URL — 사용자가 업로드한 이미지(/uploads/xxx). null 이면 URL/이름 기반 favicon 자동 추측.
+  iconUrl     String?
   // 비밀번호 — AES-256-GCM 로 암호화된 blob (포맷 v1:iv:tag:ct, base64).
   // 서버의 ACCOUNT_ENC_KEY 로만 복호화. 목록 GET 에선 반환하지 않음 — 상세 reveal 시에만 복호화.
   passwordEnc String?

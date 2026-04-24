@@ -36,6 +36,8 @@ const baseSchema = z.object({
   category: z.enum(CATEGORIES).optional().default("OTHER"),
   loginId: z.string().trim().max(200).optional().nullable(),
   url: z.string().trim().url().max(500).optional().nullable().or(z.literal("")),
+  // 커스텀 로고 — 서버에 업로드된 /uploads/... 경로 (또는 외부 URL). 빈 문자열/ null 이면 자동 추측으로 되돌림.
+  iconUrl: z.string().trim().max(500).optional().nullable().or(z.literal("")),
   notes: z.string().max(2000).optional().nullable(),
   scope: z.enum(SCOPES).optional().default("ALL"),
   scopeTeam: z.string().trim().max(80).optional().nullable(),
@@ -266,6 +268,7 @@ router.post("/", async (req, res) => {
       category: input.category ?? "OTHER",
       loginId: input.loginId || null,
       url,
+      iconUrl: input.iconUrl === "" ? null : input.iconUrl ?? null,
       notes: input.notes || null,
       scope,
       scopeTeam: scope === "TEAM" ? (input.scopeTeam || null) : null,
@@ -319,6 +322,7 @@ router.patch("/:id", async (req, res) => {
   if (input.category !== undefined) data.category = input.category;
   if (input.loginId !== undefined) data.loginId = input.loginId || null;
   if (input.url !== undefined) data.url = input.url === "" ? null : input.url;
+  if (input.iconUrl !== undefined) data.iconUrl = input.iconUrl === "" ? null : input.iconUrl;
   if (input.notes !== undefined) data.notes = input.notes || null;
   if (input.ownerName !== undefined) data.ownerName = input.ownerName || null;
   if (input.ownerUserId !== undefined) {
