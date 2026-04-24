@@ -132,6 +132,7 @@ type Account = {
   ownerUser: OwnerUser | null;
   ownerName: string | null;
   iconUrl: string | null;
+  iconShape: "SQUIRCLE" | "CIRCLE";
   active: boolean;
   hasPassword: boolean;
   createdBy: { id: string; name: string };
@@ -158,6 +159,8 @@ type FormState = {
   clearPassword: boolean;
   // 커스텀 로고 URL — "" 이면 자동 추측(파비콘/이모지), 값 있으면 그 이미지를 그대로 사용.
   iconUrl: string;
+  // 아이콘 모양 — SQUIRCLE(기본, iOS 앱아이콘) | CIRCLE(원형 로고 전용).
+  iconShape: "SQUIRCLE" | "CIRCLE";
 };
 
 const emptyForm = (defaultTeam: string): FormState => ({
@@ -174,6 +177,7 @@ const emptyForm = (defaultTeam: string): FormState => ({
   password: "",
   clearPassword: false,
   iconUrl: "",
+  iconShape: "SQUIRCLE",
 });
 
 export default function ServiceAccountsPage() {
@@ -284,6 +288,7 @@ export default function ServiceAccountsPage() {
       password: "",
       clearPassword: false,
       iconUrl: a.iconUrl ?? "",
+      iconShape: a.iconShape ?? "SQUIRCLE",
     });
     setFormErr(null);
     setEditing(a.id);
@@ -327,6 +332,7 @@ export default function ServiceAccountsPage() {
         projectIds: form.scope === "PROJECT" ? form.scopeProjectIds : [],
         projectId: form.scope === "PROJECT" ? (form.scopeProjectIds[0] || null) : null,
         iconUrl: form.iconUrl.trim() || null,
+        iconShape: form.iconShape,
       };
       // 비밀번호: 명시적으로 지우기 선택 시 null, 새 값 있으면 보냄, 빈 값이면 변경 없음(PATCH).
       if (form.clearPassword) {
@@ -472,7 +478,7 @@ export default function ServiceAccountsPage() {
       {loadErr && (
         <div className="mb-3 p-3 rounded-xl bg-rose-50 border border-rose-200 text-[12px] text-rose-700 flex items-center justify-between gap-2">
           <span>{loadErr}</span>
-          <button className="btn-ghost !px-2 !py-1 text-[11px]" onClick={load}>다시 시도</button>
+          <button className="btn-ghost !h-7 !px-2.5 text-[11px]" onClick={load}>다시 시도</button>
         </div>
       )}
 
@@ -624,12 +630,12 @@ function AccountCard({
   return (
     <div className={`panel p-4 relative transition-opacity ${a.active ? "" : "opacity-60"}`}>
       <div className="flex items-start gap-3">
-        {/* 앱 아이콘 스타일 — iOS 스퀘어클 느낌의 둥근 모서리 + 미묘한 그라데이션/섀도우.
-             이미지는 컨테이너를 꽉 채워 앱 로고처럼 바로 눈에 띄게 한다. */}
+        {/* 앱 아이콘 스타일 — SQUIRCLE(iOS 스퀘어클) 또는 CIRCLE(원형). 로고가 둥근 브랜드는 CIRCLE 로.
+             이미지는 잘리지 않게 object-contain + 살짝 패딩 — 파비콘/업로드 로고가 찌그러지지 않도록. */}
         <div
           className="w-10 h-10 grid place-items-center flex-shrink-0 overflow-hidden ring-1 ring-black/5 shadow-sm"
           style={{
-            borderRadius: "22%",
+            borderRadius: a.iconShape === "CIRCLE" ? "9999px" : "22%",
             background: iconSrc
               ? "linear-gradient(180deg, #FFFFFF 0%, #F3F4F7 100%)"
               : `linear-gradient(180deg, ${meta.color} 0%, ${meta.color}dd 100%)`,
@@ -640,7 +646,7 @@ function AccountCard({
             <img
               src={iconSrc}
               alt=""
-              className="w-full h-full object-cover"
+              className="w-[78%] h-[78%] object-contain"
               loading="lazy"
               referrerPolicy="no-referrer"
               onError={() => setIconErr(true)}
@@ -681,8 +687,8 @@ function AccountCard({
                     }`}
                   />
                 </button>
-                <button className="btn-ghost !px-2 !py-1 text-[11px]" onClick={onEdit} title="편집">편집</button>
-                <button className="btn-ghost !px-2 !py-1 text-[11px] text-danger" onClick={onDelete} title="삭제">삭제</button>
+                <button className="btn-ghost !h-7 !px-2.5 text-[11px]" onClick={onEdit} title="편집">편집</button>
+                <button className="btn-ghost !h-7 !px-2.5 text-[11px] text-danger" onClick={onDelete} title="삭제">삭제</button>
               </div>
             )}
           </div>
@@ -692,7 +698,7 @@ function AccountCard({
               <div className="flex items-center gap-1.5 text-ink-700">
                 <span className="text-ink-400 w-14 flex-shrink-0">로그인</span>
                 <span className="tabular truncate font-medium">{a.loginId}</span>
-                <button className="btn-ghost !px-1.5 !py-0.5 text-[10px]" onClick={onCopy} title="복사">복사</button>
+                <button className="btn-ghost !h-6 !px-2 text-[10px]" onClick={onCopy} title="복사">복사</button>
               </div>
             )}
             {a.hasPassword && (
@@ -700,7 +706,7 @@ function AccountCard({
                 <span className="text-ink-400 w-14 flex-shrink-0">비밀번호</span>
                 <span className="tabular truncate font-medium text-ink-500">••••••••</span>
                 <button
-                  className="btn-ghost !px-1.5 !py-0.5 text-[10px]"
+                  className="btn-ghost !h-6 !px-2 text-[10px]"
                   onClick={onCopyPassword}
                   title="비밀번호 복사 (본인 비번 재확인)"
                 >
@@ -1064,7 +1070,7 @@ function AccountModal({
               <div
                 className="w-12 h-12 grid place-items-center flex-shrink-0 overflow-hidden ring-1 ring-black/5 shadow-sm"
                 style={{
-                  borderRadius: "22%",
+                  borderRadius: form.iconShape === "CIRCLE" ? "9999px" : "22%",
                   background: previewSrc
                     ? "linear-gradient(180deg, #FFFFFF 0%, #F3F4F7 100%)"
                     : `linear-gradient(180deg, ${CATEGORY_META[form.category].color} 0%, ${CATEGORY_META[form.category].color}dd 100%)`,
@@ -1072,7 +1078,7 @@ function AccountModal({
                 }}
               >
                 {previewSrc ? (
-                  <img src={previewSrc} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  <img src={previewSrc} alt="" className="w-[78%] h-[78%] object-contain" referrerPolicy="no-referrer" />
                 ) : (
                   <span className="text-xl leading-none">{CATEGORY_META[form.category].emoji}</span>
                 )}
@@ -1086,7 +1092,26 @@ function AccountModal({
                       : "URL/서비스 이름으로 자동 추측 (실패 시 이모지)"}
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <label className="btn-ghost text-[11px] cursor-pointer">
+                  {/* 모양 세그먼트 — 애플·인스타그램처럼 로고가 원형이면 CIRCLE 로 맞춰 잘림 없이 예쁘게. */}
+                  <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden text-[10px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, iconShape: "SQUIRCLE" })}
+                      className={`px-2 py-1 ${form.iconShape === "SQUIRCLE" ? "bg-ink-900 text-white" : "bg-white text-ink-600"}`}
+                      title="둥근 사각형 (앱 아이콘)"
+                    >
+                      ◻︎ 둥근 사각
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, iconShape: "CIRCLE" })}
+                      className={`px-2 py-1 border-l border-ink-200 ${form.iconShape === "CIRCLE" ? "bg-ink-900 text-white" : "bg-white text-ink-600"}`}
+                      title="원형"
+                    >
+                      ◯ 원형
+                    </button>
+                  </div>
+                  <label className="btn-ghost !h-7 !px-2.5 text-[11px] cursor-pointer">
                     {iconUploading ? "업로드 중…" : "이미지 업로드"}
                     <input
                       type="file"
@@ -1103,7 +1128,7 @@ function AccountModal({
                   {form.iconUrl && (
                     <button
                       type="button"
-                      className="btn-ghost text-[11px] text-rose-600"
+                      className="btn-ghost !h-7 !px-2.5 text-[11px] text-rose-600"
                       onClick={() => setForm({ ...form, iconUrl: "" })}
                     >
                       자동 추측으로 되돌리기

@@ -813,6 +813,8 @@ model ServiceAccount {
   notes       String? // 접근 방법, MFA 사용 여부 등 자유 메모
   // 커스텀 로고 URL — 사용자가 업로드한 이미지(/uploads/xxx). null 이면 URL/이름 기반 favicon 자동 추측.
   iconUrl     String?
+  // 아이콘 모양 — "SQUIRCLE"(기본, iOS 스퀘어클) | "CIRCLE"(원형, 애플/인스타처럼 둥근 로고용).
+  iconShape   String   @default("SQUIRCLE")
   // 활성 상태 — false 면 목록에서 비활성 배지로 표기. 해지/만료/중단된 계정을 "삭제 없이" 기록에 남길 때 사용.
   active      Boolean  @default(true)
   // 비밀번호 — AES-256-GCM 로 암호화된 blob (포맷 v1:iv:tag:ct, base64).
