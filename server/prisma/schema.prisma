@@ -813,14 +813,20 @@ model ServiceAccount {
   notes       String? // 접근 방법, MFA 사용 여부 등 자유 메모
   // 커스텀 로고 URL — 사용자가 업로드한 이미지(/uploads/xxx). null 이면 URL/이름 기반 favicon 자동 추측.
   iconUrl     String?
+  // 활성 상태 — false 면 목록에서 비활성 배지로 표기. 해지/만료/중단된 계정을 "삭제 없이" 기록에 남길 때 사용.
+  active      Boolean  @default(true)
   // 비밀번호 — AES-256-GCM 로 암호화된 blob (포맷 v1:iv:tag:ct, base64).
   // 서버의 ACCOUNT_ENC_KEY 로만 복호화. 목록 GET 에선 반환하지 않음 — 상세 reveal 시에만 복호화.
   passwordEnc String?
   // 공개 범위 — ALL(전사) | TEAM(팀) | PROJECT(프로젝트). 문서/회의록과 일관.
   scope       String   @default("ALL")
-  scopeTeam   String? // scope=TEAM 일 때 팀 이름
-  projectId   String? // scope=PROJECT 일 때 연결된 프로젝트
+  // scope=TEAM 일 때 공유 대상 팀들 (여러 팀 가능). 레거시 단일 값은 scopeTeam 에 유지.
+  scopeTeam   String?
+  scopeTeams  String[] @default([])
+  // scope=PROJECT 일 때 연결된 프로젝트들. 레거시 단일 값은 projectId 에 유지.
+  projectId   String?
   project     Project? @relation("ProjectServiceAccounts", fields: [projectId], references: [id], onDelete: SetNull)
+  projectIds  String[] @default([])
   // 담당자 — 사용자 연결이 있으면 ownerUserId, 외부 담당자는 ownerName 으로 기록.
   ownerUserId String?
   ownerUser   User?    @relation("ServiceAccountOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
