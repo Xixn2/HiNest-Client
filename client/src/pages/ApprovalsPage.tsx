@@ -599,13 +599,29 @@ function ApprovalDetail({
             <div className="text-[12px] text-ink-400">아직 댓글이 없어요.</div>
           )}
           <div className="mt-2 flex items-start gap-2">
-            <textarea
-              className="input flex-1"
-              rows={2}
-              value={commentBody}
-              onChange={(e) => setCommentBody(e.target.value.slice(0, 2000))}
-              placeholder="반려 사유에 대한 맥락이나 추가 질문을 남겨보세요"
-            />
+            <div className="flex-1 relative">
+              <textarea
+                className="input w-full pb-5"
+                rows={2}
+                value={commentBody}
+                onChange={(e) => setCommentBody(e.target.value.slice(0, 2000))}
+                placeholder="반려 사유에 대한 맥락이나 추가 질문을 남겨보세요  (⌘/Ctrl+Enter 로 등록)"
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && commentBody.trim() && !posting) {
+                    e.preventDefault();
+                    postComment();
+                  }
+                }}
+              />
+              {/* 글자 수 표시 — 한도 근처에서만 색상 강조. */}
+              <div
+                className={`absolute right-2 bottom-1 text-[10px] tabular pointer-events-none ${
+                  commentBody.length >= 2000 ? "text-rose-500 font-bold" : commentBody.length >= 1800 ? "text-amber-500" : "text-ink-400"
+                }`}
+              >
+                {commentBody.length}/2000
+              </div>
+            </div>
             <button className="btn-primary" disabled={posting || !commentBody.trim()} onClick={postComment}>
               {posting ? "..." : "등록"}
             </button>

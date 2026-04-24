@@ -3,6 +3,7 @@ import { api, apiSWR } from "../api";
 import PageHeader from "../components/PageHeader";
 import DateTimePicker from "../components/DateTimePicker";
 import { alertAsync } from "../components/ConfirmHost";
+import { useModalDismiss } from "../lib/useModalDismiss";
 
 type Journal = {
   id: string;
@@ -38,6 +39,8 @@ export default function JournalPage() {
   // 삭제 버튼 중복 클릭 방지 + native confirm() 대체용 모달 상태.
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+  // 삭제 확인 모달: 실행 중이 아니면 Esc / 배경 클릭으로 닫기.
+  useModalDismiss(!!confirmRemoveId && !removingId, () => setConfirmRemoveId(null));
 
   // save/remove 후 setState 가 또 돌고, 이때 사용자가 이탈하면 언마운트된 컴포넌트에
   // setState 가 박히며 경고+누수. apiSWR 의 stale→fresh 콜백도 가드 대상.
