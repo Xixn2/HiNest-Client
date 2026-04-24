@@ -33,7 +33,7 @@ env:
   ECS_CLUSTER: hinest-prod
   ECS_SERVICE: hinest-server
   TASK_FAMILY: hinest-server
-  CONTAINER_NAME: hinest-server
+  CONTAINER_NAME: server
   SECRET_NAME: hinest/account-enc-key
 
 jobs:

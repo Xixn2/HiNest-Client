@@ -604,6 +604,8 @@ function AccountModal({
     return () => window.removeEventListener("keydown", h);
   }, [onClose]);
 
+  const [showPw, setShowPw] = useState(false);
+
   const scopeOptions: { v: Scope; label: string; hint: string }[] = [
     { v: "ALL", label: "전사", hint: "모든 구성원이 봅니다" },
     { v: "TEAM", label: "팀", hint: "같은 팀만 봅니다" },
@@ -715,16 +717,27 @@ function AccountModal({
                 </button>
               )}
             </span>
-            <input
-              className="input"
-              type="password"
-              autoComplete="new-password"
-              placeholder={mode === "edit" ? "변경 시에만 입력 (비워두면 유지)" : "선택 — 비워두면 저장 안 함"}
-              value={form.password}
-              maxLength={256}
-              disabled={form.clearPassword}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-            />
+            <div className="relative">
+              <input
+                className="input pr-14"
+                type={showPw ? "text" : "password"}
+                autoComplete="new-password"
+                placeholder={mode === "edit" ? "변경 시에만 입력 (비워두면 유지)" : "선택 — 비워두면 저장 안 함"}
+                value={form.password}
+                maxLength={256}
+                disabled={form.clearPassword}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPw((v) => !v)}
+                disabled={form.clearPassword}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-bold text-ink-500 hover:text-ink-800 disabled:opacity-40"
+                title={showPw ? "가리기" : "보기"}
+              >
+                {showPw ? "가리기" : "보기"}
+              </button>
+            </div>
             <span className="text-[10px] text-amber-700">
               ⚠️ 공용 크레덴셜만 — 개인 비번·2차 인증 백업 코드·root 키는 1Password 같은 전용 도구를 쓰세요.
             </span>

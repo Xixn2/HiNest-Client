@@ -112,11 +112,13 @@ export default function ConfirmHost() {
   const dialog = useSyncExternalStore(subscribe, getSnapshot, () => null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState("");
+  const [reveal, setReveal] = useState(false);
 
-  // prompt 열릴 때 defaultValue 세팅 + 자동 포커스.
+  // prompt 열릴 때 defaultValue 세팅 + 자동 포커스, 보기 상태 초기화.
   useEffect(() => {
     if (dialog?.kind === "prompt") {
       setValue(dialog.opts.defaultValue ?? "");
+      setReveal(false);
       const t = setTimeout(() => inputRef.current?.focus(), 30);
       return () => clearTimeout(t);
     }
@@ -184,21 +186,33 @@ export default function ConfirmHost() {
             </div>
           )}
           {dialog.kind === "prompt" && (
-            <input
-              ref={inputRef}
-              className="input"
-              type={dialog.opts.inputType ?? "text"}
-              autoComplete={dialog.opts.inputType === "password" ? "current-password" : undefined}
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder={dialog.opts.placeholder}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  onConfirm();
-                }
-              }}
-            />
+            <div className="relative">
+              <input
+                ref={inputRef}
+                className={dialog.opts.inputType === "password" ? "input pr-14" : "input"}
+                type={dialog.opts.inputType === "password" && !reveal ? "password" : "text"}
+                autoComplete={dialog.opts.inputType === "password" ? "current-password" : undefined}
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                placeholder={dialog.opts.placeholder}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    onConfirm();
+                  }
+                }}
+              />
+              {dialog.opts.inputType === "password" && (
+                <button
+                  type="button"
+                  onClick={() => setReveal((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-bold text-ink-500 hover:text-ink-800"
+                  title={reveal ? "가리기" : "보기"}
+                >
+                  {reveal ? "가리기" : "보기"}
+                </button>
+              )}
+            </div>
           )}
         </div>
         <div className="border-t border-ink-150 px-5 py-3 flex justify-end gap-2 flex-wrap">
