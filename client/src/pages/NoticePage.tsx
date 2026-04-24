@@ -6,6 +6,7 @@ import { useNotifications } from "../notifications";
 import PageHeader from "../components/PageHeader";
 import { confirmAsync, alertAsync } from "../components/ConfirmHost";
 import PinButton from "../components/PinButton";
+import { copyToClipboard, absoluteUrl } from "../lib/clipboard";
 
 type ReactionAgg = { emoji: string; count: number; reactedByMe: boolean };
 type Notice = {
@@ -240,6 +241,23 @@ export default function NoticePage() {
                   <h2 className="text-xl font-bold mt-2">{selected.title}</h2>
                 </div>
                 <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    className="btn-ghost inline-flex items-center gap-1"
+                    title="이 공지로 연결되는 링크를 복사"
+                    onClick={() =>
+                      copyToClipboard(absoluteUrl(`/notice?id=${selected.id}`), {
+                        title: "링크 복사됨",
+                        description: "사내톡에 붙여넣으면 이 공지로 바로 이동돼요.",
+                      })
+                    }
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.72" />
+                      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.72-1.72" />
+                    </svg>
+                    링크 복사
+                  </button>
                   <PinButton type="NOTICE" id={selected.id} label={selected.title} />
                   {canPost && (
                     <button

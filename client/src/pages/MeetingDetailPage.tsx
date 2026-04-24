@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import { confirmAsync, alertAsync } from "../components/ConfirmHost";
 import PinButton from "../components/PinButton";
 import RevisionHistoryModal from "../components/RevisionHistoryModal";
+import { copyToClipboard, absoluteUrl } from "../lib/clipboard";
 // TipTap 에디터는 ~300KB 덩어리 — 회의록 상세 페이지 안에서 다시 한 번 나눠서
 // 제목/메타/공개범위 UI 가 먼저 보이고, 에디터는 뒤따라 로드되도록 함.
 const MeetingEditor = lazy(() => import("../components/MeetingEditor"));
@@ -230,6 +231,23 @@ export default function MeetingDetailPage() {
           ← 회의록 목록
         </Link>
         <div className="flex items-center gap-2 flex-wrap justify-end">
+          <button
+            type="button"
+            className="btn-ghost inline-flex items-center gap-1"
+            title="이 회의록 링크 복사"
+            onClick={() =>
+              copyToClipboard(absoluteUrl(`/meetings/${meeting.id}`), {
+                title: "링크 복사됨",
+                description: "사내톡에 붙여넣으면 이 회의록으로 바로 이동돼요.",
+              })
+            }
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.72" />
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.72-1.72" />
+            </svg>
+            링크 복사
+          </button>
           <PinButton type="MEETING" id={meeting.id} label={meeting.title} />
           <button className="btn-ghost" onClick={() => setHistoryOpen(true)} title="버전 히스토리">히스토리</button>
           {canEdit && !edit && (
