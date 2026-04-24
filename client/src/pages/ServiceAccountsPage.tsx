@@ -129,6 +129,7 @@ type Account = {
   project: ProjectChip | null;
   ownerUser: OwnerUser | null;
   ownerName: string | null;
+  iconUrl: string | null;
   hasPassword: boolean;
   createdBy: { id: string; name: string };
   createdAt: string;
@@ -151,6 +152,8 @@ type FormState = {
   // 비밀번호 입력 — 편집 시 빈 값은 "변경 없음", "CLEAR" sentinel 은 제거, 문자열은 새 값.
   password: string;
   clearPassword: boolean;
+  // 커스텀 로고 URL — "" 이면 자동 추측(파비콘/이모지), 값 있으면 그 이미지를 그대로 사용.
+  iconUrl: string;
 };
 
 const emptyForm = (defaultTeam: string): FormState => ({
@@ -166,6 +169,7 @@ const emptyForm = (defaultTeam: string): FormState => ({
   scopeProjectId: "",
   password: "",
   clearPassword: false,
+  iconUrl: "",
 });
 
 export default function ServiceAccountsPage() {
@@ -267,6 +271,7 @@ export default function ServiceAccountsPage() {
       scopeProjectId: a.projectId ?? "",
       password: "",
       clearPassword: false,
+      iconUrl: a.iconUrl ?? "",
     });
     setFormErr(null);
     setEditing(a.id);
@@ -306,6 +311,7 @@ export default function ServiceAccountsPage() {
         scope: form.scope,
         scopeTeam: form.scope === "TEAM" ? form.scopeTeam.trim() : null,
         projectId: form.scope === "PROJECT" ? form.scopeProjectId : null,
+        iconUrl: form.iconUrl.trim() || null,
       };
       // 비밀번호: 명시적으로 지우기 선택 시 null, 새 값 있으면 보냄, 빈 값이면 변경 없음(PATCH).
       if (form.clearPassword) {
@@ -573,24 +579,27 @@ function AccountCard({
   onCopyPassword: () => void;
 }) {
   const meta = CATEGORY_META[a.category];
-  // 파비콘 해상 순서:
-  //   1) URL 이 있으면 그 도메인
+  // 아이콘 해상 순서:
+  //   0) 사용자가 업로드한 iconUrl 이 있으면 그대로 사용 (최우선)
+  //   1) URL 이 있으면 그 도메인의 파비콘
   //   2) 서비스 이름에서 유명 브랜드 매칭 (instagram, microsoft 등) — 화이트리스트
   //   3) 서비스 이름을 ascii 슬러그로 바꿔 <slug>.com 추정 시도
   //   4) 그래도 실패하면 카테고리 이모지
   const host = useMemo(() => guessHost(a.url, a.serviceName), [a.url, a.serviceName]);
   const [iconErr, setIconErr] = useState(false);
-  const favicon = host && !iconErr ? `https://www.google.com/s2/favicons?domain=${host}&sz=64` : null;
+  const iconSrc = !iconErr
+    ? a.iconUrl || (host ? `https://www.google.com/s2/favicons?domain=${host}&sz=64` : null)
+    : null;
   return (
     <div className="panel p-4">
       <div className="flex items-start gap-3">
         <div
           className="w-9 h-9 rounded-xl grid place-items-center flex-shrink-0 overflow-hidden"
-          style={{ background: favicon ? "#F8F8FA" : meta.color, color: "#fff" }}
+          style={{ background: iconSrc ? "#F8F8FA" : meta.color, color: "#fff" }}
         >
-          {favicon ? (
+          {iconSrc ? (
             <img
-              src={favicon}
+              src={iconSrc}
               alt=""
               width={28}
               height={28}
@@ -703,6 +712,41 @@ function AccountModal({
   }, [onClose]);
 
   const [showPw, setShowPw] = useState(false);
+  const [iconUploading, setIconUploading] = useState(false);
+  const [iconErr, setIconErr] = useState<string | null>(null);
+
+  // 모달 미리보기용 — 저장 전에도 현재 선택이 어떻게 보일지 바로 확인.
+  const previewHost = useMemo(
+    () => guessHost(form.url.trim() || null, form.serviceName),
+    [form.url, form.serviceName],
+  );
+  const previewSrc = form.iconUrl
+    || (previewHost ? `https://www.google.com/s2/favicons?domain=${previewHost}&sz=64` : null);
+
+  async function onPickIcon(file: File) {
+    if (!file.type.startsWith("image/")) {
+      setIconErr("이미지 파일만 업로드할 수 있어요.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setIconErr("10MB 이하 이미지를 사용해주세요.");
+      return;
+    }
+    setIconUploading(true);
+    setIconErr(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: fd, credentials: "include" });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "업로드 실패");
+      const json = await res.json();
+      setForm({ ...form, iconUrl: json.url });
+    } catch (e: any) {
+      setIconErr(e?.message ?? "업로드 실패");
+    } finally {
+      setIconUploading(false);
+    }
+  }
 
   const scopeOptions: { v: Scope; label: string; hint: string }[] = [
     { v: "ALL", label: "전사", hint: "모든 구성원이 봅니다" },
@@ -852,6 +896,58 @@ function AccountModal({
               onChange={(e) => setForm({ ...form, url: e.target.value })}
             />
           </label>
+
+          {/* 로고 — 기본은 URL/이름 기반 자동 추측(파비콘/이모지). 원하면 직접 이미지 업로드로 덮어쓴다. */}
+          <div className="flex flex-col gap-1">
+            <span className="text-[11px] font-bold text-ink-500">로고</span>
+            <div className="flex items-center gap-2">
+              <div
+                className="w-11 h-11 rounded-xl grid place-items-center flex-shrink-0 overflow-hidden border border-ink-150"
+                style={{ background: previewSrc ? "#F8F8FA" : CATEGORY_META[form.category].color, color: "#fff" }}
+              >
+                {previewSrc ? (
+                  <img src={previewSrc} alt="" className="w-9 h-9 object-contain" referrerPolicy="no-referrer" />
+                ) : (
+                  <span className="text-lg leading-none">{CATEGORY_META[form.category].emoji}</span>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] text-ink-500 mb-1">
+                  {form.iconUrl
+                    ? "직접 업로드한 로고를 사용해요."
+                    : previewHost
+                      ? `자동 추측 중: ${previewHost}`
+                      : "URL/서비스 이름으로 자동 추측 (실패 시 이모지)"}
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <label className="btn-ghost text-[11px] cursor-pointer">
+                    {iconUploading ? "업로드 중…" : "이미지 업로드"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={iconUploading}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = "";
+                        if (f) onPickIcon(f);
+                      }}
+                    />
+                  </label>
+                  {form.iconUrl && (
+                    <button
+                      type="button"
+                      className="btn-ghost text-[11px] text-rose-600"
+                      onClick={() => setForm({ ...form, iconUrl: "" })}
+                    >
+                      자동 추측으로 되돌리기
+                    </button>
+                  )}
+                </div>
+                {iconErr && <div className="text-[10px] text-rose-600 mt-1">{iconErr}</div>}
+              </div>
+            </div>
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <label className="flex flex-col gap-1">
