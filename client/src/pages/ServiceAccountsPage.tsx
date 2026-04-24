@@ -11,6 +11,11 @@ import { confirmAsync, alertAsync } from "../components/ConfirmHost";
  * - 비밀번호/토큰/액세스키는 저장하지 않는다. 전용 비밀번호 관리자(1Password 등) 사용 전제.
  * - 이 페이지의 목적은 "어떤 서비스의 계정을 누가 담당하는지" 인덱스.
  *
+ * 공개 범위(scope):
+ * - ALL     — 전사. 로그인 사용자 전원.
+ * - TEAM    — 팀. 동일 팀 사용자(+ ADMIN).
+ * - PROJECT — 프로젝트. 해당 프로젝트 멤버(+ ADMIN).
+ *
  * 편집 권한: 작성자 본인 또는 ADMIN.
  */
 
@@ -31,7 +36,12 @@ const CATEGORY_META: Record<Category, { label: string; color: string; emoji: str
 };
 const CATEGORY_ORDER: Category[] = ["CLOUD", "HOSTING", "VCS", "DB", "PAYMENT", "DOMAIN", "EMAIL", "MONITOR", "AI", "TESTING", "OTHER"];
 
+type Scope = "ALL" | "TEAM" | "PROJECT";
+const SCOPE_LABEL: Record<Scope, string> = { ALL: "전사", TEAM: "팀", PROJECT: "프로젝트" };
+type ScopeTab = "ALL_TAB" | Scope;
+
 type OwnerUser = { id: string; name: string; avatarColor: string; avatarUrl: string | null; email: string; team?: string | null; position?: string | null };
+type ProjectChip = { id: string; name: string; color: string };
 type Account = {
   id: string;
   serviceName: string;
@@ -39,6 +49,10 @@ type Account = {
   loginId: string | null;
   url: string | null;
   notes: string | null;
+  scope: Scope;
+  scopeTeam: string | null;
+  projectId: string | null;
+  project: ProjectChip | null;
   ownerUser: OwnerUser | null;
   ownerName: string | null;
   createdBy: { id: string; name: string };
@@ -54,11 +68,14 @@ type FormState = {
   loginId: string;
   url: string;
   notes: string;
-  ownerUserId: string; // "" = 없음
-  ownerName: string;   // 외부 담당자
+  ownerUserId: string;
+  ownerName: string;
+  scope: Scope;
+  scopeTeam: string;
+  scopeProjectId: string;
 };
 
-const EMPTY_FORM: FormState = {
+const emptyForm = (defaultTeam: string): FormState => ({
   serviceName: "",
   category: "OTHER",
   loginId: "",
@@ -66,20 +83,27 @@ const EMPTY_FORM: FormState = {
   notes: "",
   ownerUserId: "",
   ownerName: "",
-};
+  scope: "ALL",
+  scopeTeam: defaultTeam ?? "",
+  scopeProjectId: "",
+});
 
 export default function ServiceAccountsPage() {
   const { user } = useAuth();
+  const myTeam = (user as any)?.team ?? "";
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [users, setUsers] = useState<DirUser[]>([]);
+  const [projects, setProjects] = useState<ProjectChip[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [filterCat, setFilterCat] = useState<Category | "ALL">("ALL");
+  const [scopeTab, setScopeTab] = useState<ScopeTab>("ALL_TAB");
+  const [filterProjectId, setFilterProjectId] = useState<string>("");
 
   // 모달 상태 — "new" 생성, 문자열은 편집 중 id
   const [editing, setEditing] = useState<"new" | string | null>(null);
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [form, setForm] = useState<FormState>(() => emptyForm(myTeam));
   const [saving, setSaving] = useState(false);
   const [formErr, setFormErr] = useState<string | null>(null);
 
@@ -88,7 +112,11 @@ export default function ServiceAccountsPage() {
   async function load() {
     setLoading(true);
     try {
-      const r = await api<{ accounts: Account[] }>("/api/service-accounts");
+      const params = new URLSearchParams();
+      if (scopeTab !== "ALL_TAB") params.set("scope", scopeTab);
+      if (scopeTab === "PROJECT" && filterProjectId) params.set("projectId", filterProjectId);
+      const qs = params.toString();
+      const r = await api<{ accounts: Account[] }>(`/api/service-accounts${qs ? `?${qs}` : ""}`);
       setAccounts(r.accounts);
       setLoadErr(null);
     } catch (e: any) {
@@ -100,10 +128,11 @@ export default function ServiceAccountsPage() {
 
   useEffect(() => {
     load();
-    // 담당자 선택용 — 한 번만 로드
-    api<{ users: DirUser[] }>("/api/users")
-      .then((r) => setUsers(r.users))
-      .catch(() => {});
+  }, [scopeTab, filterProjectId]);
+
+  useEffect(() => {
+    api<{ users: DirUser[] }>("/api/users").then((r) => setUsers(r.users)).catch(() => {});
+    api<{ projects: ProjectChip[] }>("/api/service-accounts/projects").then((r) => setProjects(r.projects)).catch(() => {});
   }, []);
 
   const filtered = useMemo(() => {
@@ -121,7 +150,6 @@ export default function ServiceAccountsPage() {
     });
   }, [accounts, q, filterCat]);
 
-  // 카테고리별 그룹
   const grouped = useMemo(() => {
     const m = new Map<Category, Account[]>();
     for (const a of filtered) {
@@ -133,7 +161,15 @@ export default function ServiceAccountsPage() {
   }, [filtered]);
 
   function openCreate() {
-    setForm(EMPTY_FORM);
+    const init = emptyForm(myTeam);
+    // 프로젝트 탭에서 선택된 프로젝트가 있으면 초기값으로 주입
+    if (scopeTab === "PROJECT" && filterProjectId) {
+      init.scope = "PROJECT";
+      init.scopeProjectId = filterProjectId;
+    } else if (scopeTab === "TEAM") {
+      init.scope = "TEAM";
+    }
+    setForm(init);
     setFormErr(null);
     setEditing("new");
   }
@@ -146,13 +182,16 @@ export default function ServiceAccountsPage() {
       notes: a.notes ?? "",
       ownerUserId: a.ownerUser?.id ?? "",
       ownerName: a.ownerName ?? "",
+      scope: a.scope,
+      scopeTeam: a.scopeTeam ?? myTeam,
+      scopeProjectId: a.projectId ?? "",
     });
     setFormErr(null);
     setEditing(a.id);
   }
   function closeModal() {
     setEditing(null);
-    setForm(EMPTY_FORM);
+    setForm(emptyForm(myTeam));
     setFormErr(null);
   }
 
@@ -161,6 +200,14 @@ export default function ServiceAccountsPage() {
     if (saving) return;
     if (!form.serviceName.trim()) {
       setFormErr("서비스 이름을 입력해주세요.");
+      return;
+    }
+    if (form.scope === "TEAM" && !form.scopeTeam.trim()) {
+      setFormErr("팀 이름을 입력해주세요.");
+      return;
+    }
+    if (form.scope === "PROJECT" && !form.scopeProjectId) {
+      setFormErr("프로젝트를 선택해주세요.");
       return;
     }
     setSaving(true);
@@ -174,6 +221,9 @@ export default function ServiceAccountsPage() {
         notes: form.notes.trim() || null,
         ownerUserId: form.ownerUserId || null,
         ownerName: form.ownerName.trim() || null,
+        scope: form.scope,
+        scopeTeam: form.scope === "TEAM" ? form.scopeTeam.trim() : null,
+        projectId: form.scope === "PROJECT" ? form.scopeProjectId : null,
       };
       if (editing === "new") {
         await api("/api/service-accounts", { method: "POST", json: payload });
@@ -214,6 +264,13 @@ export default function ServiceAccountsPage() {
     }
   }
 
+  const scopeTabs: { key: ScopeTab; label: string }[] = [
+    { key: "ALL_TAB", label: "전체" },
+    { key: "ALL", label: "전사" },
+    { key: "TEAM", label: "팀" },
+    { key: "PROJECT", label: "프로젝트" },
+  ];
+
   return (
     <div className="container-narrow py-6">
       <PageHeader
@@ -233,6 +290,52 @@ export default function ServiceAccountsPage() {
           <div className="mt-0.5 text-amber-700">실제 크레덴셜은 1Password · Bitwarden 같은 전용 비밀번호 관리자에 두고, 여기에는 "어떤 서비스를 누가 쓰는지" 만 기록하세요.</div>
         </div>
       </div>
+
+      {/* 스코프 탭 */}
+      <div className="flex items-center gap-1 mb-3 border-b border-ink-200 overflow-x-auto">
+        {scopeTabs.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => { setScopeTab(t.key); if (t.key !== "PROJECT") setFilterProjectId(""); }}
+            className={`px-3 py-2 text-[12px] font-bold whitespace-nowrap border-b-2 -mb-px transition-colors ${
+              scopeTab === t.key
+                ? "border-brand-600 text-brand-700"
+                : "border-transparent text-ink-500 hover:text-ink-800"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* 프로젝트 칩 필터 (PROJECT 탭일 때만) */}
+      {scopeTab === "PROJECT" && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-3">
+          <button
+            onClick={() => setFilterProjectId("")}
+            className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${
+              filterProjectId === "" ? "bg-brand-600 text-white border-brand-600" : "bg-white text-ink-600 border-ink-200 hover:border-ink-300"
+            }`}
+          >
+            전체 프로젝트
+          </button>
+          {projects.length === 0 ? (
+            <span className="text-[11px] text-ink-400 px-2">참여 중인 프로젝트가 없어요.</span>
+          ) : projects.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => setFilterProjectId(p.id)}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold border ${
+                filterProjectId === p.id ? "text-white border-transparent" : "bg-white text-ink-700 border-ink-200 hover:border-ink-300"
+              }`}
+              style={filterProjectId === p.id ? { background: p.color } : undefined}
+            >
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: filterProjectId === p.id ? "#ffffff" : p.color }} />
+              {p.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* 검색 + 카테고리 필터 */}
       <div className="flex flex-col sm:flex-row gap-2 mb-4">
@@ -273,7 +376,7 @@ export default function ServiceAccountsPage() {
       ) : filtered.length === 0 ? (
         <div className="panel py-14 text-center">
           <div className="text-[13px] font-bold text-ink-800">일치하는 계정이 없어요</div>
-          <div className="text-[12px] text-ink-500 mt-1">검색어나 카테고리 필터를 바꿔보세요.</div>
+          <div className="text-[12px] text-ink-500 mt-1">검색어나 필터를 바꿔보세요.</div>
         </div>
       ) : (
         <div className="space-y-6">
@@ -312,6 +415,8 @@ export default function ServiceAccountsPage() {
           form={form}
           setForm={setForm}
           users={users}
+          projects={projects}
+          myTeam={myTeam}
           saving={saving}
           err={formErr}
           onClose={closeModal}
@@ -319,6 +424,22 @@ export default function ServiceAccountsPage() {
         />
       )}
     </div>
+  );
+}
+
+function ScopeBadge({ a }: { a: Account }) {
+  if (a.scope === "ALL") {
+    return <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-ink-100 text-ink-600">전사</span>;
+  }
+  if (a.scope === "TEAM") {
+    return <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200">팀 · {a.scopeTeam ?? "-"}</span>;
+  }
+  // PROJECT
+  return (
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200">
+      {a.project?.color && <span className="w-1.5 h-1.5 rounded-full" style={{ background: a.project.color }} />}
+      프로젝트 · {a.project?.name ?? "-"}
+    </span>
   );
 }
 
@@ -342,7 +463,10 @@ function AccountCard({
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <div className="text-[14px] font-extrabold text-ink-900 truncate">{a.serviceName}</div>
-              <div className="text-[11px] text-ink-500">{meta.label}</div>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-[11px] text-ink-500">{meta.label}</span>
+                <ScopeBadge a={a} />
+              </div>
             </div>
             {canEdit && (
               <div className="flex items-center gap-1 flex-shrink-0">
@@ -402,23 +526,30 @@ function AccountCard({
 }
 
 function AccountModal({
-  mode, form, setForm, users, saving, err, onClose, onSubmit,
+  mode, form, setForm, users, projects, myTeam, saving, err, onClose, onSubmit,
 }: {
   mode: "new" | "edit";
   form: FormState;
   setForm: (f: FormState) => void;
   users: DirUser[];
+  projects: ProjectChip[];
+  myTeam: string;
   saving: boolean;
   err: string | null;
   onClose: () => void;
   onSubmit: (e: React.FormEvent) => void;
 }) {
-  // Esc 로 닫기
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, [onClose]);
+
+  const scopeOptions: { v: Scope; label: string; hint: string }[] = [
+    { v: "ALL", label: "전사", hint: "모든 구성원이 봅니다" },
+    { v: "TEAM", label: "팀", hint: "같은 팀만 봅니다" },
+    { v: "PROJECT", label: "프로젝트", hint: "프로젝트 멤버만 봅니다" },
+  ];
 
   return (
     <div className="fixed inset-0 bg-ink-900/40 grid place-items-center p-4 z-50" onClick={onClose}>
@@ -455,6 +586,49 @@ function AccountModal({
                 ))}
               </select>
             </label>
+          </div>
+
+          {/* 공개 범위 */}
+          <div className="flex flex-col gap-1">
+            <span className="text-[11px] font-bold text-ink-500">공개 범위</span>
+            <div className="grid grid-cols-3 gap-1.5">
+              {scopeOptions.map((o) => (
+                <button
+                  type="button"
+                  key={o.v}
+                  onClick={() => setForm({ ...form, scope: o.v, scopeTeam: o.v === "TEAM" && !form.scopeTeam ? myTeam : form.scopeTeam })}
+                  className={`rounded-xl border px-2.5 py-2 text-left transition-all ${
+                    form.scope === o.v
+                      ? "border-brand-600 bg-brand-50 ring-1 ring-brand-300"
+                      : "border-ink-200 bg-white hover:border-ink-300"
+                  }`}
+                >
+                  <div className="text-[12px] font-extrabold text-ink-900">{o.label}</div>
+                  <div className="text-[10px] text-ink-500 mt-0.5">{o.hint}</div>
+                </button>
+              ))}
+            </div>
+            {form.scope === "TEAM" && (
+              <input
+                className="input mt-1"
+                placeholder={myTeam ? `예: ${myTeam}` : "팀 이름"}
+                value={form.scopeTeam}
+                maxLength={80}
+                onChange={(e) => setForm({ ...form, scopeTeam: e.target.value })}
+              />
+            )}
+            {form.scope === "PROJECT" && (
+              <select
+                className="input mt-1"
+                value={form.scopeProjectId}
+                onChange={(e) => setForm({ ...form, scopeProjectId: e.target.value })}
+              >
+                <option value="">프로젝트 선택…</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            )}
           </div>
 
           <label className="flex flex-col gap-1">

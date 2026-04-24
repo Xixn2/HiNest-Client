@@ -11,27 +11,23 @@ import { requireAuth } from "../lib/auth.js";
  *   누가 담당하는지" 찾기 위한 인덱스. 실제 크레덴셜은 1Password/Bitwarden 같은 전용 도구에 둔다.
  * - `notes` 필드에도 비밀번호는 쓰지 말 것 — 경고 문구는 클라에서 노출.
  *
- * 권한:
- * - 로그인한 사용자는 전체 목록 열람 가능 (팀이 공유 자원으로 쓰는 전제).
- * - 생성/수정/삭제는 작성자(createdById) 본인 또는 ADMIN/SUPER 만.
+ * 공개 범위(scope):
+ * - ALL      — 전사 공개. 로그인 사용자 전원 열람.
+ * - TEAM     — 특정 팀 공개. 동일 team 명을 가진 사용자 + ADMIN/SUPER 만 열람.
+ * - PROJECT  — 프로젝트 공개. 해당 프로젝트의 ProjectMember + ADMIN/SUPER 만 열람.
+ *
+ * 편집 권한: 작성자 본인 또는 ADMIN/SUPER.
  */
 
 const router = Router();
 router.use(requireAuth);
 
 const CATEGORIES = [
-  "CLOUD",      // AWS / GCP / Azure
-  "HOSTING",    // Vercel / Netlify / Render
-  "VCS",        // GitHub / GitLab
-  "PAYMENT",    // Stripe / Toss
-  "DOMAIN",     // 가비아 / Cloudflare
-  "EMAIL",      // Google Workspace / Resend
-  "MONITOR",    // Sentry / Datadog
-  "DB",         // Supabase / Planetscale
-  "AI",         // OpenAI / Anthropic
-  "TESTING",    // BrowserStack / 테스트 계정
-  "OTHER",
+  "CLOUD", "HOSTING", "VCS", "PAYMENT", "DOMAIN", "EMAIL",
+  "MONITOR", "DB", "AI", "TESTING", "OTHER",
 ] as const;
+
+const SCOPES = ["ALL", "TEAM", "PROJECT"] as const;
 
 const baseSchema = z.object({
   serviceName: z.string().trim().min(1).max(80),
@@ -39,6 +35,9 @@ const baseSchema = z.object({
   loginId: z.string().trim().max(200).optional().nullable(),
   url: z.string().trim().url().max(500).optional().nullable().or(z.literal("")),
   notes: z.string().max(2000).optional().nullable(),
+  scope: z.enum(SCOPES).optional().default("ALL"),
+  scopeTeam: z.string().trim().max(80).optional().nullable(),
+  projectId: z.string().optional().nullable(),
   ownerUserId: z.string().optional().nullable(),
   ownerName: z.string().trim().max(80).optional().nullable(),
 });
@@ -46,26 +45,85 @@ const baseSchema = z.object({
 const createSchema = baseSchema;
 const updateSchema = baseSchema.partial();
 
+function isAdmin(user: { role?: string; superAdmin?: boolean }) {
+  return !!user.superAdmin || user.role === "ADMIN";
+}
 function canEdit(user: { id: string; role?: string; superAdmin?: boolean }, row: { createdById: string }) {
-  return user.superAdmin || user.role === "ADMIN" || row.createdById === user.id;
+  return isAdmin(user) || row.createdById === user.id;
 }
 
-/** 목록 — 카테고리 필터와 검색 지원. */
+/**
+ * 현재 유저가 열람 가능한 ServiceAccount 의 where 절을 만든다.
+ * ADMIN/SUPER 는 모든 항목을 본다.
+ */
+async function visibleWhere(user: { id: string; role?: string; superAdmin?: boolean; team?: string | null }) {
+  if (isAdmin(user)) return {};
+
+  // 내가 멤버인 프로젝트 id 목록
+  const memberships = await prisma.projectMember.findMany({
+    where: { userId: user.id },
+    select: { projectId: true },
+  });
+  const projectIds = memberships.map((m) => m.projectId);
+
+  const conditions: any[] = [
+    { scope: "ALL" },
+    // 본인이 만든 항목은 스코프 불문 보이게 (관리 편의)
+    { createdById: user.id },
+  ];
+  if (user.team) {
+    conditions.push({ scope: "TEAM", scopeTeam: user.team });
+  }
+  if (projectIds.length > 0) {
+    conditions.push({ scope: "PROJECT", projectId: { in: projectIds } });
+  }
+  return { OR: conditions };
+}
+
+/** 목록 — 카테고리·검색·스코프 탭·프로젝트 필터 지원. */
 router.get("/", async (req, res) => {
+  const user = (req as any).user as { id: string; role?: string; superAdmin?: boolean; team?: string | null };
+
   const category = typeof req.query.category === "string" ? req.query.category : undefined;
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  const scope = typeof req.query.scope === "string" ? req.query.scope : undefined;
+  const scopeTeam = typeof req.query.scopeTeam === "string" ? req.query.scopeTeam : undefined;
+  const projectId = typeof req.query.projectId === "string" ? req.query.projectId : undefined;
 
-  const where: any = {};
+  const where: any = await visibleWhere(user);
+
   if (category && (CATEGORIES as readonly string[]).includes(category)) {
     where.category = category;
   }
+  if (scope && (SCOPES as readonly string[]).includes(scope)) {
+    // visibleWhere 와 AND 결합 — 열람 가능 집합 안에서 추가 필터
+    where.AND = [{ OR: where.OR }].filter(() => !!where.OR);
+    delete where.OR;
+    where.AND.push({ scope });
+    if (scope === "TEAM" && scopeTeam) where.AND.push({ scopeTeam });
+    if (scope === "PROJECT" && projectId) where.AND.push({ projectId });
+  } else if (projectId) {
+    // scope 필터 없이 projectId 만 — PROJECT 스코프 중 이 프로젝트
+    where.AND = [{ OR: where.OR }].filter(() => !!where.OR);
+    delete where.OR;
+    where.AND.push({ scope: "PROJECT", projectId });
+  }
+
   if (q) {
-    where.OR = [
-      { serviceName: { contains: q, mode: "insensitive" } },
-      { loginId: { contains: q, mode: "insensitive" } },
-      { ownerName: { contains: q, mode: "insensitive" } },
-      { notes: { contains: q, mode: "insensitive" } },
+    const search = [
+      { serviceName: { contains: q, mode: "insensitive" as const } },
+      { loginId: { contains: q, mode: "insensitive" as const } },
+      { ownerName: { contains: q, mode: "insensitive" as const } },
+      { notes: { contains: q, mode: "insensitive" as const } },
     ];
+    if (Array.isArray(where.AND)) {
+      where.AND.push({ OR: search });
+    } else if (where.OR) {
+      where.AND = [{ OR: where.OR }, { OR: search }];
+      delete where.OR;
+    } else {
+      where.OR = search;
+    }
   }
 
   const rows = await prisma.serviceAccount.findMany({
@@ -74,11 +132,55 @@ router.get("/", async (req, res) => {
     include: {
       ownerUser: { select: { id: true, name: true, avatarColor: true, avatarUrl: true, email: true, team: true, position: true } },
       createdBy: { select: { id: true, name: true } },
+      project: { select: { id: true, name: true, color: true } },
     },
   });
 
   res.json({ accounts: rows });
 });
+
+/** 프로젝트 칩 — 이 페이지 필터에 노출할, 내가 속한 프로젝트 목록. */
+router.get("/projects", async (req, res) => {
+  const user = (req as any).user as { id: string; role?: string; superAdmin?: boolean };
+  const where = isAdmin(user)
+    ? { status: "ACTIVE" }
+    : { status: "ACTIVE", members: { some: { userId: user.id } } };
+  const projects = await prisma.project.findMany({
+    where,
+    select: { id: true, name: true, color: true },
+    orderBy: { name: "asc" },
+  });
+  res.json({ projects });
+});
+
+async function validateScope(
+  user: { id: string; role?: string; superAdmin?: boolean; team?: string | null },
+  input: { scope?: string; scopeTeam?: string | null; projectId?: string | null },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const scope = input.scope ?? "ALL";
+  if (scope === "ALL") return { ok: true };
+  if (scope === "TEAM") {
+    if (!input.scopeTeam) return { ok: false, error: "팀 이름을 지정해주세요." };
+    // ADMIN 은 모든 팀 지정 가능. 일반 사용자는 본인 팀만.
+    if (!isAdmin(user) && user.team !== input.scopeTeam) {
+      return { ok: false, error: "본인 팀으로만 공개할 수 있어요." };
+    }
+    return { ok: true };
+  }
+  if (scope === "PROJECT") {
+    if (!input.projectId) return { ok: false, error: "프로젝트를 지정해주세요." };
+    const project = await prisma.project.findUnique({
+      where: { id: input.projectId },
+      select: { id: true, members: { where: { userId: user.id }, select: { id: true } } },
+    });
+    if (!project) return { ok: false, error: "프로젝트를 찾을 수 없어요." };
+    if (!isAdmin(user) && project.members.length === 0) {
+      return { ok: false, error: "해당 프로젝트의 멤버가 아니에요." };
+    }
+    return { ok: true };
+  }
+  return { ok: false, error: "알 수 없는 공개 범위에요." };
+}
 
 router.post("/", async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
@@ -86,18 +188,21 @@ router.post("/", async (req, res) => {
     return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "잘못된 요청" });
   }
   const input = parsed.data;
-  const userId = (req as any).user.id as string;
+  const user = (req as any).user as { id: string; role?: string; superAdmin?: boolean; team?: string | null };
 
-  // URL 빈 문자열은 null 로 정규화 (zod 의 literal("") 을 통과한 경우)
+  const scopeCheck = await validateScope(user, input);
+  if (!scopeCheck.ok) return res.status(400).json({ error: scopeCheck.error });
+
+  // URL 빈 문자열은 null 로 정규화
   const url = input.url === "" ? null : input.url ?? null;
 
-  // ownerUserId 가 실존 유저인지 검증 — 빈 문자열은 null 로
   let ownerUserId = input.ownerUserId || null;
   if (ownerUserId) {
     const exists = await prisma.user.findUnique({ where: { id: ownerUserId }, select: { id: true } });
     if (!exists) return res.status(400).json({ error: "담당자로 지정한 사용자를 찾을 수 없어요." });
   }
 
+  const scope = input.scope ?? "ALL";
   const row = await prisma.serviceAccount.create({
     data: {
       serviceName: input.serviceName,
@@ -105,13 +210,17 @@ router.post("/", async (req, res) => {
       loginId: input.loginId || null,
       url,
       notes: input.notes || null,
+      scope,
+      scopeTeam: scope === "TEAM" ? (input.scopeTeam || null) : null,
+      projectId: scope === "PROJECT" ? (input.projectId || null) : null,
       ownerUserId,
       ownerName: input.ownerName || null,
-      createdById: userId,
+      createdById: user.id,
     },
     include: {
       ownerUser: { select: { id: true, name: true, avatarColor: true, avatarUrl: true, email: true, team: true, position: true } },
       createdBy: { select: { id: true, name: true } },
+      project: { select: { id: true, name: true, color: true } },
     },
   });
 
@@ -123,16 +232,29 @@ router.patch("/:id", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "잘못된 요청" });
   }
-  const user = (req as any).user as { id: string; role?: string; superAdmin?: boolean };
+  const user = (req as any).user as { id: string; role?: string; superAdmin?: boolean; team?: string | null };
   const id = req.params.id;
 
-  const existing = await prisma.serviceAccount.findUnique({ where: { id }, select: { id: true, createdById: true } });
+  const existing = await prisma.serviceAccount.findUnique({
+    where: { id },
+    select: { id: true, createdById: true, scope: true, scopeTeam: true, projectId: true },
+  });
   if (!existing) return res.status(404).json({ error: "존재하지 않는 계정이에요." });
   if (!canEdit(user, existing)) {
     return res.status(403).json({ error: "이 계정을 수정할 권한이 없어요." });
   }
 
   const input = parsed.data;
+
+  // scope 변경 검증 — 변경 시 (또는 스코프 관련 필드 변경 시) 유효성 체크
+  const nextScope = input.scope ?? existing.scope;
+  const nextScopeTeam = input.scopeTeam !== undefined ? input.scopeTeam : existing.scopeTeam;
+  const nextProjectId = input.projectId !== undefined ? input.projectId : existing.projectId;
+  if (input.scope !== undefined || input.scopeTeam !== undefined || input.projectId !== undefined) {
+    const check = await validateScope(user, { scope: nextScope, scopeTeam: nextScopeTeam, projectId: nextProjectId });
+    if (!check.ok) return res.status(400).json({ error: check.error });
+  }
+
   const data: any = {};
   if (input.serviceName !== undefined) data.serviceName = input.serviceName;
   if (input.category !== undefined) data.category = input.category;
@@ -148,6 +270,11 @@ router.patch("/:id", async (req, res) => {
     }
     data.ownerUserId = next;
   }
+  if (input.scope !== undefined || input.scopeTeam !== undefined || input.projectId !== undefined) {
+    data.scope = nextScope;
+    data.scopeTeam = nextScope === "TEAM" ? (nextScopeTeam || null) : null;
+    data.projectId = nextScope === "PROJECT" ? (nextProjectId || null) : null;
+  }
 
   const row = await prisma.serviceAccount.update({
     where: { id },
@@ -155,6 +282,7 @@ router.patch("/:id", async (req, res) => {
     include: {
       ownerUser: { select: { id: true, name: true, avatarColor: true, avatarUrl: true, email: true, team: true, position: true } },
       createdBy: { select: { id: true, name: true } },
+      project: { select: { id: true, name: true, color: true } },
     },
   });
   res.json({ account: row });
