@@ -670,23 +670,27 @@ function AccountCard({
               </div>
             </div>
             {canEdit && (
-              <div className="flex items-center gap-1 flex-shrink-0">
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {/* 활성 토글 — absolute 로 thumb 배치해 translate 계산 없이 정확한 위치.
+                     편집/삭제 버튼과는 세로선으로 분리해 시각적으로 다른 그룹임을 표시. */}
                 <button
                   type="button"
                   role="switch"
                   aria-checked={a.active}
                   onClick={onToggleActive}
                   title={a.active ? "비활성화" : "활성화"}
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                  className={`relative inline-block h-[18px] w-8 rounded-full transition-colors align-middle ${
                     a.active ? "bg-brand-600" : "bg-ink-300"
                   }`}
                 >
                   <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                      a.active ? "translate-x-[18px]" : "translate-x-0.5"
+                    aria-hidden
+                    className={`absolute top-[2px] h-[14px] w-[14px] rounded-full bg-white shadow transition-[left] ${
+                      a.active ? "left-[16px]" : "left-[2px]"
                     }`}
                   />
                 </button>
+                <span className="h-5 w-px bg-ink-200" aria-hidden />
                 <button className="btn-ghost !h-7 !px-2.5 text-[11px]" onClick={onEdit} title="편집">편집</button>
                 <button className="btn-ghost !h-7 !px-2.5 text-[11px] text-danger" onClick={onDelete} title="삭제">삭제</button>
               </div>
