@@ -201,8 +201,30 @@ export default function ProjectQaList({
   useEffect(() => {
     try { localStorage.setItem(`qa-collapsed:${projectId}`, collapsed ? "1" : "0"); } catch {}
   }, [collapsed, projectId]);
+  // ⌘K / Ctrl+K — QA 섹션이 펼쳐진 상태일 때만 검색창에 포커스.
+  // 채팅/문서 에디터 등 다른 입력에서의 단축키 충돌을 막기 위해
+  // 활성 포커스가 textarea/contenteditable 일 땐 무시한다.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!(e.key === "k" || e.key === "K")) return;
+      if (!(e.metaKey || e.ctrlKey)) return;
+      if (collapsed) return;
+      const t = document.activeElement as HTMLElement | null;
+      if (t && (t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      e.preventDefault();
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [collapsed]);
   const [creating, setCreating] = useState(false);
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
+  // 동시 PATCH 레이스 방어 — 같은 항목에 여러 필드를 연속 클릭 시
+  // 응답이 뒤섞여 UI 가 이전 값으로 되돌아가는 것을 막는다.
+  const pendingPatchTokens = useRef(new Map<string, number>());
+  // 검색창 ref — ⌘/Ctrl+K 전역 포커스 단축키.
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const memberMap = useMemo(
     () => new Map(members.map((m) => [m.id, m])),
@@ -303,9 +325,14 @@ export default function ProjectQaList({
 
   async function patchItem(
     id: string,
-    patch: Partial<Pick<QaItem, "status" | "priority" | "title" | "note" | "screen" | "platform" | "assigneeId">>,
+    patch: Partial<Pick<QaItem, "status" | "priority" | "title" | "note" | "screen" | "platform" | "assigneeId" | "dueDate">>,
   ) {
     const snapshot = items;
+    // 항목별 요청 토큰 — 마지막으로 발행한 요청만 응답 반영을 허용.
+    // 예: 상태를 BUG→IN_PROGRESS→DONE 으로 빠르게 클릭하면 1·2번 요청 응답이
+    // 늦게 도착해도 최종 상태를 덮어쓰지 않는다.
+    const token = (pendingPatchTokens.current.get(id) ?? 0) + 1;
+    pendingPatchTokens.current.set(id, token);
     // 낙관적 반영 (assignee join 은 memberMap 으로 즉시 구성)
     setItems((prev) =>
       prev.map((x) =>
@@ -328,6 +355,7 @@ export default function ProjectQaList({
         method: "PATCH",
         json: patch,
       });
+      if (pendingPatchTokens.current.get(id) !== token) return; // 후속 요청이 있으면 무시
       setItems((prev) =>
         prev.map((x) =>
           x.id === id
@@ -343,6 +371,7 @@ export default function ProjectQaList({
         ),
       );
     } catch (err: any) {
+      if (pendingPatchTokens.current.get(id) !== token) return;
       setItems(snapshot);
       await alertAsync({ title: "수정 실패", description: err?.message ?? "수정에 실패했어요" });
     }
@@ -504,19 +533,29 @@ export default function ProjectQaList({
               🔍
             </span>
             <input
+              ref={searchInputRef}
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="제목·화면·담당자 검색"
-              className="input !h-8 !pl-7 !pr-2 !text-[12.5px] w-[220px] max-w-full"
+              onKeyDown={(e) => {
+                if (e.key === "Escape" && query) {
+                  e.preventDefault();
+                  setQuery("");
+                }
+              }}
+              placeholder="제목·화면·담당자 검색  (⌘K)"
+              className="input !h-8 !pl-7 !pr-7 !text-[12.5px] w-[220px] max-w-full"
               aria-label="QA 검색"
+              spellCheck={false}
+              autoComplete="off"
             />
             {query && (
               <button
                 type="button"
-                onClick={() => setQuery("")}
-                className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 grid place-items-center text-ink-400 hover:text-ink-700 text-[13px]"
+                onClick={() => { setQuery(""); searchInputRef.current?.focus(); }}
+                className="absolute right-0.5 top-1/2 -translate-y-1/2 w-7 h-7 grid place-items-center rounded-full text-ink-400 hover:text-ink-700 hover:bg-black/[0.05] dark:hover:bg-white/[0.08] text-[13px]"
                 aria-label="검색어 지우기"
+                title="검색어 지우기 (Esc)"
               >
                 ✕
               </button>
@@ -613,10 +652,46 @@ export default function ProjectQaList({
       ) : (
         <div className="flex flex-col">
           {visible.length === 0 ? (
-            <div className="text-center text-ink-400 text-sm py-6">
-              {filter === "ALL"
-                ? "아직 기록된 QA 항목이 없어요. 아래에서 바로 추가해 보세요."
-                : "해당 상태의 항목이 없어요."}
+            <div className="text-center text-ink-400 text-sm py-8 px-4">
+              {q ? (
+                <>
+                  <div className="mb-2">"<span className="text-ink-600 font-medium">{query}</span>" 검색 결과가 없어요.</div>
+                  <button
+                    type="button"
+                    onClick={() => { setQuery(""); searchInputRef.current?.focus(); }}
+                    className="chip chip-gray"
+                  >
+                    검색 초기화
+                  </button>
+                </>
+              ) : filter !== "ALL" ? (
+                <>
+                  <div className="mb-2">해당 상태의 항목이 없어요.</div>
+                  <button
+                    type="button"
+                    onClick={() => setFilter("ALL")}
+                    className="chip chip-gray"
+                  >
+                    전체 보기
+                  </button>
+                </>
+              ) : mineOnly ? (
+                <>
+                  <div className="mb-2">내가 담당자인 QA 항목이 없어요.</div>
+                  <button
+                    type="button"
+                    onClick={() => setMineOnly(false)}
+                    className="chip chip-gray"
+                  >
+                    전체 담당자 보기
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="mb-2">아직 기록된 QA 항목이 없어요.</div>
+                  <div className="text-[12px] text-ink-400">아래 "+ 새 QA 항목 추가"에 제목을 입력하고 Enter</div>
+                </>
+              )}
             </div>
           ) : (
             visible.map((i) => (
@@ -1300,7 +1375,9 @@ function RemoveDot({ onRemove }: { onRemove: () => void }) {
     <button
       type="button"
       onClick={onRemove}
-      className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-[11px] leading-none flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity"
+      // 모바일에서도 누르기 편하도록 터치 타겟을 28px 로 확대,
+      // 터치 디바이스에선 항상 보이게 (hover 로는 안 떠서 누를 수가 없음).
+      className="absolute top-1 right-1 w-7 h-7 rounded-full bg-black/60 text-white text-[13px] leading-none flex items-center justify-center md:opacity-0 md:group-hover/thumb:opacity-100 transition-opacity shadow"
       aria-label="첨부 제거"
       title="제거"
     >
