@@ -457,7 +457,7 @@ function PersonNode({
   const isMe = u.id === meId;
   // width 를 "고정" 해서 '나' 칩 유무와 관계없이 모든 카드 크기가 동일하도록 함.
   return (
-    <div className="group flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-ink-150 bg-white dark:bg-ink-50 hover:border-brand-300 hover:shadow-pop transition w-[180px]">
+    <div className="group flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-ink-150 bg-white dark:bg-ink-50 hover:border-brand-300 hover:shadow-pop transition w-[150px] sm:w-[180px]">
       <UserAvatar u={u} size={28} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1 min-w-0">
