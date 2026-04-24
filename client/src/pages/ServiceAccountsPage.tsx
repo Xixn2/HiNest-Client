@@ -499,11 +499,35 @@ function AccountCard({
   onCopyPassword: () => void;
 }) {
   const meta = CATEGORY_META[a.category];
+  // URL 이 있으면 해당 사이트의 파비콘을 우선 사용 (Google s2 — CORS 없이 바로 <img> 에 주입 가능).
+  // 로드 실패 시 onError 에서 fallback 플래그를 켜서 카테고리 이모지로 대체.
+  const host = useMemo(() => {
+    if (!a.url) return null;
+    try { return new URL(a.url).hostname; } catch { return null; }
+  }, [a.url]);
+  const [iconErr, setIconErr] = useState(false);
+  const favicon = host && !iconErr ? `https://www.google.com/s2/favicons?domain=${host}&sz=64` : null;
   return (
     <div className="panel p-4">
       <div className="flex items-start gap-3">
-        <div className="w-9 h-9 rounded-xl grid place-items-center text-white flex-shrink-0" style={{ background: meta.color }}>
-          <span className="text-base leading-none">{meta.emoji}</span>
+        <div
+          className="w-9 h-9 rounded-xl grid place-items-center flex-shrink-0 overflow-hidden"
+          style={{ background: favicon ? "#F8F8FA" : meta.color, color: "#fff" }}
+        >
+          {favicon ? (
+            <img
+              src={favicon}
+              alt=""
+              width={28}
+              height={28}
+              className="w-7 h-7 object-contain"
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onError={() => setIconErr(true)}
+            />
+          ) : (
+            <span className="text-base leading-none">{meta.emoji}</span>
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
