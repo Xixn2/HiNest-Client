@@ -25,6 +25,7 @@ const PAGES: PageEntry[] = [
   { label: "팀원", desc: "구성원 디렉토리", path: "/directory", aliases: ["directory", "member", "people", "팀원", "디렉토리"], emoji: "👥" },
   { label: "조직도", desc: "조직 트리", path: "/org", aliases: ["org", "organization", "조직도", "조직"], emoji: "🏢" },
   { label: "문서함", desc: "회사 문서", path: "/documents", aliases: ["document", "file", "문서", "파일"], emoji: "📄" },
+  { label: "계정 관리", desc: "서비스 계정 레지스트리", path: "/accounts", aliases: ["account", "credential", "aws", "vercel", "계정", "크레덴셜"], emoji: "🔑" },
   { label: "법인카드", desc: "카드 사용내역", path: "/expense", aliases: ["expense", "card", "카드", "지출", "법카"], emoji: "💳" },
   { label: "내 프로필", desc: "내 정보 수정", path: "/profile", aliases: ["profile", "me", "프로필", "내정보"], emoji: "🙂" },
 ];

@@ -33,6 +33,7 @@ import meetingRouter from "./routes/meeting.js";
 import pinRouter from "./routes/pin.js";
 import { shareLinkAuthedRouter, shareLinkPublicRouter } from "./routes/shareLink.js";
 import { folderShareLinkAuthedRouter } from "./routes/folderShareLink.js";
+import serviceAccountRouter from "./routes/serviceAccount.js";
 import path from "node:path";
 import mime from "mime-types";
 
@@ -157,6 +158,7 @@ app.use("/api/nav", navRouter);
 app.use("/api/project", projectRouter);
 app.use("/api/meeting", meetingRouter);
 app.use("/api/pins", pinRouter);
+app.use("/api/service-accounts", serviceAccountRouter);
 // 공유 링크 — 생성/관리는 인증 필요, 실제 외부 다운로드는 인증 없이.
 app.use("/api/share-links", shareLinkAuthedRouter);
 app.use("/api/folder-share-links", folderShareLinkAuthedRouter);
