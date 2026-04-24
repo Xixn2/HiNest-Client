@@ -25,13 +25,13 @@ jobs:
           role-session-name: gha-seed-qa-${{ github.run_id }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Extract DATABASE_URL from task definition
-        id: dburl
+      - name: Fetch DATABASE_URL from SSM Parameter Store
         run: |
-          DB_URL=$(aws ecs describe-task-definition \
-            --task-definition "$TASK_FAMILY" \
+          DB_URL=$(aws ssm get-parameter \
+            --name "/hinest/prod/DATABASE_URL" \
+            --with-decryption \
             --region "$AWS_REGION" \
-            --query "taskDefinition.containerDefinitions[?name=='$CONTAINER_NAME'].environment[] | [?name=='DATABASE_URL'].value" \
+            --query "Parameter.Value" \
             --output text)
           echo "::add-mask::$DB_URL"
           echo "DATABASE_URL=$DB_URL" >> "$GITHUB_ENV"
