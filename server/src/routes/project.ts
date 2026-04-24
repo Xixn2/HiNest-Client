@@ -338,8 +338,9 @@ router.get("/:id/webhook/:channelId/events", async (req, res) => {
 
 /* ---------------- QA 체크리스트 ---------------- */
 
-// BUG=오류(신규 리포트), IN_PROGRESS=수정 중, DONE=완료, ON_HOLD=보류.
-const QA_STATUS = ["BUG", "IN_PROGRESS", "DONE", "ON_HOLD"] as const;
+// BUG=오류(신규 리포트), IN_PROGRESS=수정 중, NEEDS_FIX=수정필요,
+// NEEDS_TEST=테스트 요망, DONE=완료, ON_HOLD=보류.
+const QA_STATUS = ["BUG", "IN_PROGRESS", "NEEDS_FIX", "NEEDS_TEST", "DONE", "ON_HOLD"] as const;
 const QA_PRIORITY = ["LOW", "NORMAL", "HIGH"] as const;
 const QA_PLATFORM = ["WEB", "IOS", "ANDROID", "MAC_APP", "WINDOWS_APP", "OTHER"] as const;
 const QA_ATTACHMENT_KIND = ["IMAGE", "VIDEO", "FILE"] as const;

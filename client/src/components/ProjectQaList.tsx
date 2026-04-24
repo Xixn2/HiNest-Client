@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api, apiSWR } from "../api";
 import { alertAsync, confirmAsync } from "./ConfirmHost";
 
-type Status = "BUG" | "IN_PROGRESS" | "DONE" | "ON_HOLD";
+type Status = "BUG" | "IN_PROGRESS" | "NEEDS_FIX" | "NEEDS_TEST" | "DONE" | "ON_HOLD";
 type Priority = "LOW" | "NORMAL" | "HIGH";
 type Platform = "WEB" | "IOS" | "ANDROID" | "MAC_APP" | "WINDOWS_APP" | "OTHER";
 type AttachmentKind = "IMAGE" | "VIDEO" | "FILE";
@@ -44,10 +44,12 @@ type Member = { id: string; name: string; avatarColor: string; avatarUrl?: strin
 
 // 상태 순서 — 필터 탭/드롭다운에서 좌→우, 위→아래 순.
 // BUG(리포트) → IN_PROGRESS(수정 중) → DONE(완료) / ON_HOLD(보류).
-const STATUS_ORDER: Status[] = ["BUG", "IN_PROGRESS", "DONE", "ON_HOLD"];
+const STATUS_ORDER: Status[] = ["BUG", "IN_PROGRESS", "NEEDS_FIX", "NEEDS_TEST", "DONE", "ON_HOLD"];
 const STATUS_LABEL: Record<Status, string> = {
   BUG: "오류",
   IN_PROGRESS: "수정 중",
+  NEEDS_FIX: "수정필요",
+  NEEDS_TEST: "테스트 요망",
   DONE: "완료",
   ON_HOLD: "보류",
 };
@@ -57,6 +59,8 @@ const STATUS_LABEL: Record<Status, string> = {
 const STATUS_CHIP: Record<Status, string> = {
   BUG: "chip chip-red",
   IN_PROGRESS: "chip chip-blue",
+  NEEDS_FIX: "chip chip-orange",
+  NEEDS_TEST: "chip chip-violet",
   DONE: "chip chip-green",
   ON_HOLD: "chip chip-amber",
 };
@@ -65,6 +69,8 @@ const STATUS_CHIP: Record<Status, string> = {
 const STATUS_DOT: Record<Status, string> = {
   BUG: "#EF4444",
   IN_PROGRESS: "#3B82F6",
+  NEEDS_FIX: "#F97316",
+  NEEDS_TEST: "#8B5CF6",
   DONE: "#10B981",
   ON_HOLD: "#F59E0B",
 };
@@ -150,8 +156,18 @@ export default function ProjectQaList({
   const [loaded, setLoaded] = useState(false);
   const [filter, setFilter] = useState<Filter>("ALL");
   const [mineOnly, setMineOnly] = useState(false);
+  // 검색어 — 제목/화면/메모/담당자 이름에 대해 대소문자 무시 부분일치.
+  const [query, setQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [quickTitle, setQuickTitle] = useState("");
+  const quickInputRef = useRef<HTMLInputElement | null>(null);
+  // 전체 섹션 접기/펼치기 — 로컬스토리지로 프로젝트별 상태 유지.
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem(`qa-collapsed:${projectId}`) === "1"; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(`qa-collapsed:${projectId}`, collapsed ? "1" : "0"); } catch {}
+  }, [collapsed, projectId]);
   const [creating, setCreating] = useState(false);
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
 
@@ -235,8 +251,9 @@ export default function ProjectQaList({
       };
       setItems((prev) => [...prev, newItem]);
       setQuickTitle("");
-      // 방금 만든 항목을 자동으로 펼쳐 상세 입력을 바로 시작할 수 있게.
-      setExpandedId(newItem.id);
+      // 빠른 연속 입력 UX — 방금 만든 항목을 자동 확장하지 않고,
+      // 입력창에 포커스를 유지해서 다음 항목 제목을 바로 이어 칠 수 있게.
+      quickInputRef.current?.focus();
     } catch (err: any) {
       await alertAsync({ title: "추가 실패", description: err?.message ?? "추가에 실패했어요" });
     } finally {
@@ -374,16 +391,31 @@ export default function ProjectQaList({
   // 상태 필터 + "내 담당" 토글을 조합.
   // 정렬: ALL 뷰에서는 해결되지 않은(= BUG/IN_PROGRESS) 항목을 위로 띄워서
   //       작업 중인 것에 시선이 먼저 가도록. 같은 그룹 안에서는 서버가 준 순서 유지.
+  const q = query.trim().toLowerCase();
   const filtered = items.filter((i) => {
     if (filter !== "ALL" && i.status !== filter) return false;
     if (mineOnly && currentUserId && i.assigneeId !== currentUserId) return false;
+    if (q) {
+      const hay = [
+        i.title,
+        i.screen ?? "",
+        i.note ?? "",
+        i.assignee?.name ?? "",
+        i.createdBy?.name ?? "",
+      ]
+        .join(" ")
+        .toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
     return true;
   });
   const openWeight: Record<Status, number> = {
     BUG: 0,
-    IN_PROGRESS: 1,
-    ON_HOLD: 2,
-    DONE: 3,
+    NEEDS_FIX: 1,
+    IN_PROGRESS: 2,
+    NEEDS_TEST: 3,
+    ON_HOLD: 4,
+    DONE: 5,
   };
   const visible =
     filter === "ALL"
@@ -396,6 +428,8 @@ export default function ProjectQaList({
     ALL: items.length,
     BUG: items.filter((i) => i.status === "BUG").length,
     IN_PROGRESS: items.filter((i) => i.status === "IN_PROGRESS").length,
+    NEEDS_FIX: items.filter((i) => i.status === "NEEDS_FIX").length,
+    NEEDS_TEST: items.filter((i) => i.status === "NEEDS_TEST").length,
     DONE: items.filter((i) => i.status === "DONE").length,
     ON_HOLD: items.filter((i) => i.status === "ON_HOLD").length,
   } as const;
@@ -405,16 +439,65 @@ export default function ProjectQaList({
       {/* ===== 헤더: 제목 + 설명 + 필터 탭 ===== */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCollapsed((v) => !v)}
+            className="flex items-center gap-2 text-left hover:bg-ink-50 rounded px-1 -ml-1 transition-colors"
+            aria-expanded={!collapsed}
+            title={collapsed ? "펼치기" : "접기"}
+          >
+            <span
+              aria-hidden
+              className="text-ink-400 text-[11px] transition-transform inline-block"
+              style={{ transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)" }}
+            >
+              ▼
+            </span>
             <span className="text-[15px] font-bold text-ink-900">QA 체크리스트</span>
-            <span className="text-[12px] text-ink-400">{counts.ALL}개</span>
+            <span className="text-[12px] text-ink-400">
+              {q ? `${filtered.length} / ${counts.ALL}` : `${counts.ALL}개`}
+            </span>
+          </button>
+          {/* 검색 — 제목/화면/메모/담당자 이름에 대해 부분일치.
+              모바일에서도 헤더에 자연스럽게 붙도록 flex-wrap 고려.
+              접힌 상태에서는 검색 UI 숨김. */}
+          {!collapsed && (
+          <div className="relative">
+            <span
+              aria-hidden
+              className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-400 text-[13px] pointer-events-none"
+            >
+              🔍
+            </span>
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="제목·화면·담당자 검색"
+              className="input !h-8 !pl-7 !pr-2 !text-[12.5px] w-[220px] max-w-full"
+              aria-label="QA 검색"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 grid place-items-center text-ink-400 hover:text-ink-700 text-[13px]"
+                aria-label="검색어 지우기"
+              >
+                ✕
+              </button>
+            )}
           </div>
+          )}
         </div>
+        {!collapsed && (
         <div className="text-[12px] text-ink-500">
           테스트 항목·버그 제보를 기록하고 담당자·화면·플랫폼까지 한곳에서 관리합니다.
         </div>
+        )}
 
         {/* 필터 탭 — Notion "그룹 보기" 느낌의 탭 스타일 */}
+        {!collapsed && (
         <div className="flex flex-wrap items-center gap-x-1 gap-y-1 mt-1 border-b border-ink-100 relative">
           {(["ALL", ...STATUS_ORDER] as const).map((k) => {
             const active = filter === k;
@@ -467,8 +550,11 @@ export default function ProjectQaList({
             </button>
           )}
         </div>
+        )}
       </div>
 
+      {!collapsed && (
+      <>
       {/* ===== 테이블 헤더 (sm 이상에서만) ===== */}
       <div
         className="hidden sm:grid items-center gap-2 px-2 py-1.5 mt-2 text-[11px] font-medium uppercase tracking-wider text-ink-400"
@@ -526,6 +612,7 @@ export default function ProjectQaList({
               +
             </span>
             <input
+              ref={quickInputRef}
               type="text"
               className="flex-1 bg-transparent outline-none text-[13px] placeholder:text-ink-400 text-ink-900"
               placeholder="새 QA 항목 추가 — 제목을 입력하고 Enter"
@@ -545,6 +632,8 @@ export default function ProjectQaList({
             )}
           </form>
         </div>
+      )}
+      </>
       )}
     </div>
   );

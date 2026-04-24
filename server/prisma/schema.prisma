@@ -137,6 +137,8 @@ model ProjectQaItem {
   priority     String    @default("NORMAL")
   /// 리스트 수동 정렬용 — 값이 같으면 createdAt 기준.
   sortOrder    Int       @default(0)
+  /// 마감기한 — null 이면 미지정. 캘린더 표시/정렬에 사용.
+  dueDate      DateTime?
   createdById  String
   /// 상태를 OPEN → PASSED/FAILED/SKIPPED 로 바꾼 사람/시각 (감사 이력).
   resolvedById String?

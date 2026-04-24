@@ -302,7 +302,7 @@ html.dark select.input {
 }
 
 /* 모든 chip-* 는 .chip 베이스(라운드·여백·정렬) 를 강제로 상속 */
-.chip-gray, .chip-brand, .chip-green, .chip-amber, .chip-red, .chip-blue {
+.chip-gray, .chip-brand, .chip-green, .chip-amber, .chip-red, .chip-blue, .chip-orange, .chip-violet {
   @apply chip;
 }
 .chip-gray  { background: var(--c-surface-3); color: var(--c-text-2); }
@@ -311,12 +311,16 @@ html.dark select.input {
 .chip-amber { background: rgba(217,119,6,.12); color: #B45309; }
 .chip-red   { background: rgba(220,38,38,.10); color: #B91C1C; }
 .chip-blue  { background: rgba(59,92,240,.08); color: #2547DB; }
+.chip-orange{ background: rgba(249,115,22,.12); color: #C2410C; }
+.chip-violet{ background: rgba(139,92,246,.12); color: #6D28D9; }
 
 html.dark .chip-gray  { background: rgba(255,255,255,.08); color: #D4D8DE; }
 html.dark .chip-green { background: rgba(74,222,128,.15); color: #86EFAC; }
 html.dark .chip-amber { background: rgba(251,191,36,.15); color: #FCD34D; }
 html.dark .chip-red   { background: rgba(255,107,107,.18); color: #FCA5A5; }
 html.dark .chip-blue  { background: rgba(120,150,255,.2);  color: #B8C6FF; }
+html.dark .chip-orange{ background: rgba(251,146,60,.18); color: #FDBA74; }
+html.dark .chip-violet{ background: rgba(167,139,250,.2); color: #C4B5FD; }
 
 /* ============================================================ */
 /*                           AVATARS                             */
