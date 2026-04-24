@@ -70,33 +70,20 @@ jobs:
             echo "already=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Ensure Secrets Manager backup + generate key
+      - name: Generate key
         if: steps.describe.outputs.already == 'false'
         id: keygen
         run: |
-          # Secrets Manager 에 이미 있으면 그 값 재사용, 없으면 새로 생성.
-          if aws secretsmanager describe-secret --secret-id "$SECRET_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
-            KEY=$(aws secretsmanager get-secret-value \
-              --secret-id "$SECRET_NAME" \
-              --region "$AWS_REGION" \
-              --query 'SecretString' --output text)
-            echo "기존 Secrets Manager 값을 재사용합니다."
-          else
-            KEY=$(openssl rand -base64 32)
-            aws secretsmanager create-secret \
-              --name "$SECRET_NAME" \
-              --description "HiNest ServiceAccount.passwordEnc 암호화 키 (AES-256-GCM)" \
-              --secret-string "$KEY" \
-              --region "$AWS_REGION" >/dev/null
-            echo "Secrets Manager 에 새 키를 저장했어요: $SECRET_NAME"
-          fi
-          # 키를 로그에서 마스킹. 이후 스텝에서 env.ACCOUNT_ENC_KEY 로만 참조.
+          # 32바이트 base64. 이후 태스크 정의 env 에만 저장되므로 AWS Console
+          # → ECS → Task definitions → hinest-server → 최신 리비전 에서 언제든 확인/백업 가능.
+          KEY=$(openssl rand -base64 32)
           echo "::add-mask::$KEY"
           {
             echo "ACCOUNT_ENC_KEY<<__EOF__"
             echo "$KEY"
             echo "__EOF__"
           } >> "$GITHUB_ENV"
+          echo "새 키 생성 완료 (로그에선 마스킹)."
 
       - name: Register new task definition revision
         if: steps.describe.outputs.already == 'false'
