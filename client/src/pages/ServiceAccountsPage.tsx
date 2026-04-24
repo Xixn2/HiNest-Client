@@ -125,11 +125,14 @@ type Account = {
   notes: string | null;
   scope: Scope;
   scopeTeam: string | null;
+  scopeTeams: string[];
   projectId: string | null;
+  projectIds: string[];
   project: ProjectChip | null;
   ownerUser: OwnerUser | null;
   ownerName: string | null;
   iconUrl: string | null;
+  active: boolean;
   hasPassword: boolean;
   createdBy: { id: string; name: string };
   createdAt: string;
@@ -147,8 +150,9 @@ type FormState = {
   ownerUserId: string;
   ownerName: string;
   scope: Scope;
-  scopeTeam: string;
-  scopeProjectId: string;
+  // 다중 팀/프로젝트 공유 — scopeTeams[0] 이 레거시 대표값(scopeTeam) 과 동기화됨.
+  scopeTeams: string[];
+  scopeProjectIds: string[];
   // 비밀번호 입력 — 편집 시 빈 값은 "변경 없음", "CLEAR" sentinel 은 제거, 문자열은 새 값.
   password: string;
   clearPassword: boolean;
@@ -165,8 +169,8 @@ const emptyForm = (defaultTeam: string): FormState => ({
   ownerUserId: "",
   ownerName: "",
   scope: "ALL",
-  scopeTeam: defaultTeam ?? "",
-  scopeProjectId: "",
+  scopeTeams: defaultTeam ? [defaultTeam] : [],
+  scopeProjectIds: [],
   password: "",
   clearPassword: false,
   iconUrl: "",
@@ -249,7 +253,7 @@ export default function ServiceAccountsPage() {
     // 프로젝트 탭에서 선택된 프로젝트가 있으면 초기값으로 주입
     if (scopeTab === "PROJECT" && filterProjectId) {
       init.scope = "PROJECT";
-      init.scopeProjectId = filterProjectId;
+      init.scopeProjectIds = [filterProjectId];
     } else if (scopeTab === "TEAM") {
       init.scope = "TEAM";
     }
@@ -267,8 +271,16 @@ export default function ServiceAccountsPage() {
       ownerUserId: a.ownerUser?.id ?? "",
       ownerName: a.ownerName ?? "",
       scope: a.scope,
-      scopeTeam: a.scopeTeam ?? myTeam,
-      scopeProjectId: a.projectId ?? "",
+      scopeTeams: a.scopeTeams?.length
+        ? a.scopeTeams
+        : a.scopeTeam
+          ? [a.scopeTeam]
+          : myTeam ? [myTeam] : [],
+      scopeProjectIds: a.projectIds?.length
+        ? a.projectIds
+        : a.projectId
+          ? [a.projectId]
+          : [],
       password: "",
       clearPassword: false,
       iconUrl: a.iconUrl ?? "",
@@ -289,12 +301,12 @@ export default function ServiceAccountsPage() {
       setFormErr("서비스 이름을 입력해주세요.");
       return;
     }
-    if (form.scope === "TEAM" && !form.scopeTeam.trim()) {
-      setFormErr("팀 이름을 입력해주세요.");
+    if (form.scope === "TEAM" && form.scopeTeams.filter((t) => t.trim()).length === 0) {
+      setFormErr("팀을 하나 이상 입력해주세요.");
       return;
     }
-    if (form.scope === "PROJECT" && !form.scopeProjectId) {
-      setFormErr("프로젝트를 선택해주세요.");
+    if (form.scope === "PROJECT" && form.scopeProjectIds.length === 0) {
+      setFormErr("프로젝트를 하나 이상 선택해주세요.");
       return;
     }
     setSaving(true);
@@ -309,8 +321,11 @@ export default function ServiceAccountsPage() {
         ownerUserId: form.ownerUserId || null,
         ownerName: form.ownerName.trim() || null,
         scope: form.scope,
-        scopeTeam: form.scope === "TEAM" ? form.scopeTeam.trim() : null,
-        projectId: form.scope === "PROJECT" ? form.scopeProjectId : null,
+        scopeTeams: form.scope === "TEAM" ? form.scopeTeams.map((t) => t.trim()).filter(Boolean) : [],
+        // 서버가 scopeTeam(레거시 대표값)도 배열 첫 요소로 채우지만, 명시적으로 같이 보내 호환 보장.
+        scopeTeam: form.scope === "TEAM" ? (form.scopeTeams[0]?.trim() || null) : null,
+        projectIds: form.scope === "PROJECT" ? form.scopeProjectIds : [],
+        projectId: form.scope === "PROJECT" ? (form.scopeProjectIds[0] || null) : null,
         iconUrl: form.iconUrl.trim() || null,
       };
       // 비밀번호: 명시적으로 지우기 선택 시 null, 새 값 있으면 보냄, 빈 값이면 변경 없음(PATCH).
@@ -496,6 +511,17 @@ export default function ServiceAccountsPage() {
                       onEdit={() => openEdit(a)}
                       onDelete={() => remove(a)}
                       onCopy={() => a.loginId && copyId(a.loginId)}
+                      onToggleActive={async () => {
+                        // 낙관적 업데이트 — 실패 시 load() 로 서버값으로 복구.
+                        const next = !a.active;
+                        setAccounts((prev) => prev.map((x) => (x.id === a.id ? { ...x, active: next } : x)));
+                        try {
+                          await api(`/api/service-accounts/${a.id}`, { method: "PATCH", json: { active: next } });
+                        } catch (e: any) {
+                          await alertAsync({ title: "변경 실패", description: e?.message ?? "활성 상태를 바꾸지 못했어요." });
+                          load();
+                        }
+                      }}
                       onCopyPassword={async () => {
                         // 본인 로그인 비번 재확인 — promptAsync 의 password 타입으로 화면에 안 보이게 입력받음.
                         const myPw = await promptAsync({
@@ -557,19 +583,23 @@ function ScopeBadge({ a }: { a: Account }) {
     return <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-ink-100 text-ink-600">전사</span>;
   }
   if (a.scope === "TEAM") {
-    return <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200">팀 · {a.scopeTeam ?? "-"}</span>;
+    // 배열 우선, 없으면 레거시 단일값.
+    const teams = (a.scopeTeams?.length ? a.scopeTeams : a.scopeTeam ? [a.scopeTeam] : []);
+    const label = teams.length <= 2 ? teams.join(", ") : `${teams[0]} 외 ${teams.length - 1}개`;
+    return <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200">팀 · {label || "-"}</span>;
   }
   // PROJECT
+  const extraCount = Math.max(0, (a.projectIds?.length ?? 0) - 1);
   return (
     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200">
       {a.project?.color && <span className="w-1.5 h-1.5 rounded-full" style={{ background: a.project.color }} />}
-      프로젝트 · {a.project?.name ?? "-"}
+      프로젝트 · {a.project?.name ?? "-"}{extraCount > 0 ? ` 외 ${extraCount}개` : ""}
     </span>
   );
 }
 
 function AccountCard({
-  a, canEdit, onEdit, onDelete, onCopy, onCopyPassword,
+  a, canEdit, onEdit, onDelete, onCopy, onCopyPassword, onToggleActive,
 }: {
   a: Account;
   canEdit: boolean;
@@ -577,6 +607,7 @@ function AccountCard({
   onDelete: () => void;
   onCopy: () => void;
   onCopyPassword: () => void;
+  onToggleActive: () => void;
 }) {
   const meta = CATEGORY_META[a.category];
   // 아이콘 해상 순서:
@@ -591,38 +622,65 @@ function AccountCard({
     ? a.iconUrl || (host ? `https://www.google.com/s2/favicons?domain=${host}&sz=64` : null)
     : null;
   return (
-    <div className="panel p-4">
+    <div className={`panel p-4 relative transition-opacity ${a.active ? "" : "opacity-60"}`}>
       <div className="flex items-start gap-3">
+        {/* 앱 아이콘 스타일 — iOS 스퀘어클 느낌의 둥근 모서리 + 미묘한 그라데이션/섀도우.
+             이미지는 컨테이너를 꽉 채워 앱 로고처럼 바로 눈에 띄게 한다. */}
         <div
-          className="w-9 h-9 rounded-xl grid place-items-center flex-shrink-0 overflow-hidden"
-          style={{ background: iconSrc ? "#F8F8FA" : meta.color, color: "#fff" }}
+          className="w-10 h-10 grid place-items-center flex-shrink-0 overflow-hidden ring-1 ring-black/5 shadow-sm"
+          style={{
+            borderRadius: "22%",
+            background: iconSrc
+              ? "linear-gradient(180deg, #FFFFFF 0%, #F3F4F7 100%)"
+              : `linear-gradient(180deg, ${meta.color} 0%, ${meta.color}dd 100%)`,
+            color: "#fff",
+          }}
         >
           {iconSrc ? (
             <img
               src={iconSrc}
               alt=""
-              width={28}
-              height={28}
-              className="w-7 h-7 object-contain"
+              className="w-full h-full object-cover"
               loading="lazy"
               referrerPolicy="no-referrer"
               onError={() => setIconErr(true)}
             />
           ) : (
-            <span className="text-base leading-none">{meta.emoji}</span>
+            <span className="text-lg leading-none">{meta.emoji}</span>
           )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <div className="text-[14px] font-extrabold text-ink-900 truncate">{a.serviceName}</div>
-              <div className="flex items-center gap-1.5 mt-0.5">
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                 <span className="text-[11px] text-ink-500">{meta.label}</span>
                 <ScopeBadge a={a} />
+                {!a.active && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-ink-100 text-ink-500 border border-ink-200">
+                    비활성
+                  </span>
+                )}
               </div>
             </div>
             {canEdit && (
               <div className="flex items-center gap-1 flex-shrink-0">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={a.active}
+                  onClick={onToggleActive}
+                  title={a.active ? "비활성화" : "활성화"}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                    a.active ? "bg-brand-600" : "bg-ink-300"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                      a.active ? "translate-x-[18px]" : "translate-x-0.5"
+                    }`}
+                  />
+                </button>
                 <button className="btn-ghost !px-2 !py-1 text-[11px]" onClick={onEdit} title="편집">편집</button>
                 <button className="btn-ghost !px-2 !py-1 text-[11px] text-danger" onClick={onDelete} title="삭제">삭제</button>
               </div>
@@ -687,6 +745,108 @@ function AccountCard({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** 팀 공유 다중 편집기 — 칩 + 입력창 + "+" 버튼. Enter/쉼표로도 추가. */
+function MultiTeamEditor({
+  teams, myTeam, onChange,
+}: {
+  teams: string[];
+  myTeam: string;
+  onChange: (next: string[]) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  function add(raw: string) {
+    const t = raw.trim();
+    if (!t) return;
+    if (teams.includes(t)) return;
+    onChange([...teams, t]);
+    setDraft("");
+  }
+  function remove(t: string) {
+    onChange(teams.filter((x) => x !== t));
+  }
+  return (
+    <div className="mt-1 flex flex-col gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {teams.map((t) => (
+          <span key={t} className="inline-flex items-center gap-1 rounded-full bg-brand-50 border border-brand-200 text-brand-800 text-[11px] font-semibold px-2 py-0.5">
+            {t}
+            <button type="button" onClick={() => remove(t)} className="text-brand-600 hover:text-brand-900" aria-label={`${t} 제거`}>×</button>
+          </span>
+        ))}
+        {teams.length === 0 && <span className="text-[11px] text-ink-400">아직 추가된 팀이 없어요.</span>}
+      </div>
+      <div className="flex items-center gap-1.5">
+        <input
+          className="input flex-1"
+          placeholder={myTeam ? `예: ${myTeam}` : "팀 이름"}
+          value={draft}
+          maxLength={80}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === ",") {
+              e.preventDefault();
+              add(draft);
+            } else if (e.key === "Backspace" && !draft && teams.length > 0) {
+              // 입력란이 비어있을 때 백스페이스로 마지막 칩 제거.
+              onChange(teams.slice(0, -1));
+            }
+          }}
+        />
+        <button type="button" className="btn-ghost !px-2.5 !py-1.5 text-[11px] font-bold" onClick={() => add(draft)}>
+          + 추가
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** 프로젝트 공유 다중 편집기 — 선택된 프로젝트는 칩, 나머지는 드롭다운으로 추가. */
+function MultiProjectEditor({
+  selected, projects, onChange,
+}: {
+  selected: string[];
+  projects: ProjectChip[];
+  onChange: (next: string[]) => void;
+}) {
+  const available = projects.filter((p) => !selected.includes(p.id));
+  function add(id: string) {
+    if (!id || selected.includes(id)) return;
+    onChange([...selected, id]);
+  }
+  function remove(id: string) {
+    onChange(selected.filter((x) => x !== id));
+  }
+  const selectedChips = selected
+    .map((id) => projects.find((p) => p.id === id))
+    .filter(Boolean) as ProjectChip[];
+  return (
+    <div className="mt-1 flex flex-col gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {selectedChips.map((p) => (
+          <span key={p.id} className="inline-flex items-center gap-1 rounded-full border text-[11px] font-semibold px-2 py-0.5" style={{ background: `${p.color}18`, borderColor: `${p.color}55`, color: p.color }}>
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: p.color }} />
+            {p.name}
+            <button type="button" onClick={() => remove(p.id)} className="hover:opacity-70" aria-label={`${p.name} 제거`}>×</button>
+          </span>
+        ))}
+        {selectedChips.length === 0 && <span className="text-[11px] text-ink-400">아직 선택된 프로젝트가 없어요.</span>}
+      </div>
+      {available.length > 0 && (
+        <select
+          className="input"
+          value=""
+          onChange={(e) => { add(e.target.value); e.currentTarget.value = ""; }}
+        >
+          <option value="">+ 프로젝트 추가…</option>
+          {available.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+      )}
     </div>
   );
 }
@@ -799,7 +959,14 @@ function AccountModal({
                 <button
                   type="button"
                   key={o.v}
-                  onClick={() => setForm({ ...form, scope: o.v, scopeTeam: o.v === "TEAM" && !form.scopeTeam ? myTeam : form.scopeTeam })}
+                  onClick={() => setForm({
+                    ...form,
+                    scope: o.v,
+                    // TEAM 처음 선택 시 내 팀을 기본값으로 세팅. 이미 채워져 있으면 유지.
+                    scopeTeams: o.v === "TEAM" && form.scopeTeams.length === 0 && myTeam
+                      ? [myTeam]
+                      : form.scopeTeams,
+                  })}
                   className={`rounded-xl border px-2.5 py-2 text-left transition-all ${
                     form.scope === o.v
                       ? "border-brand-600 bg-brand-50 ring-1 ring-brand-300"
@@ -812,25 +979,18 @@ function AccountModal({
               ))}
             </div>
             {form.scope === "TEAM" && (
-              <input
-                className="input mt-1"
-                placeholder={myTeam ? `예: ${myTeam}` : "팀 이름"}
-                value={form.scopeTeam}
-                maxLength={80}
-                onChange={(e) => setForm({ ...form, scopeTeam: e.target.value })}
+              <MultiTeamEditor
+                teams={form.scopeTeams}
+                myTeam={myTeam}
+                onChange={(next) => setForm({ ...form, scopeTeams: next })}
               />
             )}
             {form.scope === "PROJECT" && (
-              <select
-                className="input mt-1"
-                value={form.scopeProjectId}
-                onChange={(e) => setForm({ ...form, scopeProjectId: e.target.value })}
-              >
-                <option value="">프로젝트 선택…</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+              <MultiProjectEditor
+                selected={form.scopeProjectIds}
+                projects={projects}
+                onChange={(next) => setForm({ ...form, scopeProjectIds: next })}
+              />
             )}
           </div>
 
@@ -902,13 +1062,19 @@ function AccountModal({
             <span className="text-[11px] font-bold text-ink-500">로고</span>
             <div className="flex items-center gap-2">
               <div
-                className="w-11 h-11 rounded-xl grid place-items-center flex-shrink-0 overflow-hidden border border-ink-150"
-                style={{ background: previewSrc ? "#F8F8FA" : CATEGORY_META[form.category].color, color: "#fff" }}
+                className="w-12 h-12 grid place-items-center flex-shrink-0 overflow-hidden ring-1 ring-black/5 shadow-sm"
+                style={{
+                  borderRadius: "22%",
+                  background: previewSrc
+                    ? "linear-gradient(180deg, #FFFFFF 0%, #F3F4F7 100%)"
+                    : `linear-gradient(180deg, ${CATEGORY_META[form.category].color} 0%, ${CATEGORY_META[form.category].color}dd 100%)`,
+                  color: "#fff",
+                }}
               >
                 {previewSrc ? (
-                  <img src={previewSrc} alt="" className="w-9 h-9 object-contain" referrerPolicy="no-referrer" />
+                  <img src={previewSrc} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 ) : (
-                  <span className="text-lg leading-none">{CATEGORY_META[form.category].emoji}</span>
+                  <span className="text-xl leading-none">{CATEGORY_META[form.category].emoji}</span>
                 )}
               </div>
               <div className="flex-1 min-w-0">

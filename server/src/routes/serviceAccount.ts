@@ -41,9 +41,15 @@ const baseSchema = z.object({
   notes: z.string().max(2000).optional().nullable(),
   scope: z.enum(SCOPES).optional().default("ALL"),
   scopeTeam: z.string().trim().max(80).optional().nullable(),
+  // 다중 팀 공유 — "내 팀 + 다른 팀들" 형태. scopeTeam 은 레거시/대표값으로 배열의 첫 요소와 동기화한다.
+  scopeTeams: z.array(z.string().trim().min(1).max(80)).optional(),
   projectId: z.string().optional().nullable(),
+  // 다중 프로젝트 공유 — 대표값(projectId) 외에 추가 공유 프로젝트 id 목록.
+  projectIds: z.array(z.string().min(1)).optional(),
   ownerUserId: z.string().optional().nullable(),
   ownerName: z.string().trim().max(80).optional().nullable(),
+  // 활성 여부 — 기본 true. 해지/만료된 계정을 삭제 없이 비활성으로 남겨 기록 보존.
+  active: z.boolean().optional(),
   // 평문 비밀번호 — 서버에서 즉시 암호화해 passwordEnc 에만 저장.
   // null 로 보내면 기존 저장된 값 삭제, undefined 면 변경 없음(PATCH).
   password: z.string().max(512).nullable().optional(),
@@ -79,10 +85,17 @@ async function visibleWhere(user: { id: string; role?: string; superAdmin?: bool
     { createdById: user.id },
   ];
   if (user.team) {
-    conditions.push({ scope: "TEAM", scopeTeam: user.team });
+    // scope=TEAM 중 단일값(scopeTeam) 일치 OR 배열(scopeTeams) 포함
+    conditions.push({ scope: "TEAM", OR: [{ scopeTeam: user.team }, { scopeTeams: { has: user.team } }] });
   }
   if (projectIds.length > 0) {
-    conditions.push({ scope: "PROJECT", projectId: { in: projectIds } });
+    conditions.push({
+      scope: "PROJECT",
+      OR: [
+        { projectId: { in: projectIds } },
+        { projectIds: { hasSome: projectIds } },
+      ],
+    });
   }
   return { OR: conditions };
 }
@@ -107,13 +120,12 @@ router.get("/", async (req, res) => {
     where.AND = [{ OR: where.OR }].filter(() => !!where.OR);
     delete where.OR;
     where.AND.push({ scope });
-    if (scope === "TEAM" && scopeTeam) where.AND.push({ scopeTeam });
-    if (scope === "PROJECT" && projectId) where.AND.push({ projectId });
+    if (scope === "TEAM" && scopeTeam) where.AND.push({ OR: [{ scopeTeam }, { scopeTeams: { has: scopeTeam } }] });
+    if (scope === "PROJECT" && projectId) where.AND.push({ OR: [{ projectId }, { projectIds: { has: projectId } }] });
   } else if (projectId) {
-    // scope 필터 없이 projectId 만 — PROJECT 스코프 중 이 프로젝트
     where.AND = [{ OR: where.OR }].filter(() => !!where.OR);
     delete where.OR;
-    where.AND.push({ scope: "PROJECT", projectId });
+    where.AND.push({ scope: "PROJECT", OR: [{ projectId }, { projectIds: { has: projectId } }] });
   }
 
   if (q) {
@@ -203,29 +215,28 @@ router.get("/projects", async (req, res) => {
 });
 
 async function validateScope(
-  user: { id: string; role?: string; superAdmin?: boolean; team?: string | null },
-  input: { scope?: string; scopeTeam?: string | null; projectId?: string | null },
+  _user: { id: string; role?: string; superAdmin?: boolean; team?: string | null },
+  input: { scope?: string; scopeTeam?: string | null; scopeTeams?: string[]; projectId?: string | null; projectIds?: string[] },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const scope = input.scope ?? "ALL";
   if (scope === "ALL") return { ok: true };
   if (scope === "TEAM") {
-    if (!input.scopeTeam) return { ok: false, error: "팀 이름을 지정해주세요." };
-    // ADMIN 은 모든 팀 지정 가능. 일반 사용자는 본인 팀만.
-    if (!isAdmin(user) && user.team !== input.scopeTeam) {
-      return { ok: false, error: "본인 팀으로만 공개할 수 있어요." };
-    }
+    const teams = [
+      ...(input.scopeTeam ? [input.scopeTeam] : []),
+      ...((input.scopeTeams ?? []).filter(Boolean)),
+    ];
+    if (teams.length === 0) return { ok: false, error: "팀을 하나 이상 지정해주세요." };
+    // "페이지를 볼 수 있는 사람 = 공유 대상 지정 가능" 원칙 — 팀 이름 자유 입력 허용.
     return { ok: true };
   }
   if (scope === "PROJECT") {
-    if (!input.projectId) return { ok: false, error: "프로젝트를 지정해주세요." };
-    const project = await prisma.project.findUnique({
-      where: { id: input.projectId },
-      select: { id: true, members: { where: { userId: user.id }, select: { id: true } } },
-    });
-    if (!project) return { ok: false, error: "프로젝트를 찾을 수 없어요." };
-    if (!isAdmin(user) && project.members.length === 0) {
-      return { ok: false, error: "해당 프로젝트의 멤버가 아니에요." };
-    }
+    const ids = [
+      ...(input.projectId ? [input.projectId] : []),
+      ...((input.projectIds ?? []).filter(Boolean)),
+    ];
+    if (ids.length === 0) return { ok: false, error: "프로젝트를 하나 이상 지정해주세요." };
+    const found = await prisma.project.findMany({ where: { id: { in: ids } }, select: { id: true } });
+    if (found.length !== ids.length) return { ok: false, error: "선택한 프로젝트 중 일부를 찾을 수 없어요." };
     return { ok: true };
   }
   return { ok: false, error: "알 수 없는 공개 범위에요." };
@@ -262,6 +273,17 @@ router.post("/", async (req, res) => {
   }
 
   const scope = input.scope ?? "ALL";
+  // 다중 범위 정규화:
+  //  - scopeTeam 단일값 + scopeTeams 배열을 합쳐 중복 제거, 공백 제거.
+  //  - 대표값(scopeTeam / projectId)은 배열의 첫 요소로 세팅 — 레거시 UI/쿼리 호환.
+  const teamsAll = Array.from(new Set(
+    [input.scopeTeam, ...(input.scopeTeams ?? [])].map((s) => (s ?? "").trim()).filter(Boolean)
+  ));
+  const projAll = Array.from(new Set(
+    [input.projectId, ...(input.projectIds ?? [])].map((s) => s ?? "").filter(Boolean)
+  ));
+  const primaryTeam = scope === "TEAM" ? (teamsAll[0] ?? null) : null;
+  const primaryProject = scope === "PROJECT" ? (projAll[0] ?? null) : null;
   const row = await prisma.serviceAccount.create({
     data: {
       serviceName: input.serviceName,
@@ -269,10 +291,13 @@ router.post("/", async (req, res) => {
       loginId: input.loginId || null,
       url,
       iconUrl: input.iconUrl === "" ? null : input.iconUrl ?? null,
+      active: input.active ?? true,
       notes: input.notes || null,
       scope,
-      scopeTeam: scope === "TEAM" ? (input.scopeTeam || null) : null,
-      projectId: scope === "PROJECT" ? (input.projectId || null) : null,
+      scopeTeam: primaryTeam,
+      scopeTeams: scope === "TEAM" ? teamsAll : [],
+      projectId: primaryProject,
+      projectIds: scope === "PROJECT" ? projAll : [],
       ownerUserId,
       ownerName: input.ownerName || null,
       passwordEnc,
@@ -299,7 +324,7 @@ router.patch("/:id", async (req, res) => {
 
   const existing = await prisma.serviceAccount.findUnique({
     where: { id },
-    select: { id: true, createdById: true, scope: true, scopeTeam: true, projectId: true },
+    select: { id: true, createdById: true, scope: true, scopeTeam: true, scopeTeams: true, projectId: true, projectIds: true },
   });
   if (!existing) return res.status(404).json({ error: "존재하지 않는 계정이에요." });
   if (!canEdit(user, existing)) {
@@ -310,10 +335,27 @@ router.patch("/:id", async (req, res) => {
 
   // scope 변경 검증 — 변경 시 (또는 스코프 관련 필드 변경 시) 유효성 체크
   const nextScope = input.scope ?? existing.scope;
-  const nextScopeTeam = input.scopeTeam !== undefined ? input.scopeTeam : existing.scopeTeam;
+  const nextScopeTeams = input.scopeTeams !== undefined
+    ? input.scopeTeams
+    : existing.scopeTeams ?? [];
+  const nextScopeTeam = input.scopeTeam !== undefined
+    ? input.scopeTeam
+    : existing.scopeTeam;
+  const nextProjectIds = input.projectIds !== undefined
+    ? input.projectIds
+    : existing.projectIds ?? [];
   const nextProjectId = input.projectId !== undefined ? input.projectId : existing.projectId;
-  if (input.scope !== undefined || input.scopeTeam !== undefined || input.projectId !== undefined) {
-    const check = await validateScope(user, { scope: nextScope, scopeTeam: nextScopeTeam, projectId: nextProjectId });
+  const scopeRelatedChanged =
+    input.scope !== undefined || input.scopeTeam !== undefined || input.scopeTeams !== undefined ||
+    input.projectId !== undefined || input.projectIds !== undefined;
+  if (scopeRelatedChanged) {
+    const check = await validateScope(user, {
+      scope: nextScope,
+      scopeTeam: nextScopeTeam,
+      scopeTeams: nextScopeTeams,
+      projectId: nextProjectId,
+      projectIds: nextProjectIds,
+    });
     if (!check.ok) return res.status(400).json({ error: check.error });
   }
 
@@ -323,6 +365,7 @@ router.patch("/:id", async (req, res) => {
   if (input.loginId !== undefined) data.loginId = input.loginId || null;
   if (input.url !== undefined) data.url = input.url === "" ? null : input.url;
   if (input.iconUrl !== undefined) data.iconUrl = input.iconUrl === "" ? null : input.iconUrl;
+  if (input.active !== undefined) data.active = input.active;
   if (input.notes !== undefined) data.notes = input.notes || null;
   if (input.ownerName !== undefined) data.ownerName = input.ownerName || null;
   if (input.ownerUserId !== undefined) {
@@ -333,10 +376,18 @@ router.patch("/:id", async (req, res) => {
     }
     data.ownerUserId = next;
   }
-  if (input.scope !== undefined || input.scopeTeam !== undefined || input.projectId !== undefined) {
+  if (scopeRelatedChanged) {
+    const teamsAll = Array.from(new Set(
+      [nextScopeTeam, ...(nextScopeTeams ?? [])].map((s) => (s ?? "").trim()).filter(Boolean)
+    ));
+    const projAll = Array.from(new Set(
+      [nextProjectId, ...(nextProjectIds ?? [])].map((s) => s ?? "").filter(Boolean)
+    ));
     data.scope = nextScope;
-    data.scopeTeam = nextScope === "TEAM" ? (nextScopeTeam || null) : null;
-    data.projectId = nextScope === "PROJECT" ? (nextProjectId || null) : null;
+    data.scopeTeam = nextScope === "TEAM" ? (teamsAll[0] ?? null) : null;
+    data.scopeTeams = nextScope === "TEAM" ? teamsAll : [];
+    data.projectId = nextScope === "PROJECT" ? (projAll[0] ?? null) : null;
+    data.projectIds = nextScope === "PROJECT" ? projAll : [];
   }
   // 비밀번호 — undefined 면 변경 없음, null/빈 문자열은 제거, 값이 있으면 암호화.
   if (input.password !== undefined) {
