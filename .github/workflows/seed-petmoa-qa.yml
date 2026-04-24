@@ -56,7 +56,9 @@ jobs:
           \`;
           fs.writeFileSync('seed.cjs', script);
           "
-          B64=$(base64 -w0 seed.cjs)
+          gzip -9 -c seed.cjs | base64 -w0 > seed.gz.b64
+          echo "bytes: $(wc -c < seed.gz.b64)"
+          B64=$(cat seed.gz.b64)
           echo "b64=$B64" >> $GITHUB_OUTPUT
 
       - name: Run one-off seed task via ECS RunTask
@@ -72,7 +74,7 @@ jobs:
           OVERRIDES=$(jq -cn --arg c "$CONTAINER" --arg b "$SEED_B64" '{
             containerOverrides: [{
               name: $c,
-              command: ["sh","-c", "echo \($b) | base64 -d > /tmp/seed.cjs && node /tmp/seed.cjs"]
+              command: ["sh","-c", "echo \($b) | base64 -d | gunzip > /tmp/seed.cjs && node /tmp/seed.cjs"]
             }]
           }')
           echo "Overrides prepared"
