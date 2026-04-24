@@ -31,6 +31,7 @@ type QaItem = {
   status: Status;
   priority: Priority;
   sortOrder: number;
+  dueDate: string | null;
   createdAt: string;
   updatedAt: string;
   resolvedAt: string | null;
@@ -122,6 +123,37 @@ function formatRelative(iso: string): string {
   if (d < 7) return `${d}일 전`;
   const dt = new Date(then);
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * 마감기한 뱃지 — 오늘/내일/N일 남음 또는 N일 지남 형태로 표시.
+ * DONE 상태면 색상 강조를 빼서 이미 처리된 항목이 시선을 끌지 않게.
+ */
+function DueDateBadge({ dueDate, done }: { dueDate: string; done: boolean }) {
+  const d = new Date(dueDate);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diffDays = Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  let label: string;
+  if (diffDays === 0) label = "오늘";
+  else if (diffDays === 1) label = "내일";
+  else if (diffDays > 0) label = `${diffDays}일 남음`;
+  else label = `${Math.abs(diffDays)}일 지남`;
+  const overdue = diffDays < 0 && !done;
+  const today0 = diffDays === 0 && !done;
+  return (
+    <span
+      className={[
+        "shrink-0 inline-flex items-center gap-0.5",
+        overdue ? "text-red-600 font-semibold" : today0 ? "text-orange-600 font-semibold" : "text-ink-400",
+      ].join(" ")}
+      title={`마감: ${d.toLocaleDateString("ko-KR")}`}
+    >
+      <span aria-hidden>📅</span>
+      <span>{label}</span>
+    </span>
+  );
 }
 
 function humanSize(bytes: number) {
@@ -657,7 +689,7 @@ function QaRow({
   members: Member[];
   expanded: boolean;
   onToggleExpand: () => void;
-  onPatch: (patch: Partial<Pick<QaItem, "status" | "priority" | "title" | "note" | "screen" | "platform" | "assigneeId">>) => void;
+  onPatch: (patch: Partial<Pick<QaItem, "status" | "priority" | "title" | "note" | "screen" | "platform" | "assigneeId" | "dueDate">>) => void;
   onDelete: () => void;
   onAddAttachment: (files: FileList | null) => void;
   onRemoveAttachment: (attachmentId: string) => void;
@@ -787,6 +819,13 @@ function QaRow({
                 <span className="shrink-0" title={new Date(item.createdAt).toLocaleString("ko-KR")}>
                   {formatRelative(item.createdAt)}
                 </span>
+              )}
+              {item.dueDate && (
+                <>
+                  <span>·</span>
+                  {/* 마감기한 — 오늘 이후면 회색, 지났거나 오늘이면 빨간색 강조. */}
+                  <DueDateBadge dueDate={item.dueDate} done={item.status === "DONE"} />
+                </>
               )}
             </div>
           )}
@@ -948,6 +987,19 @@ function QaRow({
                 value={item.assigneeId}
                 members={members}
                 onChange={(v) => onPatch({ assigneeId: v })}
+              />
+            </PropertyRow>
+            <PropertyRow label="마감기한">
+              {/* <input type="date"> 는 YYYY-MM-DD 만 주므로 서버 전송 시 자정 UTC ISO 로 변환.
+                  빈 값은 null 로 보내 해지. */}
+              <input
+                type="date"
+                className="input w-full text-[13px] py-1"
+                value={item.dueDate ? item.dueDate.slice(0, 10) : ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  onPatch({ dueDate: v ? new Date(v + "T00:00:00.000Z").toISOString() : null });
+                }}
               />
             </PropertyRow>
             <PropertyRow label="화면" wide>

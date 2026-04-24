@@ -494,6 +494,8 @@ const qaPatchSchema = z.object({
   priority: z.enum(QA_PRIORITY).optional(),
   status: z.enum(QA_STATUS).optional(),
   sortOrder: z.number().int().min(0).max(1_000_000).optional(),
+  // null 은 해지, ISO 문자열은 설정.
+  dueDate: z.string().datetime().optional().nullable(),
 });
 
 router.patch("/:id/qa/:itemId", async (req, res) => {
@@ -542,6 +544,7 @@ router.patch("/:id/qa/:itemId", async (req, res) => {
       ...("platform" in d ? { platform: d.platform ?? null } : {}),
       ...("priority" in d ? { priority: d.priority! } : {}),
       ...("sortOrder" in d ? { sortOrder: d.sortOrder! } : {}),
+      ...("dueDate" in d ? { dueDate: d.dueDate ? new Date(d.dueDate) : null } : {}),
       ...assigneePatch,
       ...statusPatch,
     },
