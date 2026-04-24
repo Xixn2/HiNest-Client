@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, apiSWR } from "../api";
 import { alertAsync, confirmAsync } from "./ConfirmHost";
+import DatePicker from "./DatePicker";
 
 type Status = "BUG" | "IN_PROGRESS" | "NEEDS_FIX" | "NEEDS_TEST" | "DONE" | "ON_HOLD";
 type Priority = "LOW" | "NORMAL" | "HIGH";
@@ -283,9 +284,16 @@ export default function ProjectQaList({
       };
       setItems((prev) => [...prev, newItem]);
       setQuickTitle("");
-      // 빠른 연속 입력 UX — 방금 만든 항목을 자동 확장하지 않고,
-      // 입력창에 포커스를 유지해서 다음 항목 제목을 바로 이어 칠 수 있게.
-      quickInputRef.current?.focus();
+      // 엔터로 추가하면 방금 만든 항목을 자동 확장하고 제목 입력창으로 포커스를 옮긴다.
+      setExpandedId(newItem.id);
+      // 다음 렌더 타이밍에 DOM 이 붙으면 data-qa-title-input 을 찾아 포커스.
+      requestAnimationFrame(() => {
+        const el = document.querySelector<HTMLInputElement>(
+          `input[data-qa-title-input="${newItem.id}"]`,
+        );
+        el?.focus();
+        el?.select();
+      });
     } catch (err: any) {
       await alertAsync({ title: "추가 실패", description: err?.message ?? "추가에 실패했어요" });
     } finally {
@@ -759,6 +767,8 @@ function QaRow({
               autoComplete="off"
               autoCorrect="off"
               autoCapitalize="off"
+              /* 새로 만든 항목을 엔터 직후 자동 포커스/선택하기 위한 훅 */
+              data-qa-title-input={item.id}
             />
             {/* 메모/첨부 개수 뱃지 — 있으면 행에서 바로 보이게.
                 OS 네이티브 📝/📎 이모지는 컬러풀해서 미니멀 UI 와 톤이 안 맞아
@@ -984,14 +994,13 @@ function QaRow({
               />
             </PropertyRow>
             <PropertyRow label="마감기한">
-              {/* <input type="date"> 는 YYYY-MM-DD 만 주므로 서버 전송 시 자정 UTC ISO 로 변환.
-                  빈 값은 null 로 보내 해지. */}
-              <input
-                type="date"
-                className="input w-full text-[13px] py-1"
+              {/* 프로젝트 공통 DatePicker 사용 — 값은 "YYYY-MM-DD" 로 주고받고,
+                  서버 전송 시 자정 UTC ISO 로 변환. 빈 값은 null 로 보내 해지. */}
+              <DatePicker
+                variant="input"
                 value={item.dueDate ? item.dueDate.slice(0, 10) : ""}
-                onChange={(e) => {
-                  const v = e.target.value;
+                placeholder="마감기한 선택"
+                onChange={(v) => {
                   onPatch({ dueDate: v ? new Date(v + "T00:00:00.000Z").toISOString() : null });
                 }}
               />
