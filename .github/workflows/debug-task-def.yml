@@ -1,0 +1,46 @@
+# 태스크 정의 상태 진단 — ACCOUNT_ENC_KEY 가 실제로 컨테이너에 주입되는지 확인.
+name: Debug task def env
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::149536482210:role/github-deploy-hinest
+          role-session-name: gha-debug-${{ github.run_id }}
+          aws-region: ap-northeast-2
+
+      - name: Describe service + latest task def
+        run: |
+          echo "=== 서비스가 현재 사용하는 taskDefinition ==="
+          TD_IN_SVC=$(aws ecs describe-services \
+            --cluster hinest-prod --services hinest-server \
+            --query 'services[0].taskDefinition' --output text)
+          echo "$TD_IN_SVC"
+
+          echo "=== 해당 태스크 정의 컨테이너 이름 & env 키 목록 ==="
+          aws ecs describe-task-definition \
+            --task-definition "$TD_IN_SVC" \
+            --query 'taskDefinition.containerDefinitions[].{name:name, envKeys:environment[].name, secretKeys:secrets[].name}' \
+            --output json
+
+          echo "=== family hinest-server 최신 리비전 ==="
+          aws ecs describe-task-definition \
+            --task-definition hinest-server \
+            --query 'taskDefinition.{arn:taskDefinitionArn, envKeys:containerDefinitions[0].environment[].name}' \
+            --output json
+
+          echo "=== 실행 중인 태스크들이 쓰는 리비전 ==="
+          TASKS=$(aws ecs list-tasks --cluster hinest-prod --service-name hinest-server --query 'taskArns' --output text)
+          if [ -n "$TASKS" ]; then
+            aws ecs describe-tasks --cluster hinest-prod --tasks $TASKS \
+              --query 'tasks[].{td:taskDefinitionArn, status:lastStatus, health:healthStatus}' --output json
+          fi
