@@ -585,19 +585,21 @@ export default function ServiceAccountsPage() {
 }
 
 function ScopeBadge({ a }: { a: Account }) {
+  // 라이트/다크 겸용 — 다크에선 토널한 배경(색상/10~15% 알파)으로 자연스럽게 녹아들게.
+  //   bg-*-50 은 다크 모드에선 눈에 거슬리게 튀어서 dark: 변종으로 톤 다운.
+  const base = "inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold border";
   if (a.scope === "ALL") {
-    return <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-ink-100 text-ink-600">전사</span>;
+    return <span className={`${base} bg-ink-100 text-ink-600 border-ink-200 dark:bg-white/5 dark:text-ink-300 dark:border-white/10`}>전사</span>;
   }
   if (a.scope === "TEAM") {
-    // 배열 우선, 없으면 레거시 단일값.
     const teams = (a.scopeTeams?.length ? a.scopeTeams : a.scopeTeam ? [a.scopeTeam] : []);
     const label = teams.length <= 2 ? teams.join(", ") : `${teams[0]} 외 ${teams.length - 1}개`;
-    return <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200">팀 · {label || "-"}</span>;
+    return <span className={`${base} bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-400/10 dark:text-sky-300 dark:border-sky-400/20`}>팀 · {label || "-"}</span>;
   }
   // PROJECT
   const extraCount = Math.max(0, (a.projectIds?.length ?? 0) - 1);
   return (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200">
+    <span className={`${base} gap-1 bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-400/10 dark:text-violet-300 dark:border-violet-400/20`}>
       {a.project?.color && <span className="w-1.5 h-1.5 rounded-full" style={{ background: a.project.color }} />}
       프로젝트 · {a.project?.name ?? "-"}{extraCount > 0 ? ` 외 ${extraCount}개` : ""}
     </span>
@@ -782,9 +784,9 @@ function MultiTeamEditor({
     <div className="mt-1 flex flex-col gap-1.5">
       <div className="flex flex-wrap items-center gap-1.5">
         {teams.map((t) => (
-          <span key={t} className="inline-flex items-center gap-1 rounded-full bg-brand-50 border border-brand-200 text-brand-800 text-[11px] font-semibold px-2 py-0.5">
+          <span key={t} className="inline-flex items-center gap-1 rounded-full border text-[11px] font-semibold px-2 py-0.5 bg-brand-50 border-brand-200 text-brand-800 dark:bg-brand-500/15 dark:border-brand-400/30 dark:text-brand-200">
             {t}
-            <button type="button" onClick={() => remove(t)} className="text-brand-600 hover:text-brand-900" aria-label={`${t} 제거`}>×</button>
+            <button type="button" onClick={() => remove(t)} className="text-brand-600 hover:text-brand-900 dark:text-brand-300 dark:hover:text-brand-100" aria-label={`${t} 제거`}>×</button>
           </span>
         ))}
         {teams.length === 0 && <span className="text-[11px] text-ink-400">아직 추가된 팀이 없어요.</span>}
