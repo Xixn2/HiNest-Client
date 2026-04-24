@@ -6,6 +6,7 @@ import PageHeader from "../components/PageHeader";
 import MonthPicker from "../components/MonthPicker";
 import DateTimePicker from "../components/DateTimePicker";
 import { confirmAsync, alertAsync } from "../components/ConfirmHost";
+import { useModalDismiss } from "../lib/useModalDismiss";
 
 type Expense = {
   id: string;
@@ -61,6 +62,10 @@ export default function ExpensePage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // 모달들: Esc 로 닫기 + 배경 스크롤 잠금.
+  // 저장 중엔 실수로 닫히지 않도록 saving 체크.
+  useModalDismiss(open && !saving, () => setOpen(false));
+  useModalDismiss(preview !== null, () => setPreview(null));
 
   async function load(aliveRef?: { current: boolean }) {
     const q = new URLSearchParams();
