@@ -638,7 +638,7 @@ export default function ProjectQaList({
           {/* ===== 퀵 추가 행 — Notion 의 "+ 새로 만들기" 모방 ===== */}
           <form
             onSubmit={quickCreate}
-            className="flex items-center gap-2 px-2 py-2 border-t border-ink-100 hover:bg-ink-25 transition-colors"
+            className="flex items-center gap-2 px-2 py-2 border-t border-ink-100 hover:bg-black/[0.03] dark:hover:bg-white/[0.04] transition-colors"
           >
             <span className="text-ink-400" style={{ fontSize: 16, width: 16 }}>
               +
@@ -715,7 +715,7 @@ function QaRow({
       {/* 모바일: 제목줄만 grid 3칼럼 (dot | 제목 | 삭제), 속성은 아래에 flex-wrap */}
       {/* 데스크톱: 풀 Notion 테이블 레이아웃 */}
       <div
-        className="qa-row-grid items-center gap-2 px-2 py-2 hover:bg-ink-25 transition-colors cursor-pointer"
+        className="qa-row-grid items-center gap-2 px-2 py-2 hover:bg-black/[0.03] dark:hover:bg-white/[0.04] transition-colors cursor-pointer"
         onClick={(e) => {
           // 내부 인터랙티브 요소 클릭 시 토글이 덮어쓰지 않도록.
           const t = e.target as HTMLElement;
@@ -740,7 +740,7 @@ function QaRow({
           <div className="flex items-center gap-2">
             <input
               className={[
-                "flex-1 min-w-0 bg-transparent outline-none text-[13.5px] font-medium text-ink-900 truncate hover:bg-ink-25 rounded px-1 py-0.5 focus:bg-ink-25",
+                "flex-1 min-w-0 bg-transparent outline-none text-[13.5px] font-medium text-ink-900 truncate rounded px-1 py-0.5 hover:bg-black/[0.04] focus:bg-black/[0.04] dark:hover:bg-white/[0.06] dark:focus:bg-white/[0.06]",
                 item.status === "DONE" ? "line-through decoration-ink-400" : "",
               ].join(" ")}
               value={titleDraft}
@@ -957,7 +957,7 @@ function QaRow({
 
       {/* ---------- 펼친 상세 편집 ---------- */}
       {expanded && (
-        <div className="px-3 sm:px-4 pb-4 pt-1 bg-ink-25 border-t border-ink-100 flex flex-col gap-3">
+        <div className="px-3 sm:px-4 pb-4 pt-1 bg-black/[0.02] dark:bg-white/[0.03] border-t border-ink-100 flex flex-col gap-3">
           {/* 속성 그리드 — Notion 페이지 상단 Properties 영역 */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 pt-3">
             <PropertyRow label="우선순위">
