@@ -113,6 +113,7 @@ model Project {
   qaItems        ProjectQaItem[]
   // 전사 캘린더(Event) 중 이 프로젝트 범위로 공유된 일정
   scheduleEvents Event[]
+  serviceAccounts ServiceAccount[] @relation("ProjectServiceAccounts")
 }
 
 /// 프로젝트별 QA(테스트) 체크리스트 — "무엇을 검증했고 결과가 어땠는지" 남기는 용도.
@@ -810,6 +811,11 @@ model ServiceAccount {
   loginId     String? // 로그인 이메일 또는 사용자명
   url         String? // 콘솔/대시보드 URL
   notes       String? // 접근 방법, MFA 사용 여부 등 자유 메모 (비밀번호 금지)
+  // 공개 범위 — ALL(전사) | TEAM(팀) | PROJECT(프로젝트). 문서/회의록과 일관.
+  scope       String   @default("ALL")
+  scopeTeam   String? // scope=TEAM 일 때 팀 이름
+  projectId   String? // scope=PROJECT 일 때 연결된 프로젝트
+  project     Project? @relation("ProjectServiceAccounts", fields: [projectId], references: [id], onDelete: SetNull)
   // 담당자 — 사용자 연결이 있으면 ownerUserId, 외부 담당자는 ownerName 으로 기록.
   ownerUserId String?
   ownerUser   User?    @relation("ServiceAccountOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
@@ -821,4 +827,6 @@ model ServiceAccount {
 
   @@index([category, serviceName])
   @@index([ownerUserId])
+  @@index([scope, scopeTeam])
+  @@index([projectId])
 }
