@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import { deliverPendingNotifications, markSeen } from "./lib/desktopNotify";
+import { shouldDeliverNotif } from "./lib/notifPrefs";
 
 export type NotifType = "NOTICE" | "DM" | "APPROVAL_REQUEST" | "APPROVAL_REVIEW" | "MENTION" | "SYSTEM";
 
@@ -68,8 +69,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         initialRef.current = false;
         markSeen(unreadItems.map((n) => n.id));
       } else {
+        // 카테고리 토글 / 방별 음소거를 통과한 것만 OS 알림으로.
+        // 가로막힌 항목은 벨/채팅 UI 에는 그대로 들어가지만 OS 토스트는 안 뜸.
+        const allowed = unreadItems.filter((n) => shouldDeliverNotif(n));
         deliverPendingNotifications(
-          unreadItems.map((n) => ({ id: n.id, title: n.title, body: n.body, linkUrl: n.linkUrl }))
+          allowed.map((n) => ({ id: n.id, title: n.title, body: n.body, linkUrl: n.linkUrl }))
         );
       }
     } catch {}
@@ -138,9 +142,15 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             //  같은 유저 세션이 동시에 여러 번 GET /api/notification 치는 문제 → 서버 부하 증가.
             //  30초 주기 poll + visibilitychange poll 으로 서버 기준 재싱크는 이미 커버됨.)
             setItems((prev) => (prev.some((x) => x.id === n.id) ? prev : [n, ...prev]));
-            deliverPendingNotifications([
-              { id: n.id, title: n.title, body: n.body, linkUrl: n.linkUrl },
-            ]);
+            // 동일 가드 — 음소거된 방의 SSE 푸시는 OS 알림 띄우지 않음.
+            if (shouldDeliverNotif(n)) {
+              deliverPendingNotifications([
+                { id: n.id, title: n.title, body: n.body, linkUrl: n.linkUrl },
+              ]);
+            } else {
+              // 가드에 걸린 알림도 "이미 본 것" 으로 마킹해서 reload() 시 재발송 방지.
+              markSeen([n.id]);
+            }
           } catch {}
         });
         // 채팅 실시간 푸시 — ChatMiniApp 이 window 리스너로 수신.
