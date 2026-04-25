@@ -12,6 +12,13 @@ import {
   showDesktopNotification,
   type DesktopNotifPermission,
 } from "../lib/desktopNotify";
+import {
+  NOTIF_CATEGORIES,
+  loadPrefs,
+  setCategoryEnabled,
+  type NotifCategory,
+  type NotifPrefs,
+} from "../lib/notifPrefs";
 
 // 아바타 색상 팔레트.
 // 다크 모드 surface (#17191F 부근) 와 거의 같은 `#17191F` 를 빼고
@@ -438,11 +445,64 @@ function DesktopNotifyPanel() {
               onChange={(e) => onToggle(e.target.checked)}
             />
           </label>
+
+          <NotifCategoryToggles disabled={!enabled} />
+
           <button type="button" className="btn-ghost" onClick={onTest}>
             테스트 알림 보내기
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ===== 카테고리별 알림 토글 — 마스터 ON 일 때만 의미 있음 ===== */
+function NotifCategoryToggles({ disabled }: { disabled: boolean }) {
+  const [prefs, setPrefs] = useState<NotifPrefs>(() => loadPrefs());
+
+  // 다른 탭/창에서 토글이 바뀌면 이 패널도 즉시 따라가게.
+  useEffect(() => {
+    const onChange = () => setPrefs(loadPrefs());
+    window.addEventListener("hinest:notifPrefsChange", onChange);
+    window.addEventListener("storage", onChange); // 다른 탭 동기화
+    return () => {
+      window.removeEventListener("hinest:notifPrefsChange", onChange);
+      window.removeEventListener("storage", onChange);
+    };
+  }, []);
+
+  function toggle(cat: NotifCategory, on: boolean) {
+    setCategoryEnabled(cat, on);
+    setPrefs((p) => ({ ...p, [cat]: on }));
+  }
+
+  return (
+    <div className={`rounded-lg border border-ink-150 overflow-hidden ${disabled ? "opacity-60 pointer-events-none" : ""}`}>
+      <div className="px-3 py-2 bg-ink-25 border-b border-ink-150 flex items-center justify-between">
+        <div className="text-[12px] font-bold text-ink-700">카테고리별 알림</div>
+        <div className="text-[11px] text-ink-500">사내톡 메시지·@멘션은 채팅방에서 끈 방은 자동 제외</div>
+      </div>
+      <ul className="divide-y divide-ink-100">
+        {NOTIF_CATEGORIES.map((c) => {
+          const checked = !!prefs[c.key];
+          return (
+            <li key={c.key} className="px-3 py-2.5 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[13px] font-semibold text-ink-900 truncate">{c.label}</div>
+                <div className="text-[11px] text-ink-500 mt-0.5">{c.desc}</div>
+              </div>
+              <input
+                type="checkbox"
+                className="accent-brand-500 w-5 h-5 flex-shrink-0"
+                checked={checked}
+                onChange={(e) => toggle(c.key, e.target.checked)}
+                aria-label={`${c.label} 알림`}
+              />
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
