@@ -1589,6 +1589,162 @@ function EmptyMedia({ label }: { label: string }) {
   );
 }
 
+/* ===== 채팅 헤더 바로 아래 고정된 메시지 정보 띠 ===== */
+function PinnedBar({
+  pinned,
+  onJump,
+  onUnpin,
+}: {
+  pinned: Message[];
+  onJump: (id: string) => void;
+  onUnpin: (id: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  if (pinned.length === 0) return null;
+  // 콜랩스 기본은 가장 최근 핀 1개만 노출. 클릭하면 전체 리스트로 확장.
+  const top = pinned[0];
+  const more = pinned.length - 1;
+
+  return (
+    <div
+      style={{
+        background: C.gray100,
+        borderBottom: `1px solid ${C.gray200}`,
+        flexShrink: 0,
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => (more > 0 ? setExpanded((x) => !x) : onJump(top.id))}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "8px 14px",
+          background: "transparent",
+          border: 0,
+          textAlign: "left",
+          cursor: "pointer",
+          fontFamily: FONT,
+        }}
+        title={more > 0 ? (expanded ? "고정 목록 접기" : "고정 목록 펼치기") : "메시지로 이동"}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.blue} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+          <path d="M12 17v5" />
+          <path d="M9 9h6l1 8H8z" />
+          <path d="M9 9V3h6v6" />
+        </svg>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.blue, letterSpacing: "0.02em" }}>
+            고정된 메시지{pinned.length > 1 ? ` · ${pinned.length}` : ""}
+          </div>
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 500,
+              color: C.ink,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              marginTop: 1,
+            }}
+          >
+            <span style={{ color: C.gray600, marginRight: 4 }}>{top.sender?.name ?? ""}:</span>
+            {previewForMessage(top)}
+          </div>
+        </div>
+        {more > 0 && (
+          <span style={{ fontSize: 11, fontWeight: 700, color: C.gray500, flexShrink: 0 }}>
+            {expanded ? "접기" : `+${more}`}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onUnpin(top.id);
+          }}
+          aria-label="고정 해제"
+          title="고정 해제"
+          style={{
+            width: 22, height: 22, borderRadius: 999,
+            background: "transparent",
+            border: 0, color: C.gray500,
+            cursor: "pointer",
+            display: "grid", placeItems: "center",
+            flexShrink: 0,
+          }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </button>
+      {expanded && more > 0 && (
+        <div style={{ borderTop: `1px solid ${C.gray200}`, maxHeight: 240, overflowY: "auto" }}>
+          {pinned.slice(1).map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => onJump(m.id)}
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 8,
+                padding: "8px 14px 8px 38px",
+                background: "transparent",
+                border: 0,
+                borderTop: `1px solid ${C.gray200}`,
+                textAlign: "left",
+                cursor: "pointer",
+                fontFamily: FONT,
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: C.ink,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <span style={{ color: C.gray600, marginRight: 4 }}>{m.sender?.name ?? ""}:</span>
+                  {previewForMessage(m)}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUnpin(m.id);
+                }}
+                aria-label="고정 해제"
+                style={{
+                  width: 20, height: 20, borderRadius: 999,
+                  background: "transparent",
+                  border: 0, color: C.gray500,
+                  cursor: "pointer",
+                  display: "grid", placeItems: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SharedCodeRow({ code, lang, createdAt, senderName }: { code: string; lang?: string; createdAt: string; senderName: string }) {
   // 미리보기는 첫 4줄만. 길이 제한은 자체 maxHeight 로.
   const html = highlightCode(code, lang);
@@ -1851,8 +2007,30 @@ function RoomView({
   // 헤더는 상위 ChatFab이 렌더링 — 여기서는 메시지 + 입력만
   void room; void onBack; // 시그니처 유지
 
+  // 고정된 메시지 — pinnedAt 기준 최근순. 가장 최근 1개를 바에 노출 + 추가 N개 카운트.
+  // 헤더 바로 아래에 정주행 정보 띠(slack 패턴) 로 띄움.
+  const pinnedList = useMemo(
+    () =>
+      messages
+        .filter((m) => m.pinnedAt && !m.deletedAt)
+        .sort((a, b) => (b.pinnedAt ?? "").localeCompare(a.pinnedAt ?? "")),
+    [messages],
+  );
+
+  function scrollToMessage(id: string) {
+    const el = document.querySelector<HTMLElement>(`[data-msg-id="${id}"]`);
+    if (!el || !scrollRef.current) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    // 짧게 강조 — focus-visible 같은 ring 효과.
+    el.style.transition = "background .2s ease";
+    const prev = el.style.background;
+    el.style.background = "rgba(120,150,255,0.18)";
+    setTimeout(() => { el.style.background = prev; }, 900);
+  }
+
   return (
     <>
+      <PinnedBar pinned={pinnedList} onJump={scrollToMessage} onUnpin={onPin} />
       {/* 메시지 영역 */}
       <div
         ref={scrollRef}
@@ -1892,7 +2070,7 @@ function RoomView({
           const mine = m.sender.id === meId;
           const isPicking = reactingId === m.id;
           return (
-            <div key={m.id}>
+            <div key={m.id} data-msg-id={m.id}>
               {m.showDayDivider && (
                 <div
                   style={{
