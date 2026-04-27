@@ -13,20 +13,27 @@ export function isDevAccount(u: { name?: string | null } | null | undefined): bo
 export function DevBadge({
   size = "sm",
   inline = true,
+  iconOnly = false,
 }: {
   size?: "sm" | "md";
   inline?: boolean;
+  /** 좁은 자리(조직도 카드 등) 에선 라벨 빼고 그라데이션 원 + 코드 아이콘만. */
+  iconOnly?: boolean;
 }) {
   const fs = size === "md" ? 11.5 : 10;
-  const pad = size === "md" ? "2px 7px" : "1.5px 6px";
+  const pad = iconOnly ? 0 : size === "md" ? "2px 7px" : "1.5px 6px";
+  const dim = iconOnly ? (size === "md" ? 18 : 14) : undefined;
   return (
     <span
-      title="HiNest 를 만든 개발자"
+      title="HiNest 개발자"
       style={{
         display: inline ? "inline-flex" : "flex",
         alignItems: "center",
+        justifyContent: "center",
         gap: 3,
         padding: pad,
+        width: dim,
+        height: dim,
         borderRadius: 999,
         fontSize: fs,
         fontWeight: 800,
@@ -39,11 +46,11 @@ export function DevBadge({
         boxShadow: "0 1px 2px rgba(60,75,200,0.25)",
       }}
     >
-      <svg width={fs - 1} height={fs - 1} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <svg width={iconOnly ? (size === "md" ? 11 : 9) : fs - 1} height={iconOnly ? (size === "md" ? 11 : 9) : fs - 1} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <polyline points="16 18 22 12 16 6" />
         <polyline points="8 6 2 12 8 18" />
       </svg>
-      HiNest 개발자
+      {!iconOnly && "HiNest 개발자"}
     </span>
   );
 }
