@@ -35,8 +35,13 @@ import {
   MessageBubble,
   ReactionPicker,
   groupReactions,
+  safeFileUrl,
   type MessageAction,
 } from "./chat/MessageBubble";
+import { parseCodeSegments } from "../lib/codeDetect";
+import { copyToClipboard } from "../lib/clipboard";
+import { highlightCode } from "../lib/syntaxHighlight";
+import { LangIcon } from "../lib/langIcon";
 
 /**
  * 팝업 내부 사내톡 — 토스(Toss) 스타일 코디네이터.
@@ -597,6 +602,7 @@ export default function ChatMiniApp({
           meId={user?.id ?? ""}
           settings={roomSettings[active.id] ?? {}}
           onPatch={(p) => patchRoomSetting(active.id, p)}
+          messages={messages}
         />
       ) : active ? (
         <RoomView
@@ -1222,12 +1228,13 @@ function CreateGroupView({
 
 /* ======================= 채팅방 설정 ======================= */
 function SettingsView({
-  room, meId, settings, onPatch,
+  room, meId, settings, onPatch, messages,
 }: {
   room: Room;
   meId: string;
   settings: { nickname?: string; muted?: boolean };
   onPatch: (p: { nickname?: string; muted?: boolean }) => void;
+  messages: Message[];
 }) {
   const originalTitle = roomTitle(room, meId);
   const [draft, setDraft] = useState(settings.nickname ?? "");
@@ -1378,6 +1385,277 @@ function SettingsView({
           />
         </div>
       </button>
+
+      <SharedMediaTabs messages={messages} />
+    </div>
+  );
+}
+
+/* ===== 공유된 사진/영상/파일/코드 — 채팅방 설정 화면 하단 ===== */
+type MediaTab = "photo" | "video" | "file" | "code";
+function SharedMediaTabs({ messages }: { messages: Message[] }) {
+  const [tab, setTab] = useState<MediaTab>("photo");
+
+  // 한 번 훑어 분류 — 메시지 수가 적은 케이스가 대부분이라 매 렌더 비용 무시 가능.
+  const photos = messages.filter((m) => m.kind === "IMAGE" && safeFileUrl(m.fileUrl));
+  const videos = messages.filter((m) => m.kind === "VIDEO" && safeFileUrl(m.fileUrl));
+  const files = messages.filter(
+    (m) => (m.kind === "FILE" || (m.kind !== "IMAGE" && m.kind !== "VIDEO" && m.fileUrl)) && safeFileUrl(m.fileUrl)
+  );
+  // 코드: TEXT 본문에 코드 펜스/휴리스틱이 잡히는 메시지.
+  const codeItems = messages.flatMap((m) => {
+    if (m.kind !== "TEXT" || !m.content) return [];
+    const segs = parseCodeSegments(m.content);
+    const codes = segs.filter((s) => s.kind === "code") as { kind: "code"; code: string; lang?: string }[];
+    return codes.map((c, idx) => ({ messageId: m.id, idx, code: c.code, lang: c.lang, createdAt: m.createdAt, sender: m.sender }));
+  });
+
+  const tabs: { key: MediaTab; label: string; count: number }[] = [
+    { key: "photo", label: "사진", count: photos.length },
+    { key: "video", label: "영상", count: videos.length },
+    { key: "file", label: "파일", count: files.length },
+    { key: "code", label: "코드", count: codeItems.length },
+  ];
+
+  return (
+    <div style={{ marginTop: 24 }}>
+      <SectionLabel>공유된 콘텐츠</SectionLabel>
+      <div style={{ display: "flex", gap: 4, marginBottom: 10, borderBottom: `1px solid ${C.gray200}` }}>
+        {tabs.map((t) => {
+          const active = tab === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              style={{
+                padding: "8px 12px",
+                background: "transparent",
+                border: 0,
+                borderBottom: `2px solid ${active ? C.blue : "transparent"}`,
+                color: active ? C.ink : C.gray600,
+                fontSize: 13,
+                fontWeight: active ? 700 : 600,
+                cursor: "pointer",
+                fontFamily: FONT,
+                marginBottom: -1,
+              }}
+            >
+              {t.label}
+              <span style={{ marginLeft: 4, fontSize: 11, color: active ? C.blue : C.gray500, fontVariantNumeric: "tabular-nums" }}>
+                {t.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === "photo" &&
+        (photos.length === 0 ? (
+          <EmptyMedia label="공유된 사진이 없어요" />
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4 }}>
+            {photos.map((m) => {
+              const url = safeFileUrl(m.fileUrl)!;
+              return (
+                <a
+                  key={m.id}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ aspectRatio: "1 / 1", overflow: "hidden", borderRadius: 8, background: C.gray100 }}
+                  title={m.fileName ?? ""}
+                >
+                  <img
+                    src={url}
+                    alt={m.fileName ?? ""}
+                    loading="lazy"
+                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                  />
+                </a>
+              );
+            })}
+          </div>
+        ))}
+
+      {tab === "video" &&
+        (videos.length === 0 ? (
+          <EmptyMedia label="공유된 영상이 없어요" />
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
+            {videos.map((m) => {
+              const url = safeFileUrl(m.fileUrl)!;
+              return (
+                <a
+                  key={m.id}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ position: "relative", aspectRatio: "16 / 10", overflow: "hidden", borderRadius: 8, background: "#000" }}
+                  title={m.fileName ?? ""}
+                >
+                  <video
+                    src={url}
+                    preload="metadata"
+                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                  />
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      display: "grid",
+                      placeItems: "center",
+                      background: "rgba(0,0,0,0.25)",
+                      color: "#fff",
+                    }}
+                    aria-hidden
+                  >
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+                      <polygon points="6 4 20 12 6 20" />
+                    </svg>
+                  </div>
+                </a>
+              );
+            })}
+          </div>
+        ))}
+
+      {tab === "file" &&
+        (files.length === 0 ? (
+          <EmptyMedia label="공유된 파일이 없어요" />
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {files.map((m) => {
+              const url = safeFileUrl(m.fileUrl)!;
+              return (
+                <a
+                  key={m.id}
+                  href={url}
+                  download={m.fileName ?? undefined}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "10px 12px",
+                    borderRadius: 10,
+                    background: C.gray100,
+                    color: C.ink,
+                    textDecoration: "none",
+                    minWidth: 0,
+                  }}
+                  title={m.fileName ?? ""}
+                >
+                  <div style={{ width: 36, height: 36, flexShrink: 0, borderRadius: 8, background: C.surface, display: "grid", placeItems: "center", border: `1px solid ${C.gray200}` }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <path d="M14 2v6h6" />
+                    </svg>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {m.fileName ?? "파일"}
+                    </div>
+                    <div style={{ fontSize: 11, color: C.gray500, marginTop: 2 }}>
+                      {typeof m.fileSize === "number" ? formatBytes(m.fileSize) : ""}
+                      {m.fileSize ? " · " : ""}
+                      {new Date(m.createdAt).toLocaleDateString("ko-KR")}
+                    </div>
+                  </div>
+                </a>
+              );
+            })}
+          </div>
+        ))}
+
+      {tab === "code" &&
+        (codeItems.length === 0 ? (
+          <EmptyMedia label="공유된 코드가 없어요" />
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {codeItems.map((c) => (
+              <SharedCodeRow key={`${c.messageId}-${c.idx}`} code={c.code} lang={c.lang} createdAt={c.createdAt} senderName={c.sender?.name ?? ""} />
+            ))}
+          </div>
+        ))}
+    </div>
+  );
+}
+
+function EmptyMedia({ label }: { label: string }) {
+  return (
+    <div style={{ padding: "32px 0", textAlign: "center", color: C.gray500, fontSize: 13 }}>
+      {label}
+    </div>
+  );
+}
+
+function SharedCodeRow({ code, lang, createdAt, senderName }: { code: string; lang?: string; createdAt: string; senderName: string }) {
+  // 미리보기는 첫 4줄만. 길이 제한은 자체 maxHeight 로.
+  const html = highlightCode(code, lang);
+  const lineCount = (code.match(/\n/g)?.length ?? 0) + 1;
+  return (
+    <div
+      className="code-block"
+      style={{
+        borderRadius: 10,
+        background: "#1B1F27",
+        border: "1px solid rgba(255,255,255,0.10)",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "5px 10px",
+          fontSize: 10.5,
+          fontWeight: 700,
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+          color: "rgba(255,255,255,0.7)",
+          borderBottom: "1px solid rgba(255,255,255,0.10)",
+        }}
+      >
+        <LangIcon lang={lang} size={12} />
+        <span>{lang || "code"}</span>
+        <span style={{ marginLeft: "auto", fontSize: 10, fontWeight: 500, color: "rgba(255,255,255,0.55)" }}>
+          {senderName} · {new Date(createdAt).toLocaleDateString("ko-KR")} · {lineCount}줄
+        </span>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            copyToClipboard(code, { title: "복사됨", description: "코드를 클립보드에 복사했어요." });
+          }}
+          style={{
+            background: "transparent",
+            border: 0,
+            color: "rgba(255,255,255,0.85)",
+            fontSize: 10.5,
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          복사
+        </button>
+      </div>
+      <pre
+        style={{
+          margin: 0,
+          padding: "8px 10px",
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+          fontSize: 12,
+          lineHeight: 1.5,
+          color: "#fff",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          maxHeight: 140,
+          overflowY: "auto",
+        }}
+      >
+        <code className="hljs" dangerouslySetInnerHTML={{ __html: html }} />
+      </pre>
     </div>
   );
 }
