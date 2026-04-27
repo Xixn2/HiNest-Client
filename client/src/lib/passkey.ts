@@ -44,7 +44,7 @@ export async function registerPasskey(deviceName?: string) {
   console.info("[passkey] register verified ✓");
 }
 
-/** 인증 성공 시 총관리자면 서버가 super cookie 를 자동 설정해줌 */
+/** 인증 성공 시 개발자면 서버가 super cookie 를 자동 설정해줌 */
 export async function authenticateWithPasskey(): Promise<{ ok: boolean; super?: boolean; expiresAt?: number }> {
   console.info("[passkey] authenticateWithPasskey start");
   const opts = await api<any>("/api/passkey/auth/options", { method: "POST", json: {} });

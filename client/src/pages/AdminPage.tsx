@@ -366,12 +366,12 @@ function UsersTab({
       reload();
     } catch (e: any) {
       const msg: string = e?.message ?? "변경에 실패했습니다.";
-      // 역할 변경은 총관리자 step-up 세션이 필요함. 안내 + 이동 유도.
+      // 역할 변경은 개발자 step-up 세션이 필요함. 안내 + 이동 유도.
       if (msg.includes("비밀번호 재확인") || msg.includes("SUPER_STEPUP")) {
-        setUpdateErr("역할 변경은 총관리자 세션이 필요합니다. /super-admin 에서 비밀번호 재확인 후 다시 시도해주세요.");
+        setUpdateErr("역할 변경은 개발자 세션이 필요합니다. /super-admin 에서 비밀번호 재확인 후 다시 시도해주세요.");
         const ok = await confirmAsync({
-          title: "총관리자 재인증",
-          description: "역할 변경은 총관리자 재인증이 필요해요.\n지금 총관리자 페이지로 이동할까요?",
+          title: "개발자 재인증",
+          description: "역할 변경은 개발자 재인증이 필요해요.\n지금 개발자 페이지로 이동할까요?",
           confirmLabel: "이동",
         });
         if (ok) nav("/super-admin");

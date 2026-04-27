@@ -145,8 +145,8 @@ function BlockedPage() {
           잠겨 있어요
         </h1>
         <p className="text-[15px] sm:text-[16px] text-white/75 mt-5 max-w-[560px] leading-relaxed">
-          총관리자가 이 메뉴를 일시적으로 닫아 두었어요.
-          계속 사용해야 한다면 총관리자에게 알려주세요.
+          개발자가 이 메뉴를 일시적으로 닫아 두었어요.
+          계속 사용해야 한다면 개발자에게 알려주세요.
         </p>
         <div className="flex flex-wrap items-center gap-3 mt-8">
           <NavLink
@@ -359,7 +359,7 @@ function UnderConstructionPage({ isDeveloper }: { isDeveloper: boolean }) {
   );
 }
 
-/** 총관리자가 끈/개발중 사이드바 path 들. /api/nav/visibility 응답 + 이벤트로 다른 탭 동기화. */
+/** 개발자가 끈/개발중 사이드바 path 들. /api/nav/visibility 응답 + 이벤트로 다른 탭 동기화. */
 function useNavStatus() {
   const [disabled, setDisabled] = useState<Set<string>>(new Set());
   const [dev, setDev] = useState<Set<string>>(new Set());
@@ -487,7 +487,7 @@ function AppLayoutInner() {
         </div>
 
         <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-5">
-          {/* 총관리자가 끈 항목은 메뉴에서 제외. 섹션 자체가 비면 라벨도 안 보이게. */}
+          {/* 개발자가 끈 항목은 메뉴에서 제외. 섹션 자체가 비면 라벨도 안 보이게. */}
           {(() => { const items = filterByVisibility(WORK_NAV); return items.length > 0 && <NavSection label="워크스페이스" items={items} dev={devNav} />; })()}
           {(() => { const items = filterByVisibility(COMM_NAV); return items.length > 0 && <NavSection label="커뮤니케이션" items={items} dev={devNav} />; })()}
           {(() => { const items = filterByVisibility(RESOURCE_NAV); return items.length > 0 && <NavSection label="자료·재무" items={items} dev={devNav} />; })()}
@@ -512,7 +512,7 @@ function AppLayoutInner() {
                   onMouseEnter={() => prefetchRoute("/super-admin")}
                   onFocus={() => prefetchRoute("/super-admin")}
                 >
-                  {({ isActive }) => (<><CrownIcon active={isActive} /><span>총관리자</span></>)}
+                  {({ isActive }) => (<><DevIcon active={isActive} /><span>개발자</span></>)}
                 </NavLink>
               )}
             </div>
@@ -656,13 +656,19 @@ function NavSection({ label, items, dev }: { label: string; items: NavItem[]; de
                   <span className="flex-1 inline-flex items-center gap-1.5 min-w-0">
                     <span className="truncate min-w-0">{n.label}</span>
                     {dev?.has(n.to) && (
+                      // 작은 점 하나로 \"개발 중\" 표시 — 큰 칩 라벨이 사이드바 톤을 무너뜨려서 다운그레이드.
                       <span
-                        className="text-[9px] font-extrabold uppercase tracking-[0.06em] px-1 py-0.5 rounded-[3px] flex-shrink-0"
-                        style={{ background: "var(--c-warning)", color: "#fff", lineHeight: 1 }}
-                        title="개발 중 — 들어가면 안내 화면이 뜹니다"
-                      >
-                        DEV
-                      </span>
+                        className="flex-shrink-0"
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: "50%",
+                          background: "var(--c-warning)",
+                          boxShadow: "0 0 0 2px color-mix(in srgb, var(--c-warning) 22%, transparent)",
+                        }}
+                        title="개발 중인 메뉴 — 들어가면 안내 화면이 뜹니다"
+                        aria-label="개발 중"
+                      />
                     )}
                   </span>
                   {badgeCount > 0 && (
@@ -933,7 +939,7 @@ const BREADCRUMB: Record<string, string> = {
   "/approvals": "전자결재",
   "/expense": "법인카드",
   "/admin": "관리자",
-  "/super-admin": "총관리자",
+  "/super-admin": "개발자",
   "/profile": "내 프로필",
 };
 
@@ -1037,5 +1043,6 @@ function CardIcon({ active }: I) { return svgBase(!!active, <><rect x="3" y="6" 
 function KeyIcon({ active }: I) { return svgBase(!!active, <><circle cx="7.5" cy="15.5" r="4.5" /><path d="m10.5 12.5 10-10M17 7l3 3M15.5 8.5l3 3" /></>); }
 function SnippetIcon({ active }: I) { return svgBase(!!active, <><path d="m8 3-4 4 4 4M16 3l4 4-4 4" /><path d="M14 4 10 20" /></>); }
 function ShieldIcon({ active }: I) { return svgBase(!!active, <><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z" /><path d="m9 12 2 2 4-4" /></>); }
+function DevIcon({ active }: I) { return svgBase(!!active, <><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></>); }
 function CrownIcon({ active }: I) { return svgBase(!!active, <><path d="M3 18h18" /><path d="M3 8l4 5 5-8 5 8 4-5v10H3z" /></>); }
 const _unused_swInv = swInv;
