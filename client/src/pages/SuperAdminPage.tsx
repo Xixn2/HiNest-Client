@@ -844,8 +844,8 @@ const CMD_TREE: Record<string, any> = {
   user: {
     info: { "arg:user": {} },
     role: { "arg:user": { MEMBER: {}, MANAGER: {}, ADMIN: {} } },
-    grant: { admin: { "arg:user": {} }, super: { "arg:user": {} } },
-    revoke: { admin: { "arg:user": {} }, super: { "arg:user": {} } },
+    grant: { admin: { "arg:user": {} }, super: { "arg:user": {} }, dev: { "arg:user": {} }, developer: { "arg:user": {} } },
+    revoke: { admin: { "arg:user": {} }, super: { "arg:user": {} }, dev: { "arg:user": {} }, developer: { "arg:user": {} } },
     lock: { "arg:user": {} },
     unlock: { "arg:user": {} },
     resign: { "arg:user": { "arg:date": {} } },
@@ -892,6 +892,7 @@ function resolveCompletion(
 
   // 트리를 따라 들어감.
   let node: any = CMD_TREE;
+  let lostInTree = false; // 도중에 모르는 토큰이 나오면 마킹 — @ 는 그래도 user 로 살림.
   for (const t of completedTokens) {
     // 동적 arg: 자식이면 그 자식 노드의 자식 단계로 진입 (값은 무시하고 트리만 한 칸 깊게).
     const argKey = Object.keys(node).find((k) => k.startsWith("arg:"));
@@ -900,15 +901,28 @@ function resolveCompletion(
     } else if (argKey) {
       node = node[argKey];
     } else {
-      // 알 수 없는 토큰 — 자유 입력 단계. 후보 없음.
-      return null;
+      // 알 수 없는 토큰 — Tab 정적 후보는 의미 없지만 @ 는 살려둠.
+      lostInTree = true;
+      break;
     }
-    if (!node || typeof node !== "object") return null;
+    if (!node || typeof node !== "object") {
+      lostInTree = true;
+      break;
+    }
   }
 
   // 현재 토큰이 @ 로 시작하면 동적 컨텍스트(user/team/position) 강제.
   const atMatch = currentToken.startsWith("@");
   if (atMatch) {
+    // 트리에서 길을 잃었으면 user 기본값으로 fallback — \"비싼 호출\" 아니므로 관대하게.
+    if (lostInTree) {
+      return {
+        ctx: { kind: "user" },
+        tokenStart: s,
+        tokenEnd: cursor,
+        query: currentToken.slice(1),
+      };
+    }
     // 트리에서 arg:user|arg:team|arg:position 자식이 있는지 보고 그 컨텍스트 사용.
     const argKey = Object.keys(node).find((k) => k.startsWith("arg:"));
     let kind: CompCtx["kind"] = "user";
@@ -923,6 +937,9 @@ function resolveCompletion(
       query: currentToken.slice(1),
     };
   }
+
+  // 트리에서 길 잃음 + @ 가 아닌 경우 — Tab 후보는 줄 게 없음.
+  if (lostInTree) return null;
 
   // 정적 후보 (Tab 완성).
   const keys = Object.keys(node);
