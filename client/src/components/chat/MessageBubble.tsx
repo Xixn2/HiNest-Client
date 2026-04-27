@@ -1140,6 +1140,13 @@ function CodeBlockBubble({ code, lang, mine }: { code: string; lang?: string; mi
   return (
     <div
       style={{
+        // display:block + width:100% + min-width:0 콤보 — flex 부모가 0 1 auto 일 때
+        // 안에 든 long-content `pre` 가 버블을 부풀려 채팅 영역 밖으로 새는 것 방지.
+        display: "block",
+        width: "100%",
+        minWidth: 0,
+        maxWidth: "100%",
+        boxSizing: "border-box",
         position: "relative",
         margin: "4px 0",
         borderRadius: 10,
@@ -1192,8 +1199,16 @@ function CodeBlockBubble({ code, lang, mine }: { code: string; lang?: string; mi
           fontSize: 12.5,
           lineHeight: 1.5,
           color: mine ? "#fff" : "var(--c-fg-strong)",
-          whiteSpace: "pre",
-          overflowX: "auto",
+          // pre-wrap + break-word: 좁은 화면에서 긴 줄이 자동으로 접힘. 의도된 \n 은 보존.
+          // 종전 whiteSpace:pre + overflowX:auto 는 가로 스크롤이 부모 폭을 밀어 모바일에서 버블이
+          // 화면을 뚫고 나갔음.
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          overflowWrap: "anywhere",
+          // 100줄 넘는 코드 덩어리는 버블 자체를 화면 한 페이지 이상으로 늘리지 않도록
+          // 60vh 안에 가두고 그 안에서만 세로 스크롤.
+          maxHeight: "60vh",
+          overflowY: "auto",
           maxWidth: "100%",
         }}
       >
