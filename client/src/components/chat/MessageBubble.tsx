@@ -5,6 +5,7 @@ import { api } from "../../api";
 import { alertAsync } from "../ConfirmHost";
 import { parseCodeSegments } from "../../lib/codeDetect";
 import { copyToClipboard } from "../../lib/clipboard";
+import { useModalDismiss } from "../../lib/useModalDismiss";
 
 /**
  * 파일/이미지/동영상 메시지를 문서함으로 복사 저장.
@@ -48,9 +49,10 @@ function SaveToDocsChip({ fileUrl, fileName, fileType, fileSize, mine }: { fileU
         fontWeight: 600,
         padding: "4px 8px",
         borderRadius: 999,
-        border: `1px solid ${C.gray200}`,
-        background: done ? "#E6F4EA" : "white",
-        color: done ? "#137333" : C.gray700,
+        // 종전엔 white/회색 하드코딩이라 다크 테마에서 우두커니 떴음. 테마 토큰으로 교체.
+        border: "1px solid var(--c-border)",
+        background: done ? "var(--c-surface-2)" : "var(--c-surface)",
+        color: done ? "var(--c-success)" : "var(--c-text-2)",
         cursor: saving || done ? "default" : "pointer",
         display: "inline-flex",
         alignItems: "center",
@@ -1137,6 +1139,10 @@ function InlineCode({ code, mine }: { code: string; mine: boolean }) {
 }
 
 function CodeBlockBubble({ code, lang, mine }: { code: string; lang?: string; mine: boolean }) {
+  const [viewerOpen, setViewerOpen] = useState(false);
+  // 짧은 코드는 굳이 전체보기를 띄울 필요 없어서 8줄 / 400자 기준으로 노출.
+  const lineCount = (code.match(/\n/g)?.length ?? 0) + 1;
+  const showExpand = lineCount > 8 || code.length > 400;
   return (
     <div
       style={{
@@ -1214,6 +1220,172 @@ function CodeBlockBubble({ code, lang, mine }: { code: string; lang?: string; mi
       >
         <code style={{ fontFamily: "inherit" }}>{code}</code>
       </pre>
+      {showExpand && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setViewerOpen(true);
+          }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "100%",
+            padding: "6px 10px",
+            background: "transparent",
+            border: "none",
+            borderTop: mine ? "1px solid rgba(255,255,255,0.10)" : "1px solid var(--c-border)",
+            color: mine ? "rgba(255,255,255,0.85)" : "var(--c-fg-muted)",
+            fontSize: 11.5,
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          전체보기 ({lineCount}줄)
+        </button>
+      )}
+      {viewerOpen && (
+        <CodeViewerModal code={code} lang={lang} onClose={() => setViewerOpen(false)} />
+      )}
+    </div>
+  );
+}
+
+/** 코드 전체보기 — 화면 거의 전체 차지하는 모달.
+ *  큰 폰트·줄번호·복사 버튼 제공. Esc 로 닫기 + 배경 스크롤 잠금은 useModalDismiss. */
+function CodeViewerModal({ code, lang, onClose }: { code: string; lang?: string; onClose: () => void }) {
+  useModalDismiss(true, onClose);
+  const lines = code.split("\n");
+  const lineNumWidth = String(lines.length).length * 8 + 12; // 자릿수에 따라 좌측 패딩.
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 200,
+        background: "rgba(0,0,0,0.55)",
+        display: "grid",
+        placeItems: "center",
+        padding: "max(env(safe-area-inset-top), 12px) 12px max(env(safe-area-inset-bottom), 12px)",
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "min(1100px, 100%)",
+          height: "100%",
+          maxHeight: "100%",
+          background: "var(--c-surface-1)",
+          color: "var(--c-fg-strong)",
+          borderRadius: 14,
+          border: "1px solid var(--c-border)",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
+        }}
+      >
+        {/* 헤더 */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "10px 14px",
+            borderBottom: "1px solid var(--c-border)",
+            background: "var(--c-surface-2)",
+            flexShrink: 0,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 800,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              padding: "3px 8px",
+              borderRadius: 6,
+              background: "var(--c-surface-3)",
+              color: "var(--c-fg-muted)",
+            }}
+          >
+            {lang || "code"}
+          </div>
+          <div style={{ flex: 1, fontSize: 12, color: "var(--c-fg-muted)" }}>
+            {lines.length}줄 · {code.length.toLocaleString()}자
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              copyToClipboard(code, { title: "복사됨", description: "코드를 클립보드에 복사했어요." })
+            }
+            className="btn-ghost btn-xs"
+          >
+            복사
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-ghost btn-xs"
+            aria-label="닫기"
+            title="닫기 (Esc)"
+          >
+            ✕
+          </button>
+        </div>
+        {/* 본문 — 줄번호 + 코드 */}
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflow: "auto",
+            background: "var(--c-surface-1)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "stretch", minHeight: "100%" }}>
+            {/* 줄번호 칼럼 — 따로 둬서 복사 시 줄번호가 같이 따라오지 않도록. */}
+            <pre
+              aria-hidden
+              style={{
+                margin: 0,
+                padding: "12px 8px",
+                paddingLeft: 12,
+                fontFamily: CODE_FONT,
+                fontSize: 13,
+                lineHeight: 1.6,
+                color: "var(--c-fg-muted)",
+                background: "var(--c-surface-2)",
+                borderRight: "1px solid var(--c-border)",
+                userSelect: "none",
+                textAlign: "right",
+                minWidth: lineNumWidth,
+                whiteSpace: "pre",
+                flexShrink: 0,
+              }}
+            >
+              {lines.map((_, i) => `${i + 1}\n`).join("")}
+            </pre>
+            <pre
+              style={{
+                margin: 0,
+                padding: "12px 14px",
+                fontFamily: CODE_FONT,
+                fontSize: 13,
+                lineHeight: 1.6,
+                color: "var(--c-fg-strong)",
+                whiteSpace: "pre",
+                overflowX: "auto",
+                flex: 1,
+                minWidth: 0,
+              }}
+            >
+              <code style={{ fontFamily: "inherit" }}>{code}</code>
+            </pre>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
