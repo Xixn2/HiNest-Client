@@ -154,10 +154,15 @@ router.post("/step-up", requireAuth, async (req, res) => {
   const password = rawPw.length > 128 ? rawPw.slice(0, 128) : rawPw;
   if (!password) return res.status(400).json({ error: "비밀번호를 입력해주세요" });
 
-  // 총관리자는 반드시 별도의 super 비밀번호가 설정되어 있어야 함 — 일반 비밀번호 fallback 금지
+  // 총관리자는 반드시 별도의 super 비밀번호가 설정되어 있어야 함 — 일반 비밀번호 fallback 금지.
+  // 처음 super 권한을 받은 직후엔 superPasswordHash 가 null 이라 클라가 \"setup\" 화면으로 분기할 수 있도록
+  // 별도 코드 반환.
   if (!user.superPasswordHash) {
     await writeLog(user.id, "SUPER_STEPUP_FAIL", undefined, "no_super_password_set", req.ip);
-    return res.status(403).json({ error: "총관리자 전용 비밀번호가 설정되어있지 않아요. 서버 관리자에게 문의하세요." });
+    return res.status(403).json({
+      error: "총관리자 전용 비밀번호가 아직 설정되지 않았어요. 처음 설정해 주세요.",
+      code: "SUPER_PW_NOT_SET",
+    });
   }
   const ok = await bcrypt.compare(password, user.superPasswordHash);
   if (!ok) {
@@ -169,6 +174,43 @@ router.post("/step-up", requireAuth, async (req, res) => {
   setSuperCookie(res, token);
   await writeLog(user.id, "SUPER_STEPUP_OK", undefined, `ttl=${SUPER_TTL_SEC}s`, req.ip);
   res.json({ ok: true, expiresAt: Date.now() + SUPER_TTL_SEC * 1000 });
+});
+
+/* ===== 총관리자 step-up 비밀번호 최초 설정 / 변경 =====
+ * - 최초 설정: 본인이 super 권한이고 superPasswordHash 가 null 이면 currentPassword 없이 설정 가능.
+ * - 변경: currentPassword(현재 super 비번) 가 일치해야 함.
+ * 정책: 8~128자, 본인의 일반 로그인 비밀번호와 다르게 (재사용 방지).
+ */
+router.post("/super-password", requireAuth, async (req, res) => {
+  const u = (req as any).user;
+  const user = await prisma.user.findUnique({ where: { id: u.id } });
+  if (!user || !user.superAdmin) return res.status(403).json({ error: "forbidden" });
+
+  const rawNew = String(req.body?.next ?? "");
+  const next = rawNew.length > 128 ? rawNew.slice(0, 128) : rawNew;
+  if (!next || next.length < 8) return res.status(400).json({ error: "8자 이상 입력해 주세요" });
+
+  const sameAsLogin = await bcrypt.compare(next, user.passwordHash).catch(() => false);
+  if (sameAsLogin) {
+    return res.status(400).json({ error: "일반 로그인 비밀번호와 달라야 해요" });
+  }
+
+  // 변경 모드면 current 검증 — null 이면 \"최초 설정\" 으로 간주.
+  if (user.superPasswordHash) {
+    const rawCur = String(req.body?.current ?? "");
+    const current = rawCur.length > 128 ? rawCur.slice(0, 128) : rawCur;
+    if (!current) return res.status(400).json({ error: "현재 총관리자 비밀번호가 필요해요" });
+    const ok = await bcrypt.compare(current, user.superPasswordHash);
+    if (!ok) {
+      await writeLog(user.id, "SUPER_PW_CHANGE_FAIL", undefined, undefined, req.ip);
+      return res.status(401).json({ error: "현재 총관리자 비밀번호가 일치하지 않아요" });
+    }
+  }
+
+  const hash = await bcrypt.hash(next, 12);
+  await prisma.user.update({ where: { id: user.id }, data: { superPasswordHash: hash } });
+  await writeLog(user.id, user.superPasswordHash ? "SUPER_PW_CHANGE" : "SUPER_PW_SET", undefined, undefined, req.ip);
+  res.json({ ok: true, firstTime: !user.superPasswordHash });
 });
 
 /**

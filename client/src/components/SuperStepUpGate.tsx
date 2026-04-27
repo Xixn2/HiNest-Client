@@ -95,6 +95,9 @@ export default function SuperStepUpGate({ children }: { children: React.ReactNod
     return () => clearTimeout(t);
   }, [checking, session?.active]);
 
+  // 처음 super 가 됐을 때 step-up 비번이 아예 없는 케이스 — 별도 setup 화면으로 분기.
+  const [needsSetup, setNeedsSetup] = useState(false);
+
   async function submitPassword(e: React.FormEvent) {
     e.preventDefault();
     setErr(""); setLoading(true);
@@ -102,7 +105,30 @@ export default function SuperStepUpGate({ children }: { children: React.ReactNod
       const res = await api<{ expiresAt: number }>("/api/auth/step-up", { method: "POST", json: { password } });
       setSession({ active: true, expiresAt: res.expiresAt });
     } catch (e: any) {
-      setErr(e.message ?? "인증 실패");
+      // 서버가 SUPER_PW_NOT_SET 코드를 주면 setup UI 로 분기.
+      if (e?.code === "SUPER_PW_NOT_SET") {
+        setNeedsSetup(true);
+        setErr("");
+      } else {
+        setErr(e.message ?? "인증 실패");
+      }
+    } finally { setLoading(false); }
+  }
+
+  async function submitSetup(next: string, confirm: string) {
+    setErr("");
+    if (next !== confirm) { setErr("새 비밀번호가 일치하지 않아요"); return; }
+    if (next.length < 8) { setErr("8자 이상 입력해 주세요"); return; }
+    setLoading(true);
+    try {
+      await api("/api/auth/super-password", { method: "POST", json: { next } });
+      // 설정 직후 자동으로 step-up 진행 — 사용자 한 번 더 입력 안 해도 되도록.
+      const res = await api<{ expiresAt: number }>("/api/auth/step-up", { method: "POST", json: { password: next } });
+      setNeedsSetup(false);
+      setPassword("");
+      setSession({ active: true, expiresAt: res.expiresAt });
+    } catch (e: any) {
+      setErr(e?.message ?? "설정 실패");
     } finally { setLoading(false); }
   }
 
@@ -221,27 +247,36 @@ export default function SuperStepUpGate({ children }: { children: React.ReactNod
               </div>
             )}
 
-            <form onSubmit={submitPassword} className="space-y-3">
-              <div>
-                {!hasPasskey && <label className="field-label">비밀번호</label>}
-                <input ref={pwRef} className="input" type="password" placeholder="현재 비밀번호"
-                  value={password} onChange={(e) => setPassword(e.target.value)} required />
-              </div>
-              {err && (
-                <div className="flex items-start gap-2 p-2.5 rounded-md bg-red-50 border border-red-100 text-[12px] font-semibold text-red-700">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 flex-shrink-0">
-                    <circle cx="12" cy="12" r="9" /><path d="M12 8v4M12 16h.01" />
-                  </svg>
-                  {err}
+            {needsSetup ? (
+              <SuperPwSetupForm
+                onSubmit={submitSetup}
+                err={err}
+                loading={loading}
+                onCancel={() => { setNeedsSetup(false); setErr(""); }}
+              />
+            ) : (
+              <form onSubmit={submitPassword} className="space-y-3">
+                <div>
+                  {!hasPasskey && <label className="field-label">비밀번호</label>}
+                  <input ref={pwRef} className="input" type="password" placeholder="현재 비밀번호"
+                    value={password} onChange={(e) => setPassword(e.target.value)} required />
                 </div>
-              )}
-              <div className="flex items-center gap-2 pt-1">
-                <button type="button" className="btn-ghost" onClick={() => nav("/")}>돌아가기</button>
-                <button className="btn-primary btn-lg flex-1" disabled={loading || !password}>
-                  {loading ? "확인 중…" : "인증하고 진입"}
-                </button>
-              </div>
-            </form>
+                {err && (
+                  <div className="flex items-start gap-2 p-2.5 rounded-md bg-red-50 border border-red-100 text-[12px] font-semibold text-red-700">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 flex-shrink-0">
+                      <circle cx="12" cy="12" r="9" /><path d="M12 8v4M12 16h.01" />
+                    </svg>
+                    {err}
+                  </div>
+                )}
+                <div className="flex items-center gap-2 pt-1">
+                  <button type="button" className="btn-ghost" onClick={() => nav("/")}>돌아가기</button>
+                  <button className="btn-primary btn-lg flex-1" disabled={loading || !password}>
+                    {loading ? "확인 중…" : "인증하고 진입"}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
 
           {!hasPasskey && canRegister && (
@@ -620,3 +655,51 @@ function PasskeyPanel({
     </div>
   );
 }
+
+function SuperPwSetupForm({
+  onSubmit,
+  err,
+  loading,
+  onCancel,
+}: {
+  onSubmit: (next: string, confirm: string) => void;
+  err: string;
+  loading: boolean;
+  onCancel: () => void;
+}) {
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  return (
+    <form
+      onSubmit={(e) => { e.preventDefault(); onSubmit(next, confirm); }}
+      className="space-y-3"
+    >
+      <div className="p-3 rounded-md bg-brand-50 border border-brand-100 text-[12px] text-brand-700">
+        총관리자 권한이 부여됐어요. 처음 진입이라 <b>총관리자 전용 비밀번호</b> 를 설정해 주세요. (8자 이상, 일반 로그인 비밀번호와 달라야 함)
+      </div>
+      <div>
+        <label className="field-label">새 총관리자 비밀번호</label>
+        <input className="input" type="password" autoFocus value={next} onChange={(e) => setNext(e.target.value)} minLength={8} maxLength={128} required />
+      </div>
+      <div>
+        <label className="field-label">한 번 더 입력</label>
+        <input className="input" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} minLength={8} maxLength={128} required />
+      </div>
+      {err && (
+        <div className="flex items-start gap-2 p-2.5 rounded-md bg-red-50 border border-red-100 text-[12px] font-semibold text-red-700">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 flex-shrink-0">
+            <circle cx="12" cy="12" r="9" /><path d="M12 8v4M12 16h.01" />
+          </svg>
+          {err}
+        </div>
+      )}
+      <div className="flex items-center gap-2 pt-1">
+        <button type="button" className="btn-ghost" onClick={onCancel} disabled={loading}>취소</button>
+        <button className="btn-primary btn-lg flex-1" disabled={loading || !next || !confirm}>
+          {loading ? "설정 중…" : "설정하고 진입"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
