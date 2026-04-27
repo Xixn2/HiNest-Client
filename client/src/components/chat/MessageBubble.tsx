@@ -8,6 +8,7 @@ import { parseCodeSegments } from "../../lib/codeDetect";
 import { copyToClipboard } from "../../lib/clipboard";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { highlightCode } from "../../lib/syntaxHighlight";
+import { LangIcon } from "../../lib/langIcon";
 
 /**
  * 파일/이미지/동영상 메시지를 문서함으로 복사 저장.
@@ -1186,7 +1187,10 @@ function CodeBlockBubble({ code, lang, mine }: { code: string; lang?: string; mi
           borderBottom: "1px solid rgba(255,255,255,0.10)",
         }}
       >
-        <span>{lang || "code"}</span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <LangIcon lang={lang} size={13} />
+          {lang || "code"}
+        </span>
         <button
           type="button"
           onClick={(e) => {
@@ -1328,8 +1332,12 @@ function CodeViewerModal({ code, lang, onClose }: { code: string; lang?: string;
               borderRadius: 6,
               background: "var(--c-surface-3)",
               color: "var(--c-text-3)",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
             }}
           >
+            <LangIcon lang={lang} size={14} />
             {lang || "code"}
           </div>
           <div style={{ flex: 1, fontSize: 12, color: "var(--c-text-3)" }}>
