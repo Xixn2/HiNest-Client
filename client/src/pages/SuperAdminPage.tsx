@@ -159,7 +159,7 @@ function SuperAdminContent() {
             </button>
           </div>
         )}
-        <TabBtn active={tab === "api"} onClick={() => setTab("api")}>API 명세</TabBtn>
+        <TabBtn active={tab === "api"} onClick={() => setTab("api")}>API 명세서</TabBtn>
         <TabBtn active={tab === "console"} onClick={() => setTab("console")}>콘솔</TabBtn>
         <TabBtn active={tab === "server"} onClick={() => setTab("server")}>서버 로그</TabBtn>
         <TabBtn active={tab === "nav"} onClick={() => setTab("nav")}>메뉴 관리</TabBtn>

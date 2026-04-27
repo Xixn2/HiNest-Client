@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
 import InstallAppBanner from "../components/InstallAppBanner";
 import { confirmAsync, alertAsync } from "../components/ConfirmHost";
+import { isDevAccount, DevBadge } from "../lib/devBadge";
 
 type Notice = { id: string; title: string; content: string; createdAt: string; author: { name: string }; pinned: boolean };
 type Event = { id: string; title: string; startAt: string; endAt: string; scope: string; color: string };
@@ -264,8 +265,9 @@ export default function DashboardPage() {
                     {n.pinned && <span className="chip-red">PIN</span>}
                     <div className="text-[13px] font-semibold text-ink-900 truncate">{n.title}</div>
                   </div>
-                  <div className="text-[11px] text-ink-500 mt-0.5 flex items-center gap-1.5">
+                  <div className="text-[11px] text-ink-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
                     <span>{n.author?.name}</span>
+                    {isDevAccount(n.author) && <DevBadge />}
                     <span className="text-ink-300">·</span>
                     <span className="tabular">{new Date(n.createdAt).toLocaleDateString("ko-KR")}</span>
                   </div>

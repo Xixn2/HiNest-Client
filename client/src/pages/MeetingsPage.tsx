@@ -4,6 +4,7 @@ import { api, apiSWR, invalidateCache } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
 import { alertAsync } from "../components/ConfirmHost";
+import { isDevAccount, DevBadge } from "../lib/devBadge";
 
 type MeetingRow = {
   id: string;
@@ -139,6 +140,7 @@ export default function MeetingsPage() {
                 <div className="text-[14px] font-bold truncate">{m.title || "제목 없음"}</div>
                 <div className="flex items-center gap-2 mt-0.5 text-[11.5px] text-slate-500">
                   <span>{m.author.name}</span>
+                  {isDevAccount(m.author) && <DevBadge />}
                   <span>·</span>
                   <span>{new Date(m.updatedAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
                   {m.project && (

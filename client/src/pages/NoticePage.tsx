@@ -7,6 +7,7 @@ import PageHeader from "../components/PageHeader";
 import { confirmAsync, alertAsync } from "../components/ConfirmHost";
 import PinButton from "../components/PinButton";
 import { copyToClipboard, absoluteUrl } from "../lib/clipboard";
+import { isDevAccount, DevBadge } from "../lib/devBadge";
 
 type ReactionAgg = { emoji: string; count: number; reactedByMe: boolean };
 type Notice = {
@@ -211,8 +212,10 @@ export default function NoticePage() {
                   )}
                   <div className="font-semibold text-ink-900 truncate">{n.title}</div>
                 </div>
-                <div className="text-xs text-slate-500 mt-0.5">
-                  {n.author?.name} · {new Date(n.createdAt).toLocaleDateString("ko-KR")}
+                <div className="text-xs text-slate-500 mt-0.5 inline-flex items-center gap-1.5">
+                  <span>{n.author?.name}</span>
+                  {isDevAccount(n.author) && <DevBadge />}
+                  <span>· {new Date(n.createdAt).toLocaleDateString("ko-KR")}</span>
                 </div>
               </button>
             ))}
@@ -235,6 +238,7 @@ export default function NoticePage() {
                       </span>
                     )}
                     <span>{selected.author?.name}</span>
+                    {isDevAccount(selected.author) && <DevBadge />}
                     <span>·</span>
                     <span>{new Date(selected.createdAt).toLocaleString("ko-KR")}</span>
                   </div>
