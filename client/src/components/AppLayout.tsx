@@ -11,7 +11,7 @@ import { NotificationProvider, useNotifications } from "../notifications";
 import { PinsProvider, usePins, pinLinkUrl } from "../pins";
 import { ROUTE_PREFETCH, loadProject } from "../routes";
 import { isDevAccount, DevBadge } from "../lib/devBadge";
-import { getDevPagesEnabled } from "../lib/devPagesPref";
+import { getDevPagesEnabled, setDevPagesEnabled } from "../lib/devPagesPref";
 
 /**
  * 사이드바 hover/focus prefetch — 사용자가 클릭하기 전에 해당 페이지 청크를
@@ -310,11 +310,14 @@ function AppLayoutInner() {
               <div className="min-w-0 flex-1">
                 <div className="text-[13px] font-semibold text-ink-900 truncate flex items-center gap-1">
                   <span className="truncate">{user?.name}</span>
-                  {isDevAccount({ name: user?.name }) && <DevBadge />}
+                  {isDevAccount(user) && <DevBadge />}
                 </div>
                 <div className="text-[11px] text-ink-500 truncate">{user?.email}</div>
               </div>
             </NavLink>
+            {/* 개발자 전용 — \"개발 중\" 페이지 진입 토글 (사이드바 빠른 스위치).
+                마이페이지의 \"개발자 옵션\" 패널과 같은 localStorage 키 공유. */}
+            {isDevAccount(user) && <DevQuickToggle />}
             <button
               onClick={async () => {
                 await logout();
@@ -434,6 +437,56 @@ type ProjectLite = {
   color: string;
   status: "ACTIVE" | "ARCHIVED";
 };
+
+/** 사이드바 본인 정보 옆 \"개발 중 페이지 보기\" 빠른 토글 — 개발자 전용. */
+function DevQuickToggle() {
+  const [on, setOn] = useState<boolean>(() => getDevPagesEnabled());
+  useEffect(() => {
+    function refresh() { setOn(getDevPagesEnabled()); }
+    window.addEventListener("hinest:devPagesChange", refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("hinest:devPagesChange", refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+  function toggle() {
+    const next = !on;
+    setOn(next);
+    setDevPagesEnabled(next);
+  }
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      className="btn-icon"
+      title={on ? "“개발 중” 페이지 진입 켜짐 — 클릭해서 끄기" : "“개발 중” 페이지 진입 꺼짐 — 클릭해서 켜기"}
+      aria-label={on ? "개발 페이지 보기 끄기" : "개발 페이지 보기 켜기"}
+      style={{
+        position: "relative",
+        color: on ? "var(--c-warning)" : "var(--c-text-3)",
+      }}
+    >
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="16 18 22 12 16 6" />
+        <polyline points="8 6 2 12 8 18" />
+      </svg>
+      <span
+        aria-hidden
+        style={{
+          position: "absolute",
+          right: 2,
+          bottom: 2,
+          width: 7,
+          height: 7,
+          borderRadius: "50%",
+          background: on ? "var(--c-warning)" : "var(--c-border-strong)",
+          border: "1.5px solid var(--c-surface)",
+        }}
+      />
+    </button>
+  );
+}
 
 /**
  * 사이드바 "팀" 섹션 — 내가 참여중인 프로젝트 목록.
