@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, apiSWR } from "../api";
 import PageHeader from "../components/PageHeader";
 import { useAuth } from "../auth";
 import MonthPicker from "../components/MonthPicker";
 import DateTimePicker from "../components/DateTimePicker";
 import { alertAsync } from "../components/ConfirmHost";
+import { useModalDismiss } from "../lib/useModalDismiss";
 
 type Attendance = {
   id: string;
@@ -29,6 +30,16 @@ function ymNow() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+const KST_TODAY_FMT = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: "Asia/Seoul",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+function todayKST() {
+  return KST_TODAY_FMT.format(new Date());
+}
+
 export default function AttendancePage() {
   const { user } = useAuth();
   const [month, setMonth] = useState(ymNow());
@@ -41,16 +52,16 @@ export default function AttendancePage() {
   const [reviewingId, setReviewingId] = useState<string | null>(null);
 
   // 제출/승인 직후 load() 가 다시 돌 때, 사용자가 빠르게 탭 이탈하면
-  // setState 가 언마운트된 컴포넌트에 박혀 경고+누수. 승인/반려/제출이 연달아 쏟아져도
-  // 마지막 응답만 반영하도록 monotonic token 도 같이 사용.
+  // setState 가 언마운트된 컴포넌트에 박혀 경고+누수. 마지막 응답만 반영하도록 monotonic token.
   const aliveRef = useRef(true);
   const loadTokenRef = useRef(0);
   useEffect(() => {
     aliveRef.current = true;
-    return () => {
-      aliveRef.current = false;
-    };
+    return () => { aliveRef.current = false; };
   }, []);
+
+  // 모달 Esc·배경 잠금.
+  useModalDismiss(open && !saving, () => setOpen(false));
 
   async function load() {
     const myToken = ++loadTokenRef.current;
@@ -72,8 +83,6 @@ export default function AttendancePage() {
   // SWR — 월별 출퇴근과 휴가 목록은 탭 재진입 시 캐시로 즉시 채움.
   const isReviewer = user?.role === "ADMIN" || user?.role === "MANAGER";
   useEffect(() => {
-    // month 를 빠르게 넘기면 이전 달의 onFresh 가 새 달의 setRecords 를 덮어쓰는 race 가 있음.
-    // 의존성 변경으로 effect 가 재실행되는 순간 alive=false 로 만들어 이전 요청 응답은 조용히 무시.
     let alive = true;
     apiSWR<{ attendances: Attendance[] }>(`/api/attendance/month?month=${month}`, {
       onCached: (d) => { if (alive) setRecords(d.attendances); },
@@ -129,13 +138,34 @@ export default function AttendancePage() {
     }
   }
 
-  function duration(c?: string, o?: string) {
-    if (!c || !o) return "-";
-    const ms = new Date(o).getTime() - new Date(c).getTime();
-    const h = Math.floor(ms / 3600000);
-    const m = Math.floor((ms % 3600000) / 60000);
-    return `${h}시간 ${m}분`;
-  }
+  // === 통계 계산 ===
+  const stats = useMemo(() => {
+    const completed = records.filter((r) => r.checkIn && r.checkOut);
+    const totalMs = completed.reduce(
+      (acc, r) => acc + (new Date(r.checkOut!).getTime() - new Date(r.checkIn!).getTime()),
+      0,
+    );
+    const avgMs = completed.length ? totalMs / completed.length : 0;
+    const usedDays = leaves
+      .filter((l) => l.status === "APPROVED")
+      .reduce((acc, l) => acc + dayDiff(l.startDate, l.endDate), 0);
+    const pending = leaves.filter((l) => l.status === "PENDING").length;
+    return {
+      workDays: completed.length,
+      avgHours: avgMs ? msToHM(avgMs) : "—",
+      usedDays,
+      pending,
+    };
+  }, [records, leaves]);
+
+  const pendingForReviewer = useMemo(
+    () => allLeaves.filter((l) => l.status === "PENDING"),
+    [allLeaves],
+  );
+  const handledForReviewer = useMemo(
+    () => allLeaves.filter((l) => l.status !== "PENDING"),
+    [allLeaves],
+  );
 
   return (
     <div>
@@ -145,7 +175,6 @@ export default function AttendancePage() {
         right={
           <div className="flex gap-2 flex-wrap items-center">
             <MonthPicker value={month} onChange={setMonth} />
-            {/* MonthPicker(=.input, h=44px, radius=10px) 와 높이/둥글기 맞추려면 btn-lg 필요 */}
             <button className="btn-primary btn-lg" onClick={() => setOpen(true)}>
               + 휴가 신청
             </button>
@@ -153,159 +182,302 @@ export default function AttendancePage() {
         }
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 card">
-          <h2 className="text-lg font-bold mb-4">{month} 출퇴근 기록</h2>
-          <div className="overflow-hidden rounded-xl border border-slate-100 overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
-            <table className="w-full text-sm min-w-[480px]">
-              <thead className="bg-slate-50 text-slate-500 text-xs">
-                <tr>
-                  <th className="text-left px-4 py-3">일자</th>
-                  <th className="text-left px-4 py-3">출근</th>
-                  <th className="text-left px-4 py-3">퇴근</th>
-                  <th className="text-left px-4 py-3">근무시간</th>
-                </tr>
-              </thead>
-              <tbody>
-                {records.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-slate-400">
-                      기록이 없습니다.
-                    </td>
-                  </tr>
-                )}
-                {records.map((r) => (
-                  <tr key={r.id} className="border-t border-slate-100">
-                    <td className="px-4 py-3 font-medium">{r.date}</td>
-                    <td className="px-4 py-3">
-                      {r.checkIn ? new Date(r.checkIn).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "-"}
-                    </td>
-                    <td className="px-4 py-3">
-                      {r.checkOut ? new Date(r.checkOut).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "-"}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">{duration(r.checkIn, r.checkOut)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* 상단 통계 카드 — 전체 페이지의 시각적 앵커. */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+        <StatCard
+          label={`${month} 근무일`}
+          value={`${stats.workDays}일`}
+          accent="brand"
+          icon={
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="5" width="18" height="16" rx="2" />
+              <path d="M3 10h18M8 3v4M16 3v4" />
+            </svg>
+          }
+        />
+        <StatCard
+          label="평균 근무시간"
+          value={stats.avgHours}
+          accent="success"
+          icon={
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3.5 2" />
+            </svg>
+          }
+        />
+        <StatCard
+          label="사용한 휴가"
+          value={`${stats.usedDays}일`}
+          accent="warning"
+          icon={
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2v6M5 8a7 7 0 0 1 14 0c0 8 -7 14 -7 14s-7 -6 -7 -14z" />
+            </svg>
+          }
+        />
+        <StatCard
+          label="승인 대기"
+          value={`${stats.pending}건`}
+          accent="violet"
+          icon={
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 8v4l2 2" />
+            </svg>
+          }
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* 출퇴근 기록 */}
+        <div className="lg:col-span-2 panel p-0 overflow-hidden">
+          <div className="px-5 py-4 border-b border-ink-100 flex items-center justify-between">
+            <div>
+              <div className="text-[15px] font-extrabold text-ink-900">{month} 출퇴근 기록</div>
+              <div className="text-[12px] text-ink-500 mt-0.5">총 {records.length}일 기록</div>
+            </div>
           </div>
+          {records.length === 0 ? (
+            <EmptyState
+              icon={
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="5" width="18" height="16" rx="2" />
+                  <path d="M3 10h18M8 3v4M16 3v4" />
+                </svg>
+              }
+              title="기록이 없어요"
+              hint="이 달은 아직 출퇴근 기록이 없어요. 다른 달도 확인해 보세요."
+            />
+          ) : (
+            <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+              <table className="w-full text-[13px] min-w-[480px]">
+                <thead className="bg-ink-25 text-ink-500 text-[11px] uppercase tracking-[0.06em]">
+                  <tr>
+                    <th className="text-left px-5 py-2.5 font-bold">일자</th>
+                    <th className="text-left px-5 py-2.5 font-bold">출근</th>
+                    <th className="text-left px-5 py-2.5 font-bold">퇴근</th>
+                    <th className="text-right px-5 py-2.5 font-bold">근무시간</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.map((r) => {
+                    const d = new Date(r.date + "T00:00:00");
+                    const dow = d.getDay();
+                    const isWeekend = dow === 0 || dow === 6;
+                    const isToday = r.date === todayKST();
+                    return (
+                      <tr
+                        key={r.id}
+                        className="border-t border-ink-100"
+                        style={{ background: isToday ? "var(--c-brand-soft)" : undefined }}
+                      >
+                        <td className="px-5 py-3">
+                          <div className="font-bold text-ink-900">{r.date.slice(5)}</div>
+                          <div className="text-[10.5px] mt-0.5" style={{ color: isWeekend ? "var(--c-danger)" : "var(--c-text-3)" }}>
+                            {dowLabel(dow)}
+                            {isToday && <span className="ml-1 chip chip-brand !text-[9.5px] !py-0">오늘</span>}
+                          </div>
+                        </td>
+                        <td className="px-5 py-3 font-mono text-ink-800">
+                          {r.checkIn ? formatHM(r.checkIn) : <span className="text-ink-400">—</span>}
+                        </td>
+                        <td className="px-5 py-3 font-mono text-ink-800">
+                          {r.checkOut ? formatHM(r.checkOut) : <span className="text-ink-400">—</span>}
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          {r.checkIn && r.checkOut ? (
+                            <span className="font-bold text-ink-900">{durationLabel(r.checkIn, r.checkOut)}</span>
+                          ) : (
+                            <span className="text-ink-400">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
-        <div className="card">
-          <h2 className="text-lg font-bold mb-4">내 휴가 신청</h2>
-          <div className="space-y-3">
-            {leaves.length === 0 && <div className="text-sm text-slate-400">신청 내역이 없습니다.</div>}
-            {leaves.map((l) => (
-              <div key={l.id} className="p-3 rounded-xl border border-slate-100">
-                <div className="flex items-center justify-between">
-                  <div className="font-semibold">{typeLabel(l.type)}</div>
-                  <StatusChip status={l.status} />
-                </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  {new Date(l.startDate).toLocaleDateString("ko-KR")} ~ {new Date(l.endDate).toLocaleDateString("ko-KR")}
-                </div>
-                {l.reason && <div className="text-sm text-slate-600 mt-1">{l.reason}</div>}
+        {/* 내 휴가 신청 */}
+        <div className="panel p-0 overflow-hidden">
+          <div className="px-5 py-4 border-b border-ink-100 flex items-center justify-between">
+            <div>
+              <div className="text-[15px] font-extrabold text-ink-900">내 휴가 신청</div>
+              <div className="text-[12px] text-ink-500 mt-0.5">최근 신청 {leaves.length}건</div>
+            </div>
+          </div>
+          <div className="p-3 space-y-2 max-h-[60vh] overflow-y-auto">
+            {leaves.length === 0 ? (
+              <div className="px-2 py-10 text-center text-[12.5px] text-ink-500">
+                신청 내역이 없어요.
+                <br />
+                <button className="btn-ghost btn-xs mt-2" onClick={() => setOpen(true)}>+ 휴가 신청</button>
               </div>
-            ))}
+            ) : (
+              leaves.map((l) => <LeaveRow key={l.id} l={l} />)
+            )}
           </div>
         </div>
       </div>
 
-      {(user?.role === "ADMIN" || user?.role === "MANAGER") && (
-        <div className="card mt-6">
-          <h2 className="text-lg font-bold mb-4">전체 휴가 승인 대기</h2>
-          <div className="overflow-hidden rounded-xl border border-slate-100 overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
-            <table className="w-full text-sm min-w-[720px]">
-              <thead className="bg-slate-50 text-slate-500 text-xs">
-                <tr>
-                  <th className="text-left px-4 py-3">이름</th>
-                  <th className="text-left px-4 py-3">종류</th>
-                  <th className="text-left px-4 py-3">기간</th>
-                  <th className="text-left px-4 py-3">사유</th>
-                  <th className="text-left px-4 py-3">상태</th>
-                  <th className="text-right px-4 py-3">처리</th>
-                </tr>
-              </thead>
-              <tbody>
-                {allLeaves.map((l) => (
-                  <tr key={l.id} className="border-t border-slate-100">
-                    <td className="px-4 py-3 font-medium">{l.user?.name}</td>
-                    <td className="px-4 py-3">{typeLabel(l.type)}</td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {new Date(l.startDate).toLocaleDateString("ko-KR")} ~ {new Date(l.endDate).toLocaleDateString("ko-KR")}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">{l.reason || "-"}</td>
-                    <td className="px-4 py-3">
-                      <StatusChip status={l.status} />
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {l.status === "PENDING" && (
-                        <div className="inline-flex gap-1">
-                          <button
-                            className="text-xs px-3 py-1 rounded-lg bg-brand-400 text-white disabled:opacity-60"
-                            onClick={() => review(l.id, "APPROVED")}
-                            disabled={reviewingId === l.id}
-                          >
-                            {reviewingId === l.id ? "처리 중…" : "승인"}
-                          </button>
-                          <button
-                            className="text-xs px-3 py-1 rounded-lg bg-rose-500 text-white disabled:opacity-60"
-                            onClick={() => review(l.id, "REJECTED")}
-                            disabled={reviewingId === l.id}
-                          >
-                            반려
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* 관리자 — 전체 휴가 처리 */}
+      {isReviewer && (
+        <div className="panel p-0 overflow-hidden mt-5">
+          <div className="px-5 py-4 border-b border-ink-100 flex items-center justify-between">
+            <div>
+              <div className="text-[15px] font-extrabold text-ink-900">전체 휴가 신청</div>
+              <div className="text-[12px] text-ink-500 mt-0.5">
+                대기 <b className="text-ink-900">{pendingForReviewer.length}</b> · 처리됨 {handledForReviewer.length}
+              </div>
+            </div>
           </div>
+          {allLeaves.length === 0 ? (
+            <EmptyState
+              icon={
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="5" width="18" height="16" rx="2" />
+                  <path d="M3 10h18M8 3v4M16 3v4" />
+                </svg>
+              }
+              title="신청이 없어요"
+              hint="구성원의 휴가 신청이 들어오면 여기에 표시돼요."
+            />
+          ) : (
+            <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+              <table className="w-full text-[13px] min-w-[720px]">
+                <thead className="bg-ink-25 text-ink-500 text-[11px] uppercase tracking-[0.06em]">
+                  <tr>
+                    <th className="text-left px-5 py-2.5 font-bold">이름</th>
+                    <th className="text-left px-5 py-2.5 font-bold">종류</th>
+                    <th className="text-left px-5 py-2.5 font-bold">기간</th>
+                    <th className="text-left px-5 py-2.5 font-bold">사유</th>
+                    <th className="text-left px-5 py-2.5 font-bold">상태</th>
+                    <th className="text-right px-5 py-2.5 font-bold">처리</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...pendingForReviewer, ...handledForReviewer].map((l) => (
+                    <tr key={l.id} className="border-t border-ink-100">
+                      <td className="px-5 py-3 font-bold text-ink-900">{l.user?.name}</td>
+                      <td className="px-5 py-3">
+                        <span className="inline-flex items-center gap-1.5">
+                          <LeaveTypeDot type={l.type} />
+                          <span className="text-ink-800">{typeLabel(l.type)}</span>
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-ink-700">
+                        {formatRange(l.startDate, l.endDate)}
+                        <span className="ml-1 text-[11px] text-ink-500">({dayDiff(l.startDate, l.endDate)}일)</span>
+                      </td>
+                      <td className="px-5 py-3 text-ink-600 max-w-[240px] truncate" title={l.reason ?? ""}>
+                        {l.reason || <span className="text-ink-400">—</span>}
+                      </td>
+                      <td className="px-5 py-3">
+                        <StatusChip status={l.status} />
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        {l.status === "PENDING" && (
+                          <div className="inline-flex gap-1.5">
+                            <button
+                              className="btn-primary btn-xs"
+                              onClick={() => review(l.id, "APPROVED")}
+                              disabled={reviewingId === l.id}
+                            >
+                              {reviewingId === l.id ? "처리 중…" : "승인"}
+                            </button>
+                            <button
+                              className="btn-ghost btn-xs"
+                              style={{ color: "var(--c-danger)" }}
+                              onClick={() => review(l.id, "REJECTED")}
+                              disabled={reviewingId === l.id}
+                            >
+                              반려
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
+      {/* 신청 모달 */}
       {open && (
-        <div className="fixed inset-0 bg-slate-900/40 grid place-items-center p-4" onClick={() => setOpen(false)}>
-          <div className="card w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold mb-4">휴가 신청</h3>
-            <form onSubmit={submit} className="space-y-3">
+        <div
+          className="fixed inset-0 z-50 grid place-items-center p-4"
+          style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)" }}
+          onClick={() => !saving && setOpen(false)}
+        >
+          <div className="panel p-0 w-full max-w-[480px] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div
+              className="px-5 py-4"
+              style={{
+                background: "linear-gradient(135deg, var(--c-brand) 0%, #7C3AED 100%)",
+                color: "#fff",
+              }}
+            >
+              <div className="text-[10.5px] font-extrabold tracking-[0.18em] uppercase opacity-90">New Request</div>
+              <div className="text-[18px] font-extrabold tracking-tight mt-0.5">휴가 신청</div>
+            </div>
+            <form onSubmit={submit} className="p-5 space-y-4">
               <div>
-                <label className="label">종류</label>
-                <select className="input" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                  <option value="ANNUAL">연차</option>
-                  <option value="HALF">반차</option>
-                  <option value="SICK">병가</option>
-                  <option value="TRIP">외근</option>
-                  <option value="OTHER">기타</option>
-                </select>
+                <label className="field-label">종류</label>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {LEAVE_TYPES.map((t) => (
+                    <button
+                      key={t.value}
+                      type="button"
+                      onClick={() => setForm({ ...form, type: t.value })}
+                      className={`flex flex-col items-center justify-center gap-1 py-2 rounded-xl border text-[11.5px] font-bold transition ${
+                        form.type === t.value
+                          ? "border-brand-500 bg-brand-50 text-brand-700"
+                          : "border-ink-150 text-ink-600 hover:bg-ink-25"
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full" style={{ background: t.color }} />
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="label">시작일</label>
+                  <label className="field-label">시작일</label>
                   <DateTimePicker mode="date" value={form.startDate} onChange={(v) => setForm({ ...form, startDate: v })} />
                 </div>
                 <div>
-                  <label className="label">종료일</label>
+                  <label className="field-label">종료일</label>
                   <DateTimePicker mode="date" value={form.endDate} onChange={(v) => setForm({ ...form, endDate: v })} min={form.startDate} />
                 </div>
               </div>
+              {form.startDate && form.endDate && new Date(form.endDate) >= new Date(form.startDate) && (
+                <div className="px-3 py-2 rounded-lg bg-brand-soft text-[12.5px] font-semibold" style={{ color: "var(--c-brand-soft-fg)" }}>
+                  총 <b>{dayDiff(form.startDate, form.endDate)}일</b> · {formatRange(form.startDate, form.endDate)}
+                </div>
+              )}
               <div>
-                <label className="label">사유</label>
+                <label className="field-label">사유 (선택)</label>
                 <textarea
                   className="input"
                   rows={3}
                   maxLength={1000}
                   value={form.reason}
                   onChange={(e) => setForm({ ...form, reason: e.target.value })}
+                  placeholder="비워두어도 신청 가능"
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-2 pt-1">
                 <button type="button" className="btn-ghost" onClick={() => setOpen(false)} disabled={saving}>
                   취소
                 </button>
-                <button className="btn-primary" disabled={saving}>{saving ? "신청 중…" : "신청"}</button>
+                <button className="btn-primary" disabled={saving}>{saving ? "신청 중…" : "신청하기"}</button>
               </div>
             </form>
           </div>
@@ -315,20 +487,121 @@ export default function AttendancePage() {
   );
 }
 
+const LEAVE_TYPES = [
+  { value: "ANNUAL", label: "연차", color: "#3B5CF0" },
+  { value: "HALF",   label: "반차", color: "#7C3AED" },
+  { value: "SICK",   label: "병가", color: "#DC2626" },
+  { value: "TRIP",   label: "외근", color: "#16A34A" },
+  { value: "OTHER",  label: "기타", color: "#64748B" },
+];
+
 function typeLabel(t: string) {
-  return { ANNUAL: "연차", HALF: "반차", SICK: "병가", TRIP: "외근", OTHER: "기타" }[t] ?? t;
+  return LEAVE_TYPES.find((x) => x.value === t)?.label ?? t;
+}
+
+function LeaveTypeDot({ type }: { type: string }) {
+  const t = LEAVE_TYPES.find((x) => x.value === type);
+  return <span className="w-2 h-2 rounded-full" style={{ background: t?.color ?? "#94A3B8" }} />;
+}
+
+function LeaveRow({ l }: { l: Leave }) {
+  return (
+    <div className="px-3 py-2.5 rounded-xl border border-ink-100 hover:bg-ink-25 transition">
+      <div className="flex items-center gap-2">
+        <LeaveTypeDot type={l.type} />
+        <span className="text-[13px] font-bold text-ink-900">{typeLabel(l.type)}</span>
+        <span className="text-[11px] text-ink-500">· {dayDiff(l.startDate, l.endDate)}일</span>
+        <span className="ml-auto"><StatusChip status={l.status} /></span>
+      </div>
+      <div className="text-[11.5px] text-ink-500 mt-1 font-mono">
+        {formatRange(l.startDate, l.endDate)}
+      </div>
+      {l.reason && (
+        <div className="text-[12px] text-ink-700 mt-1.5 leading-relaxed line-clamp-2">{l.reason}</div>
+      )}
+    </div>
+  );
 }
 
 function StatusChip({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    PENDING: "bg-amber-100 text-amber-700",
-    APPROVED: "bg-brand-100 text-brand-700",
-    REJECTED: "bg-rose-100 text-rose-700",
-  };
-  const label: Record<string, string> = {
-    PENDING: "대기",
-    APPROVED: "승인",
-    REJECTED: "반려",
-  };
-  return <span className={`chip ${map[status] ?? ""}`}>{label[status] ?? status}</span>;
+  if (status === "APPROVED") return <span className="chip chip-green">승인</span>;
+  if (status === "REJECTED") return <span className="chip chip-red">반려</span>;
+  if (status === "PENDING") return <span className="chip chip-amber">대기</span>;
+  return <span className="chip chip-gray">{status}</span>;
+}
+
+function StatCard({
+  label,
+  value,
+  icon,
+  accent,
+}: {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+  accent: "brand" | "success" | "warning" | "violet";
+}) {
+  const accentStyle = {
+    brand: { bg: "var(--c-brand-soft)", fg: "var(--c-brand)" },
+    success: { bg: "rgba(22,163,74,0.10)", fg: "var(--c-success)" },
+    warning: { bg: "rgba(217,119,6,0.10)", fg: "var(--c-warning)" },
+    violet: { bg: "rgba(124,58,237,0.10)", fg: "#7C3AED" },
+  }[accent];
+  return (
+    <div className="panel p-4 flex items-center gap-3">
+      <div
+        className="w-10 h-10 rounded-xl grid place-items-center flex-shrink-0"
+        style={{ background: accentStyle.bg, color: accentStyle.fg }}
+      >
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <div className="text-[11px] font-bold text-ink-500 uppercase tracking-[0.06em] truncate">{label}</div>
+        <div className="text-[19px] font-extrabold text-ink-900 mt-0.5 tracking-tight tabular-nums">{value}</div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ icon, title, hint }: { icon: React.ReactNode; title: string; hint: string }) {
+  return (
+    <div className="px-6 py-14 text-center">
+      <div className="w-12 h-12 mx-auto rounded-2xl grid place-items-center mb-3" style={{ background: "var(--c-surface-3)", color: "var(--c-text-3)" }}>
+        {icon}
+      </div>
+      <div className="text-[14px] font-bold text-ink-900">{title}</div>
+      <div className="text-[12.5px] text-ink-500 mt-1">{hint}</div>
+    </div>
+  );
+}
+
+// === 유틸 ===
+function dowLabel(n: number) {
+  return ["일", "월", "화", "수", "목", "금", "토"][n] ?? "";
+}
+function formatHM(iso: string) {
+  return new Date(iso).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+}
+function durationLabel(c: string, o: string) {
+  const ms = new Date(o).getTime() - new Date(c).getTime();
+  if (ms <= 0) return "-";
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  return `${h}h ${m}m`;
+}
+function msToHM(ms: number) {
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  return `${h}h ${m}m`;
+}
+function dayDiff(a: string, b: string) {
+  // 양 끝 포함 일수.
+  const start = new Date(a + "T00:00:00").getTime();
+  const end = new Date(b + "T00:00:00").getTime();
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return 0;
+  return Math.round((end - start) / 86400000) + 1;
+}
+function formatRange(a: string, b: string) {
+  if (a === b) return a;
+  return `${a} ~ ${b}`;
 }

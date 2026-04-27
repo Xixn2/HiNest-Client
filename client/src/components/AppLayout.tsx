@@ -78,40 +78,85 @@ function RouteVisibilityGate({
   return <>{children}</>;
 }
 
-/** 비활성된 메뉴 진입 시 안내 — 자물쇠 모양 + 그라데이션 배경. */
+/** 비활성된 메뉴 진입 시 안내 — 풀 화면 그라데이션 + 자물쇠 일러스트. */
 function BlockedPage() {
   return (
-    <div className="grid place-items-center py-10">
-      <div className="w-full max-w-[480px] panel p-0 overflow-hidden text-center">
+    <div
+      className="relative w-full overflow-hidden rounded-3xl"
+      style={{
+        minHeight: "min(78vh, 720px)",
+        background:
+          "radial-gradient(ellipse at top right, rgba(99,102,241,0.18) 0%, transparent 55%), radial-gradient(ellipse at bottom left, rgba(15,23,42,0.65) 0%, transparent 60%), linear-gradient(135deg, #1E293B 0%, #0F172A 100%)",
+        color: "#fff",
+      }}
+    >
+      {/* 큰 배경 자물쇠 — 시각적 hero */}
+      <svg
+        aria-hidden
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="0.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        style={{
+          position: "absolute",
+          right: "-6%",
+          bottom: "-12%",
+          width: "min(640px, 70%)",
+          height: "auto",
+          color: "rgba(255,255,255,0.05)",
+          pointerEvents: "none",
+        }}
+      >
+        <rect x="4" y="11" width="16" height="9" rx="2" />
+        <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+      </svg>
+      {/* 격자 패턴 */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: 0,
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)",
+          backgroundSize: "44px 44px",
+          maskImage: "radial-gradient(ellipse at center, #000 0%, transparent 75%)",
+          pointerEvents: "none",
+        }}
+      />
+      <div className="relative px-6 sm:px-12 py-14 sm:py-20 max-w-[920px]">
         <div
-          className="px-8 pt-10 pb-7 text-white relative"
+          className="w-20 h-20 rounded-3xl grid place-items-center mb-7"
           style={{
-            background: "linear-gradient(135deg, #475569 0%, #1F2937 100%)",
+            background: "rgba(255,255,255,0.08)",
+            backdropFilter: "blur(10px)",
+            border: "1px solid rgba(255,255,255,0.14)",
           }}
         >
-          <div
-            className="w-16 h-16 rounded-2xl mx-auto grid place-items-center mb-3"
-            style={{
-              background: "rgba(255,255,255,0.14)",
-              backdropFilter: "blur(8px)",
-              border: "1px solid rgba(255,255,255,0.18)",
-            }}
-          >
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <rect x="4" y="11" width="16" height="9" rx="2" />
-              <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-            </svg>
-          </div>
-          <div className="text-[11px] font-extrabold tracking-[0.18em] uppercase opacity-80">Restricted</div>
-          <div className="text-[20px] font-extrabold tracking-tight mt-1">사용할 수 없는 메뉴</div>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <rect x="4" y="11" width="16" height="9" rx="2" />
+            <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+          </svg>
         </div>
-        <div className="px-8 py-7">
-          <div className="text-[13.5px] text-ink-700 leading-relaxed">
-            총관리자가 이 메뉴를 일시적으로 닫아 두었어요.
-            <br />
-            계속 사용해야 한다면 총관리자에게 요청해 주세요.
-          </div>
-          <NavLink to="/" className="btn-primary inline-flex mt-6">
+        <div className="text-[12px] font-extrabold tracking-[0.22em] uppercase opacity-70">Restricted</div>
+        <h1 className="text-[clamp(28px,5vw,44px)] font-extrabold tracking-tight mt-2 leading-tight">
+          이 메뉴는<br />
+          잠겨 있어요
+        </h1>
+        <p className="text-[15px] sm:text-[16px] text-white/75 mt-5 max-w-[560px] leading-relaxed">
+          총관리자가 이 메뉴를 일시적으로 닫아 두었어요.
+          계속 사용해야 한다면 총관리자에게 알려주세요.
+        </p>
+        <div className="flex flex-wrap items-center gap-3 mt-8">
+          <NavLink
+            to="/"
+            className="inline-flex items-center gap-2 px-5 py-3 rounded-xl font-bold text-[14px] transition"
+            style={{ background: "#fff", color: "#0F172A" }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
             개요로 돌아가기
           </NavLink>
         </div>
@@ -120,111 +165,194 @@ function BlockedPage() {
   );
 }
 
-/** \"개발 중\" 페이지 — 망치/도구 아이콘 + 펄스 애니메이션 + 친근한 톤. */
+/** \"개발 중\" 페이지 — 풀 화면 그라데이션 + 회전 톱니바퀴 + 펄스 도형. */
 function UnderConstructionPage({ isDeveloper }: { isDeveloper: boolean }) {
   return (
-    <div className="grid place-items-center py-10">
+    <div
+      className="relative w-full overflow-hidden rounded-3xl"
+      style={{
+        minHeight: "min(78vh, 720px)",
+        background:
+          "radial-gradient(ellipse at top, rgba(167,139,250,0.28) 0%, transparent 55%), radial-gradient(ellipse at bottom right, rgba(56,189,248,0.18) 0%, transparent 55%), linear-gradient(135deg, #3B5CF0 0%, #7C3AED 60%, #581C87 100%)",
+        color: "#fff",
+      }}
+    >
       <style>{`
-        @keyframes hinest-uc-pulse {
-          0%, 100% { transform: scale(1); opacity: 0.55; }
-          50%       { transform: scale(1.18); opacity: 0.9; }
-        }
+        @keyframes hinest-uc-pulse { 0%,100% { transform: scale(1); opacity: .5; } 50% { transform: scale(1.18); opacity: .85; } }
         @keyframes hinest-uc-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes hinest-uc-spin-rev { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
+        @keyframes hinest-uc-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
       `}</style>
-      <div className="w-full max-w-[520px] panel p-0 overflow-hidden text-center">
-        <div
-          className="px-8 pt-12 pb-9 relative overflow-hidden"
+
+      {/* 배경 펄스 도형들 */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          top: "-8%",
+          right: "-10%",
+          width: 380,
+          height: 380,
+          borderRadius: "50%",
+          background: "rgba(255,255,255,0.12)",
+          animation: "hinest-uc-pulse 3.6s ease-in-out infinite",
+          filter: "blur(2px)",
+          pointerEvents: "none",
+        }}
+      />
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          bottom: "-12%",
+          left: "-8%",
+          width: 260,
+          height: 260,
+          borderRadius: "50%",
+          background: "rgba(255,255,255,0.10)",
+          animation: "hinest-uc-pulse 4.4s ease-in-out infinite 0.8s",
+          pointerEvents: "none",
+        }}
+      />
+      {/* 격자 */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: 0,
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px)",
+          backgroundSize: "48px 48px",
+          maskImage: "radial-gradient(ellipse at center, #000 0%, transparent 75%)",
+          pointerEvents: "none",
+        }}
+      />
+
+      {/* 큰 배경 톱니바퀴 — hero 일러스트 */}
+      <svg
+        aria-hidden
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="0.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        style={{
+          position: "absolute",
+          right: "-14%",
+          bottom: "-22%",
+          width: "min(720px, 80%)",
+          height: "auto",
+          color: "rgba(255,255,255,0.08)",
+          pointerEvents: "none",
+          animation: "hinest-uc-spin 26s linear infinite",
+        }}
+      >
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33h.04a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.04a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+      </svg>
+
+      <div className="relative px-6 sm:px-12 py-14 sm:py-20 max-w-[1000px]">
+        {/* 작은 톱니바퀴 (반대 방향) — 깊이감 */}
+        <svg
+          aria-hidden
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="0.6"
           style={{
-            background:
-              "radial-gradient(ellipse at top, rgba(124,58,237,0.18) 0%, transparent 60%), linear-gradient(135deg, #3B5CF0 0%, #7C3AED 100%)",
-            color: "#fff",
+            position: "absolute",
+            top: 40,
+            right: 60,
+            width: 84,
+            height: 84,
+            color: "rgba(255,255,255,0.18)",
+            animation: "hinest-uc-spin-rev 14s linear infinite",
+          }}
+          className="hidden md:block"
+        >
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33h.04a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.04a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+
+        {/* hero 톱니 카드 */}
+        <div
+          className="w-24 h-24 rounded-3xl grid place-items-center mb-8"
+          style={{
+            background: "rgba(255,255,255,0.16)",
+            backdropFilter: "blur(12px)",
+            border: "1px solid rgba(255,255,255,0.24)",
+            boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
+            animation: "hinest-uc-float 4.5s ease-in-out infinite",
           }}
         >
-          {/* 배경 펄스 도형 */}
-          <div
+          <svg
+            width="44"
+            height="44"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
             aria-hidden
-            style={{
-              position: "absolute",
-              top: -40,
-              right: -60,
-              width: 220,
-              height: 220,
-              borderRadius: "50%",
-              background: "rgba(255,255,255,0.14)",
-              animation: "hinest-uc-pulse 3.4s ease-in-out infinite",
-              pointerEvents: "none",
-            }}
-          />
-          <div
-            aria-hidden
-            style={{
-              position: "absolute",
-              bottom: -50,
-              left: -40,
-              width: 160,
-              height: 160,
-              borderRadius: "50%",
-              background: "rgba(255,255,255,0.10)",
-              animation: "hinest-uc-pulse 4.2s ease-in-out infinite 0.8s",
-              pointerEvents: "none",
-            }}
-          />
-          <div className="relative">
-            {/* 회전하는 톱니바퀴 */}
+            style={{ animation: "hinest-uc-spin 9s linear infinite" }}
+          >
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33h.04a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.04a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </div>
+        <div className="text-[12px] font-extrabold tracking-[0.22em] uppercase opacity-90">Under Construction</div>
+        <h1 className="text-[clamp(32px,5.5vw,52px)] font-extrabold tracking-tight mt-2 leading-[1.05]">
+          더 좋은 모습으로<br />돌아올게요
+        </h1>
+        <p className="text-[15px] sm:text-[16px] text-white/85 mt-5 max-w-[560px] leading-relaxed">
+          이 페이지는 아직 만드는 중이에요. 새 기능이 완성되면 자동으로 활성화돼서 자연스럽게 사용할 수 있어요.
+        </p>
+
+        {/* 진행 표시 — 시각적 데코, 진짜 진행률 아님. 페이지에 활기 추가 */}
+        <div className="mt-7 max-w-[560px]">
+          <div className="text-[11px] font-bold tracking-[0.14em] uppercase opacity-75 mb-2">In progress</div>
+          <div className="h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.16)" }}>
             <div
-              className="w-20 h-20 rounded-2xl mx-auto grid place-items-center mb-3"
               style={{
-                background: "rgba(255,255,255,0.18)",
-                backdropFilter: "blur(8px)",
-                border: "1px solid rgba(255,255,255,0.25)",
+                height: "100%",
+                width: "62%",
+                background: "linear-gradient(90deg, #fff 0%, #C4B5FD 100%)",
+                borderRadius: 999,
               }}
-            >
-              <svg
-                width="34"
-                height="34"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-                style={{ animation: "hinest-uc-spin 9s linear infinite" }}
-              >
-                <circle cx="12" cy="12" r="3" />
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33h.04a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.04a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-              </svg>
-            </div>
-            <div className="text-[10.5px] font-extrabold tracking-[0.18em] uppercase opacity-90">Under Construction</div>
-            <div className="text-[22px] font-extrabold tracking-tight mt-1">개발 중인 페이지예요</div>
+            />
           </div>
         </div>
-        <div className="px-8 py-7">
-          <div className="text-[13.5px] text-ink-700 leading-relaxed">
-            아직 만드는 중이라 완성되면 알려드릴게요.
-            <br />
-            기능이 마무리되면 자동으로 켜져요.
+
+        {isDeveloper && (
+          <div
+            className="mt-7 inline-flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-bold"
+            style={{
+              background: "rgba(255,255,255,0.18)",
+              backdropFilter: "blur(10px)",
+              border: "1px solid rgba(255,255,255,0.22)",
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <polyline points="16 18 22 12 16 6" />
+              <polyline points="8 6 2 12 8 18" />
+            </svg>
+            HiNest 개발자 — 사이드바 \"개발 페이지 보기\" 토글로 우회 가능
           </div>
-          {isDeveloper && (
-            <div
-              className="mt-4 mx-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold"
-              style={{
-                background: "var(--c-brand-soft)",
-                color: "var(--c-brand-soft-fg)",
-              }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <polyline points="16 18 22 12 16 6" />
-                <polyline points="8 6 2 12 8 18" />
-              </svg>
-              개발자 — 마이페이지에서 \"개발 페이지 보기\" 토글로 우회 가능
-            </div>
-          )}
-          <div className="flex justify-center gap-2 mt-6">
-            <NavLink to="/" className="btn-primary">
-              개요로 돌아가기
-            </NavLink>
-          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-3 mt-8">
+          <NavLink
+            to="/"
+            className="inline-flex items-center gap-2 px-5 py-3 rounded-xl font-bold text-[14px] transition"
+            style={{ background: "#fff", color: "#3B5CF0" }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+            개요로 돌아가기
+          </NavLink>
         </div>
       </div>
     </div>
