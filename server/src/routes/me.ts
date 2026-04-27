@@ -21,6 +21,7 @@ router.get("/", requireAuth, async (req, res) => {
       avatarColor: user.avatarColor,
       avatarUrl: user.avatarUrl,
       superAdmin: user.superAdmin,
+      isDeveloper: user.isDeveloper,
       employeeNo: user.employeeNo,
       presenceStatus: user.presenceStatus,
       presenceMessage: user.presenceMessage,

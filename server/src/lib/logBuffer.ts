@@ -16,7 +16,7 @@ export type LogEntry = {
   msg: string;
 };
 
-const MAX = 2000;
+const MAX = 9999;
 const buf: LogEntry[] = [];
 
 function pushEntry(level: LogLevel, msg: string) {
@@ -25,7 +25,7 @@ function pushEntry(level: LogLevel, msg: string) {
 }
 
 export function getLogs(opts: { since?: number; level?: LogLevel; q?: string; limit?: number } = {}): LogEntry[] {
-  const limit = Math.min(2000, Math.max(1, opts.limit ?? 500));
+  const limit = Math.min(9999, Math.max(1, opts.limit ?? 500));
   let arr = buf;
   if (opts.since) arr = arr.filter((e) => e.ts > opts.since!);
   if (opts.level) arr = arr.filter((e) => e.level === opts.level);

@@ -20,6 +20,7 @@ import {
   type NotifPrefs,
 } from "../lib/notifPrefs";
 import { isDevAccount, DevBadge } from "../lib/devBadge";
+import { getDevPagesEnabled, setDevPagesEnabled } from "../lib/devPagesPref";
 
 // 아바타 색상 팔레트.
 // 다크 모드 surface (#17191F 부근) 와 거의 같은 `#17191F` 를 빼고
@@ -181,7 +182,7 @@ export default function ProfilePage() {
               <div className="min-w-0">
                 <div className="text-[18px] font-extrabold text-ink-900 tracking-tight truncate flex items-center gap-1.5 min-w-0">
                   <span className="truncate min-w-0">{name}</span>
-                  {isDevAccount({ name }) && <DevBadge size="md" />}
+                  {isDevAccount(user) && <DevBadge size="md" />}
                 </div>
                 <div className="text-[12px] text-ink-500 truncate">{user.email}</div>
               </div>
@@ -299,6 +300,7 @@ export default function ProfilePage() {
           <DesktopNotifyPanel />
           <ShortcutsPanel />
           <SessionInfoPanel />
+          {user.isDeveloper && <DevOptionsPanel />}
 
           <div className="panel p-6">
             <div className="h-sub mb-4">비밀번호 변경</div>
@@ -886,6 +888,75 @@ function PresencePanel() {
           "근무중" · "오프라인" 은 자동 판정이라 여기서 선택할 수 없어요. "자동" 을 선택하면 오늘 출퇴근 여부에 따라 자동으로 표시됩니다.
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ===== 개발자 옵션 — isDeveloper 가 true 일 때만 노출 ===== */
+function DevOptionsPanel() {
+  const [on, setOn] = useState<boolean>(() => getDevPagesEnabled());
+  useEffect(() => {
+    function refresh() { setOn(getDevPagesEnabled()); }
+    window.addEventListener("hinest:devPagesChange", refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("hinest:devPagesChange", refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+  function toggle(next: boolean) {
+    setOn(next);
+    setDevPagesEnabled(next);
+  }
+  return (
+    <div className="panel p-6">
+      <div className="h-sub mb-1 inline-flex items-center gap-2">
+        <DevBadge size="md" />
+        개발자 옵션
+      </div>
+      <div className="t-caption mb-4">
+        \"개발 중\" 으로 표시된 메뉴를 안내 페이지 없이 바로 진입할지 선택할 수 있어요.
+      </div>
+      <label className="flex items-center justify-between gap-3 p-3 rounded-lg bg-ink-25 border border-ink-150 cursor-pointer">
+        <div>
+          <div className="text-[13px] font-bold text-ink-900">개발 중 페이지 바로 진입</div>
+          <div className="text-[11.5px] text-ink-500 mt-0.5">
+            끄면 다른 사용자처럼 "개발 중" 안내 화면을 봐요. (각 디바이스/브라우저별 저장)
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => toggle(!on)}
+          aria-label={on ? "끄기" : "켜기"}
+          style={{
+            position: "relative",
+            width: 46,
+            height: 26,
+            borderRadius: 999,
+            border: 0,
+            cursor: "pointer",
+            background: on ? "var(--c-brand)" : "var(--c-border-strong)",
+            transition: "background .18s ease",
+            flexShrink: 0,
+            padding: 0,
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              position: "absolute",
+              top: 2,
+              left: on ? 22 : 2,
+              width: 22,
+              height: 22,
+              borderRadius: "50%",
+              background: "#fff",
+              boxShadow: "0 1px 3px rgba(0,0,0,.15)",
+              transition: "left .18s ease",
+            }}
+          />
+        </button>
+      </label>
     </div>
   );
 }
