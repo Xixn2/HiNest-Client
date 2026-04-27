@@ -14,9 +14,20 @@ type MeetingRow = {
   authorId: string;
   createdAt: string;
   updatedAt: string;
-  author: { id: string; name: string; avatarColor: string };
+  author: { id: string; name: string; avatarColor: string; avatarUrl?: string | null };
   project: { id: string; name: string; color: string } | null;
 };
+
+type Vis = MeetingRow["visibility"];
+type FilterKey = "all" | "mine" | Vis;
+
+const FILTERS: { key: FilterKey; label: string }[] = [
+  { key: "all", label: "전체" },
+  { key: "mine", label: "내가 쓴 것" },
+  { key: "ALL", label: "전사 공개" },
+  { key: "PROJECT", label: "프로젝트" },
+  { key: "SPECIFIC", label: "특정 인원" },
+];
 
 /** 회의록 목록 + 새로 만들기. */
 export default function MeetingsPage() {
@@ -26,14 +37,14 @@ export default function MeetingsPage() {
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [creating, setCreating] = useState(false);
+
   // 새로고침해도 필터 유지.
   const [sp, setSp] = useSearchParams();
-  type VF = "all" | "mine" | "ALL" | "PROJECT" | "SPECIFIC";
-  const VF_SET = new Set<VF>(["all", "mine", "ALL", "PROJECT", "SPECIFIC"]);
-  const visibilityFilter: VF = (VF_SET.has((sp.get("filter") ?? "") as VF)
-    ? (sp.get("filter") as VF)
+  const FILTER_KEYS = new Set<FilterKey>(FILTERS.map((f) => f.key));
+  const visibilityFilter: FilterKey = (FILTER_KEYS.has((sp.get("filter") ?? "") as FilterKey)
+    ? (sp.get("filter") as FilterKey)
     : "all");
-  const setVisibilityFilter = (f: VF) => {
+  const setVisibilityFilter = (f: FilterKey) => {
     const next = new URLSearchParams(sp);
     if (f === "all") next.delete("filter");
     else next.set("filter", f);
@@ -43,21 +54,11 @@ export default function MeetingsPage() {
   useEffect(() => {
     let alive = true;
     apiSWR<{ meetings: MeetingRow[] }>("/api/meeting", {
-      onCached: (r) => {
-        if (!alive) return;
-        setRows(r.meetings);
-        setLoading(false);
-      },
-      onFresh: (r) => {
-        if (!alive) return;
-        setRows(r.meetings);
-        setLoading(false);
-      },
+      onCached: (r) => { if (!alive) return; setRows(r.meetings); setLoading(false); },
+      onFresh: (r) => { if (!alive) return; setRows(r.meetings); setLoading(false); },
       onError: () => alive && setLoading(false),
     });
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, []);
 
   const filtered = useMemo(() => {
@@ -68,6 +69,17 @@ export default function MeetingsPage() {
     if (k) arr = arr.filter((m) => m.title.toLowerCase().includes(k) || m.author.name.toLowerCase().includes(k));
     return arr;
   }, [rows, q, visibilityFilter, user?.id]);
+
+  // 통계 — 상단 카드용. 무거운 계산 아님.
+  const stats = useMemo(() => {
+    const now = Date.now();
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
+    return {
+      total: rows.length,
+      mine: rows.filter((m) => m.authorId === user?.id).length,
+      thisWeek: rows.filter((m) => now - new Date(m.updatedAt).getTime() < weekMs).length,
+    };
+  }, [rows, user?.id]);
 
   async function createNew() {
     if (creating) return;
@@ -81,8 +93,6 @@ export default function MeetingsPage() {
           visibility: "ALL",
         },
       });
-      // 목록 캐시를 비워 — 새 회의록을 저장 후 뒤로 돌아왔을 때 stale cache 로 인해
-      // 방금 만든 항목이 안 보이는 flash 를 방지.
       invalidateCache("/api/meeting");
       nav(`/meetings/${r.meeting.id}?edit=1`);
     } catch (e: any) {
@@ -92,93 +102,315 @@ export default function MeetingsPage() {
     }
   }
 
+  // 같은 날짜끼리 시각적으로 묶으면 시간 흐름이 잘 잡힘.
+  const grouped = useMemo(() => {
+    const map = new Map<string, MeetingRow[]>();
+    for (const m of filtered) {
+      const k = dateGroupKey(m.updatedAt);
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(m);
+    }
+    return Array.from(map.entries());
+  }, [filtered]);
+
   return (
     <div>
-      <PageHeader title="회의록" description="노션처럼 서식을 넣어 작성하고, 공개 범위를 세밀하게 지정하세요." />
-
-      <div className="card">
-        <div className="flex items-center gap-2 mb-4 flex-wrap">
-          <input
-            className="input flex-1 min-w-[200px]"
-            placeholder="제목·작성자로 검색"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            maxLength={80}
-          />
-          <select
-            className="input w-[140px]"
-            value={visibilityFilter}
-            onChange={(e) => setVisibilityFilter(e.target.value as any)}
-          >
-            <option value="all">전체 보기</option>
-            <option value="mine">내가 쓴 것</option>
-            <option value="ALL">공개 범위: 전사</option>
-            <option value="PROJECT">공개 범위: 프로젝트</option>
-            <option value="SPECIFIC">공개 범위: 특정 인원</option>
-          </select>
-          <button className="btn-primary" onClick={createNew} disabled={creating}>
+      <PageHeader
+        title="회의록"
+        description="노션처럼 서식을 넣어 작성하고, 공개 범위를 세밀하게 지정하세요."
+        right={
+          <button className="btn-primary btn-lg" onClick={createNew} disabled={creating}>
             {creating ? "생성 중…" : "+ 새 회의록"}
           </button>
-        </div>
+        }
+      />
 
-        <div className="space-y-1.5">
-          {filtered.map((m) => (
-            <Link
-              key={m.id}
-              to={`/meetings/${m.id}`}
-              className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 hover:bg-slate-50 transition"
+      {/* 통계 카드 — 페이지 진입 시 빠른 컨텍스트 제공. */}
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        <StatCard
+          label="전체 회의록"
+          value={stats.total}
+          accent="brand"
+          icon={
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <path d="M14 2v6h6M8 13h8M8 17h5" />
+            </svg>
+          }
+        />
+        <StatCard
+          label="내가 쓴 것"
+          value={stats.mine}
+          accent="violet"
+          icon={
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11 4h2v16h-2zM5 8h2v12H5zM17 8h2v12h-2z" />
+            </svg>
+          }
+        />
+        <StatCard
+          label="이번 주 업데이트"
+          value={stats.thisWeek}
+          accent="success"
+          icon={
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2v6M12 22v-6M4.93 4.93l4.24 4.24M14.83 14.83l4.24 4.24M2 12h6M22 12h-6M4.93 19.07l4.24-4.24M14.83 9.17l4.24-4.24" />
+            </svg>
+          }
+        />
+      </div>
+
+      {/* 검색 + 필터 칩 */}
+      <div className="panel p-4 mb-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-[220px]">
+            <input
+              className="input !pl-9"
+              placeholder="제목·작성자로 검색"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              maxLength={80}
+            />
+            <svg
+              width="15" height="15" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+              style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--c-text-3)" }}
             >
-              <div className="w-10 h-10 rounded-lg grid place-items-center flex-shrink-0" style={{ background: m.project?.color ?? "#CBD5E1", color: "#fff" }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                  <line x1="8" y1="13" x2="16" y2="13" />
-                  <line x1="8" y1="17" x2="13" y2="17" />
-                </svg>
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-[14px] font-bold truncate">{m.title || "제목 없음"}</div>
-                <div className="flex items-center gap-2 mt-0.5 text-[11.5px] text-slate-500">
-                  <span>{m.author.name}</span>
-                  {isDevAccount(m.author) && <DevBadge />}
-                  <span>·</span>
-                  <span>{new Date(m.updatedAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
-                  {m.project && (
-                    <>
-                      <span>·</span>
-                      <span className="inline-flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: m.project.color }} />
-                        {m.project.name}
-                      </span>
-                    </>
-                  )}
-                </div>
-              </div>
-              <VisibilityBadge v={m.visibility} />
-            </Link>
-          ))}
-          {!loading && filtered.length === 0 && (
-            <div className="text-center py-10 text-slate-400 text-sm">
-              {q || visibilityFilter !== "all" ? "해당하는 회의록이 없습니다." : "첫 회의록을 만들어보세요."}
-            </div>
-          )}
-          {loading && <div className="text-center py-10 text-slate-400 text-sm">불러오는 중…</div>}
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
+            </svg>
+          </div>
         </div>
+        <div className="flex items-center gap-1.5 flex-wrap mt-3">
+          {FILTERS.map((f) => {
+            const active = visibilityFilter === f.key;
+            return (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setVisibilityFilter(f.key)}
+                className="text-[12px] font-bold px-3 py-1.5 rounded-full transition"
+                style={{
+                  background: active ? "var(--c-brand)" : "var(--c-surface-3)",
+                  color: active ? "#fff" : "var(--c-text-2)",
+                  border: active ? "1px solid var(--c-brand)" : "1px solid transparent",
+                }}
+              >
+                {f.label}
+              </button>
+            );
+          })}
+          <span className="text-[11px] text-ink-500 ml-auto">
+            {loading ? "불러오는 중…" : `${filtered.length}개`}
+          </span>
+        </div>
+      </div>
+
+      {/* 본문 */}
+      {loading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} />)}
+        </div>
+      ) : filtered.length === 0 ? (
+        <EmptyState onCreate={createNew} hasFilter={q !== "" || visibilityFilter !== "all"} />
+      ) : (
+        <div className="space-y-5">
+          {grouped.map(([day, items]) => (
+            <div key={day}>
+              <div className="text-[11px] font-extrabold tracking-[0.06em] uppercase text-ink-500 mb-2 px-1">
+                {day}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {items.map((m) => (
+                  <MeetingCard key={m.id} m={m} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MeetingCard({ m }: { m: MeetingRow }) {
+  const projectColor = m.project?.color ?? "#94A3B8";
+  return (
+    <Link
+      to={`/meetings/${m.id}`}
+      className="panel p-0 overflow-hidden hover:!border-brand-300 transition group block"
+    >
+      {/* 좌측 색띠 — 프로젝트 색 / 없으면 회색 */}
+      <div className="flex">
+        <div className="w-1.5 flex-shrink-0" style={{ background: projectColor }} aria-hidden />
+        <div className="flex-1 p-4 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="text-[15px] font-extrabold text-ink-900 line-clamp-2 leading-snug group-hover:text-brand-600 transition">
+              {m.title || "제목 없음"}
+            </div>
+            <VisibilityBadge v={m.visibility} />
+          </div>
+          <div className="flex items-center gap-2 mt-3 text-[11.5px] text-ink-500 flex-wrap">
+            <AuthorChip author={m.author} />
+            <span className="text-ink-300">·</span>
+            <span title={new Date(m.updatedAt).toLocaleString("ko-KR")}>
+              {formatRelative(m.updatedAt)}
+            </span>
+            {m.project && (
+              <>
+                <span className="text-ink-300">·</span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: m.project.color }} />
+                  {m.project.name}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function AuthorChip({ author }: { author: MeetingRow["author"] }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        className="w-5 h-5 rounded-full grid place-items-center text-white text-[10px] font-bold flex-shrink-0 overflow-hidden"
+        style={{ background: author.avatarUrl ? "transparent" : author.avatarColor }}
+      >
+        {author.avatarUrl ? (
+          <img src={author.avatarUrl} alt={author.name} className="w-full h-full object-cover" />
+        ) : (
+          (author.name[0] ?? "?")
+        )}
+      </span>
+      <span className="font-semibold text-ink-700">{author.name}</span>
+      {isDevAccount(author) && <DevBadge iconOnly />}
+    </span>
+  );
+}
+
+function VisibilityBadge({ v }: { v: Vis }) {
+  // 라이트/다크 양쪽에서 자연스러운 톤 — 기존 chip 클래스 재사용해 테마 통일.
+  if (v === "ALL") {
+    return (
+      <span className="chip chip-green !text-[10px] !py-0.5 !px-2 inline-flex items-center gap-1 flex-shrink-0">
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+        </svg>
+        전사
+      </span>
+    );
+  }
+  if (v === "PROJECT") {
+    return (
+      <span className="chip chip-blue !text-[10px] !py-0.5 !px-2 inline-flex items-center gap-1 flex-shrink-0">
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        </svg>
+        프로젝트
+      </span>
+    );
+  }
+  return (
+    <span className="chip chip-amber !text-[10px] !py-0.5 !px-2 inline-flex items-center gap-1 flex-shrink-0">
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      </svg>
+      특정 인원
+    </span>
+  );
+}
+
+function StatCard({
+  label, value, icon, accent,
+}: {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  accent: "brand" | "success" | "violet";
+}) {
+  const a = {
+    brand: { bg: "var(--c-brand-soft)", fg: "var(--c-brand)" },
+    success: { bg: "rgba(22,163,74,0.10)", fg: "var(--c-success)" },
+    violet: { bg: "rgba(124,58,237,0.10)", fg: "#7C3AED" },
+  }[accent];
+  return (
+    <div className="panel p-4 flex items-center gap-3">
+      <div
+        className="w-10 h-10 rounded-xl grid place-items-center flex-shrink-0"
+        style={{ background: a.bg, color: a.fg }}
+      >
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <div className="text-[11px] font-bold text-ink-500 uppercase tracking-[0.06em] truncate">{label}</div>
+        <div className="text-[19px] font-extrabold text-ink-900 mt-0.5 tabular-nums">{value}</div>
       </div>
     </div>
   );
 }
 
-function VisibilityBadge({ v }: { v: "ALL" | "PROJECT" | "SPECIFIC" }) {
-  const styles: Record<typeof v, { bg: string; fg: string; label: string }> = {
-    ALL: { bg: "#DCFCE7", fg: "#166534", label: "전사" },
-    PROJECT: { bg: "#DBEAFE", fg: "#1E40AF", label: "프로젝트" },
-    SPECIFIC: { bg: "#FEF3C7", fg: "#92400E", label: "특정 인원" },
-  };
-  const s = styles[v];
+function SkeletonRow() {
   return (
-    <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: s.bg, color: s.fg }}>
-      {s.label}
-    </span>
+    <div className="panel p-4 animate-pulse">
+      <div className="h-4 rounded w-2/3 mb-3" style={{ background: "var(--c-surface-3)" }} />
+      <div className="h-3 rounded w-1/3" style={{ background: "var(--c-surface-3)" }} />
+    </div>
   );
+}
+
+function EmptyState({ onCreate, hasFilter }: { onCreate: () => void; hasFilter: boolean }) {
+  return (
+    <div className="panel p-12 text-center">
+      <div
+        className="w-14 h-14 mx-auto rounded-2xl grid place-items-center mb-3"
+        style={{ background: "var(--c-brand-soft)", color: "var(--c-brand)" }}
+      >
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <path d="M14 2v6h6M8 13h8M8 17h5" />
+        </svg>
+      </div>
+      <div className="text-[15px] font-extrabold text-ink-900">
+        {hasFilter ? "조건에 맞는 회의록이 없어요" : "첫 회의록을 만들어 볼까요"}
+      </div>
+      <div className="text-[12.5px] text-ink-500 mt-1.5 leading-relaxed">
+        {hasFilter
+          ? "검색어를 바꾸거나 다른 필터를 시도해 보세요."
+          : "오늘 회의 안건과 결정 사항을 정리해 두면 다음 회의가 가벼워져요."}
+      </div>
+      {!hasFilter && (
+        <button className="btn-primary mt-5" onClick={onCreate}>+ 새 회의록 만들기</button>
+      )}
+    </div>
+  );
+}
+
+function dateGroupKey(iso: string): string {
+  const d = new Date(iso);
+  const today = new Date();
+  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const t = startOfDay(today);
+  const dt = startOfDay(d);
+  const diffDays = Math.round((t - dt) / 86400000);
+  if (diffDays === 0) return "오늘";
+  if (diffDays === 1) return "어제";
+  if (diffDays < 7) return `${diffDays}일 전`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)}주 전`;
+  return d.toLocaleDateString("ko-KR", { year: "numeric", month: "long" });
+}
+
+function formatRelative(iso: string): string {
+  const d = new Date(iso);
+  const diff = Date.now() - d.getTime();
+  if (diff < 60_000) return "방금";
+  if (diff < 3600_000) return `${Math.floor(diff / 60_000)}분 전`;
+  if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}시간 전`;
+  if (diff < 7 * 86400_000) return `${Math.floor(diff / 86400_000)}일 전`;
+  return d.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" });
 }
