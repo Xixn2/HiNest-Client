@@ -1150,6 +1150,9 @@ function CodeBlockBubble({ code, lang, mine }: { code: string; lang?: string; mi
   const showExpand = lineCount > 8 || code.length > 400;
   return (
     <div
+      // .code-block 클래스를 박아서 styles.css 가 hljs 다크 팔레트로 강제 — 라이트 테마에서도
+      // 코드 영역만큼은 항상 어두운 inset 으로 통일 (Slack/Discord 패턴).
+      className="code-block"
       style={{
         // display:block + width:100% + min-width:0 콤보 — flex 부모가 0 1 auto 일 때
         // 안에 든 long-content `pre` 가 버블을 부풀려 채팅 영역 밖으로 새는 것 방지.
@@ -1161,8 +1164,10 @@ function CodeBlockBubble({ code, lang, mine }: { code: string; lang?: string; mi
         position: "relative",
         margin: "4px 0",
         borderRadius: 10,
-        background: mine ? "rgba(0,0,0,0.28)" : "var(--c-surface-3)",
-        border: mine ? "1px solid rgba(255,255,255,0.12)" : "1px solid var(--c-border)",
+        // mine(파란 버블) / 상대(회색 버블) 모두 동일한 어두운 코드 surface — 색을 통일해
+        // 사용자가 어떤 버블에서 코드를 봐도 같은 가독성.
+        background: "#1B1F27",
+        border: "1px solid rgba(255,255,255,0.10)",
         overflow: "hidden",
       }}
     >
@@ -1176,8 +1181,9 @@ function CodeBlockBubble({ code, lang, mine }: { code: string; lang?: string; mi
           fontWeight: 700,
           letterSpacing: "0.06em",
           textTransform: "uppercase",
-          color: mine ? "rgba(255,255,255,0.7)" : "var(--c-text-3)",
-          borderBottom: mine ? "1px solid rgba(255,255,255,0.10)" : "1px solid var(--c-border)",
+          // 코드 박스는 어두운 surface 로 통일했으니 헤더도 그에 맞춰 항상 옅은 흰색.
+          color: "rgba(255,255,255,0.7)",
+          borderBottom: "1px solid rgba(255,255,255,0.10)",
         }}
       >
         <span>{lang || "code"}</span>
@@ -1241,8 +1247,8 @@ function CodeBlockBubble({ code, lang, mine }: { code: string; lang?: string; mi
             padding: "6px 10px",
             background: "transparent",
             border: "none",
-            borderTop: mine ? "1px solid rgba(255,255,255,0.10)" : "1px solid var(--c-border)",
-            color: mine ? "rgba(255,255,255,0.85)" : "var(--c-text-3)",
+            borderTop: "1px solid rgba(255,255,255,0.10)",
+            color: "rgba(255,255,255,0.85)",
             fontSize: 11.5,
             fontWeight: 700,
             cursor: "pointer",

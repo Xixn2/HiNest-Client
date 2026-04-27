@@ -389,6 +389,39 @@ html.dark .hljs-variable,
 html.dark .hljs-params,
 html.dark .hljs-attr         { color: #e06c75; }
 
+/* 채팅 버블 안의 코드 블록은 라이트 테마라도 항상 어두운 inset 으로 띄움
+   (Slack/Discord 패턴). 그래서 hljs 도 다크 팔레트로 강제. */
+.code-block .hljs              { color: #abb2bf; }
+.code-block .hljs-keyword,
+.code-block .hljs-selector-tag,
+.code-block .hljs-built_in,
+.code-block .hljs-name,
+.code-block .hljs-tag          { color: #c678dd; }
+.code-block .hljs-string,
+.code-block .hljs-title,
+.code-block .hljs-section,
+.code-block .hljs-attribute,
+.code-block .hljs-literal,
+.code-block .hljs-template-tag,
+.code-block .hljs-template-variable,
+.code-block .hljs-type,
+.code-block .hljs-addition     { color: #98c379; }
+.code-block .hljs-comment,
+.code-block .hljs-quote,
+.code-block .hljs-deletion,
+.code-block .hljs-meta         { color: #7f848e; font-style: italic; }
+.code-block .hljs-number,
+.code-block .hljs-symbol,
+.code-block .hljs-bullet,
+.code-block .hljs-link         { color: #d19a66; }
+.code-block .hljs-function .hljs-title,
+.code-block .hljs-class .hljs-title,
+.code-block .hljs-title.function_,
+.code-block .hljs-title.class_  { color: #61afef; }
+.code-block .hljs-variable,
+.code-block .hljs-params,
+.code-block .hljs-attr         { color: #e06c75; }
+
 /* ============================================================ */
 /*                           AVATARS                             */
 /* ============================================================ */
