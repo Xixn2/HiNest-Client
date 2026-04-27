@@ -7,6 +7,7 @@ import { alertAsync } from "../ConfirmHost";
 import { parseCodeSegments } from "../../lib/codeDetect";
 import { copyToClipboard } from "../../lib/clipboard";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { highlightCode } from "../../lib/syntaxHighlight";
 
 /**
  * 파일/이미지/동영상 메시지를 문서함으로 복사 저장.
@@ -1133,7 +1134,7 @@ function InlineCode({ code, mine }: { code: string; mine: boolean }) {
         margin: "0 1px",
         borderRadius: 4,
         background: mine ? "rgba(255,255,255,0.18)" : "var(--c-surface-3)",
-        color: mine ? "#fff" : "var(--c-fg-strong)",
+        color: mine ? "#fff" : "var(--c-text)",
         wordBreak: "break-word",
       }}
     >
@@ -1175,7 +1176,7 @@ function CodeBlockBubble({ code, lang, mine }: { code: string; lang?: string; mi
           fontWeight: 700,
           letterSpacing: "0.06em",
           textTransform: "uppercase",
-          color: mine ? "rgba(255,255,255,0.7)" : "var(--c-fg-muted)",
+          color: mine ? "rgba(255,255,255,0.7)" : "var(--c-text-3)",
           borderBottom: mine ? "1px solid rgba(255,255,255,0.10)" : "1px solid var(--c-border)",
         }}
       >
@@ -1208,21 +1209,22 @@ function CodeBlockBubble({ code, lang, mine }: { code: string; lang?: string; mi
           fontFamily: CODE_FONT,
           fontSize: 12.5,
           lineHeight: 1.5,
-          color: mine ? "#fff" : "var(--c-fg-strong)",
           // pre-wrap + break-word: 좁은 화면에서 긴 줄이 자동으로 접힘. 의도된 \n 은 보존.
-          // 종전 whiteSpace:pre + overflowX:auto 는 가로 스크롤이 부모 폭을 밀어 모바일에서 버블이
-          // 화면을 뚫고 나갔음.
           whiteSpace: "pre-wrap",
           wordBreak: "break-word",
           overflowWrap: "anywhere",
-          // 100줄 넘는 코드 덩어리는 버블 자체를 화면 한 페이지 이상으로 늘리지 않도록
-          // 60vh 안에 가두고 그 안에서만 세로 스크롤.
           maxHeight: "60vh",
           overflowY: "auto",
           maxWidth: "100%",
         }}
       >
-        <code style={{ fontFamily: "inherit" }}>{code}</code>
+        <code
+          className="hljs"
+          // highlight.js 가 토큰별 span 으로 감싼 HTML 을 그대로 주입.
+          // hljs.highlight 출력은 안전(이스케이프 처리됨) — 자체 sanitization 추가 불필요.
+          dangerouslySetInnerHTML={{ __html: highlightCode(code, lang) }}
+          style={{ fontFamily: "inherit" }}
+        />
       </pre>
       {showExpand && (
         <button
@@ -1240,7 +1242,7 @@ function CodeBlockBubble({ code, lang, mine }: { code: string; lang?: string; mi
             background: "transparent",
             border: "none",
             borderTop: mine ? "1px solid rgba(255,255,255,0.10)" : "1px solid var(--c-border)",
-            color: mine ? "rgba(255,255,255,0.85)" : "var(--c-fg-muted)",
+            color: mine ? "rgba(255,255,255,0.85)" : "var(--c-text-3)",
             fontSize: 11.5,
             fontWeight: 700,
             cursor: "pointer",
@@ -1270,7 +1272,10 @@ function CodeViewerModal({ code, lang, onClose }: { code: string; lang?: string;
         position: "fixed",
         inset: 0,
         zIndex: 9999,
-        background: "rgba(0,0,0,0.65)",
+        // 종전 0.65 는 배경 캘린더가 비쳐 어수선했음. 0.85 로 올려 거의 가림 + backdropFilter 로 블러.
+        background: "rgba(0,0,0,0.85)",
+        backdropFilter: "blur(4px)",
+        WebkitBackdropFilter: "blur(4px)",
         display: "grid",
         placeItems: "center",
         padding: "max(env(safe-area-inset-top), 16px) 16px max(env(safe-area-inset-bottom), 16px)",
@@ -1283,14 +1288,15 @@ function CodeViewerModal({ code, lang, onClose }: { code: string; lang?: string;
           width: "min(1100px, 100%)",
           height: "100%",
           maxHeight: "100%",
-          background: "var(--c-surface-1)",
-          color: "var(--c-fg-strong)",
+          // 패널은 불투명한 surface — 종전엔 토큰 var 가 일부 환경에서 투명하게 잡혀 배경이 비쳤음.
+          background: "var(--c-surface)",
+          color: "var(--c-text)",
           borderRadius: 14,
           border: "1px solid var(--c-border)",
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
         }}
       >
         {/* 헤더 */}
@@ -1314,12 +1320,12 @@ function CodeViewerModal({ code, lang, onClose }: { code: string; lang?: string;
               padding: "3px 8px",
               borderRadius: 6,
               background: "var(--c-surface-3)",
-              color: "var(--c-fg-muted)",
+              color: "var(--c-text-3)",
             }}
           >
             {lang || "code"}
           </div>
-          <div style={{ flex: 1, fontSize: 12, color: "var(--c-fg-muted)" }}>
+          <div style={{ flex: 1, fontSize: 12, color: "var(--c-text-3)" }}>
             {lines.length}줄 · {code.length.toLocaleString()}자
           </div>
           <button
@@ -1341,13 +1347,13 @@ function CodeViewerModal({ code, lang, onClose }: { code: string; lang?: string;
             ✕
           </button>
         </div>
-        {/* 본문 — 줄번호 + 코드 */}
+        {/* 본문 — 줄번호 + 코드. 둘 다 불투명한 surface 위에 그려야 배경 비치지 않음. */}
         <div
           style={{
             flex: 1,
             minHeight: 0,
             overflow: "auto",
-            background: "var(--c-surface-1)",
+            background: "var(--c-surface)",
           }}
         >
           <div style={{ display: "flex", alignItems: "stretch", minHeight: "100%" }}>
@@ -1361,7 +1367,7 @@ function CodeViewerModal({ code, lang, onClose }: { code: string; lang?: string;
                 fontFamily: CODE_FONT,
                 fontSize: 13,
                 lineHeight: 1.6,
-                color: "var(--c-fg-muted)",
+                color: "var(--c-text-3)",
                 background: "var(--c-surface-2)",
                 borderRight: "1px solid var(--c-border)",
                 userSelect: "none",
@@ -1380,14 +1386,18 @@ function CodeViewerModal({ code, lang, onClose }: { code: string; lang?: string;
                 fontFamily: CODE_FONT,
                 fontSize: 13,
                 lineHeight: 1.6,
-                color: "var(--c-fg-strong)",
                 whiteSpace: "pre",
                 overflowX: "auto",
                 flex: 1,
                 minWidth: 0,
+                background: "var(--c-surface)",
               }}
             >
-              <code style={{ fontFamily: "inherit" }}>{code}</code>
+              <code
+                className="hljs"
+                dangerouslySetInnerHTML={{ __html: highlightCode(code, lang) }}
+                style={{ fontFamily: "inherit" }}
+              />
             </pre>
           </div>
         </div>
