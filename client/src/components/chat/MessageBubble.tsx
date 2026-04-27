@@ -3,6 +3,8 @@ import { C, FONT, formatBytes } from "./theme";
 import type { Attachment, Message, Reaction } from "./types";
 import { api } from "../../api";
 import { alertAsync } from "../ConfirmHost";
+import { parseCodeSegments } from "../../lib/codeDetect";
+import { copyToClipboard } from "../../lib/clipboard";
 
 /**
  * 파일/이미지/동영상 메시지를 문서함으로 복사 저장.
@@ -1079,10 +1081,15 @@ export function TextBubble({
   content: string;
   mine: boolean;
 }) {
+  // 코드(펜스/인라인/휴리스틱) 영역을 떼어내고 일반 텍스트만 URL 링크화.
+  const segments = parseCodeSegments(content);
+  // 코드 블록이 하나라도 있으면 둥근모서리 안쪽 패딩이 너무 작으면 보기 안 좋아서
+  // 살짝 늘려준다 (펜스 코드는 자체 padding 갖는 박스라 충돌 없음).
+  const hasBlockCode = segments.some((s) => s.kind === "code");
   return (
     <div
       style={{
-        padding: "9px 13px",
+        padding: hasBlockCode ? "8px 8px" : "9px 13px",
         fontSize: 14,
         fontWeight: 500,
         lineHeight: 1.4,
@@ -1098,7 +1105,100 @@ export function TextBubble({
         fontFamily: FONT,
       }}
     >
-      {renderWithLinks(content, mine)}
+      {segments.map((seg, i) => {
+        if (seg.kind === "code") return <CodeBlockBubble key={i} code={seg.code} lang={seg.lang} mine={mine} />;
+        if (seg.kind === "inline-code") return <InlineCode key={i} code={seg.code} mine={mine} />;
+        return <span key={i}>{renderWithLinks(seg.text, mine)}</span>;
+      })}
+    </div>
+  );
+}
+
+const CODE_FONT =
+  "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace";
+
+function InlineCode({ code, mine }: { code: string; mine: boolean }) {
+  return (
+    <code
+      style={{
+        fontFamily: CODE_FONT,
+        fontSize: 12.5,
+        padding: "1px 5px",
+        margin: "0 1px",
+        borderRadius: 4,
+        background: mine ? "rgba(255,255,255,0.18)" : "var(--c-surface-3)",
+        color: mine ? "#fff" : "var(--c-fg-strong)",
+        wordBreak: "break-word",
+      }}
+    >
+      {code}
+    </code>
+  );
+}
+
+function CodeBlockBubble({ code, lang, mine }: { code: string; lang?: string; mine: boolean }) {
+  return (
+    <div
+      style={{
+        position: "relative",
+        margin: "4px 0",
+        borderRadius: 10,
+        background: mine ? "rgba(0,0,0,0.28)" : "var(--c-surface-3)",
+        border: mine ? "1px solid rgba(255,255,255,0.12)" : "1px solid var(--c-border)",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "4px 8px 4px 10px",
+          fontSize: 10.5,
+          fontWeight: 700,
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+          color: mine ? "rgba(255,255,255,0.7)" : "var(--c-fg-muted)",
+          borderBottom: mine ? "1px solid rgba(255,255,255,0.10)" : "1px solid var(--c-border)",
+        }}
+      >
+        <span>{lang || "code"}</span>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            copyToClipboard(code, { title: "복사됨", description: "코드를 클립보드에 복사했어요." });
+          }}
+          style={{
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            color: "inherit",
+            fontSize: 10.5,
+            fontWeight: 700,
+            letterSpacing: "0.06em",
+            padding: "2px 4px",
+          }}
+          title="코드 복사"
+        >
+          복사
+        </button>
+      </div>
+      <pre
+        style={{
+          margin: 0,
+          padding: "8px 10px",
+          fontFamily: CODE_FONT,
+          fontSize: 12.5,
+          lineHeight: 1.5,
+          color: mine ? "#fff" : "var(--c-fg-strong)",
+          whiteSpace: "pre",
+          overflowX: "auto",
+          maxWidth: "100%",
+        }}
+      >
+        <code style={{ fontFamily: "inherit" }}>{code}</code>
+      </pre>
     </div>
   );
 }
