@@ -840,7 +840,7 @@ const CMD_TREE: Record<string, any> = {
   whoami: {},
   clear: {},
   cls: {},
-  users: { list: { "arg:limit": {} }, find: { "arg:query": {} } },
+  users: { list: { "arg:limit": {} }, find: { "arg:query": {} }, devs: {} },
   user: {
     info: { "arg:user": {} },
     role: { "arg:user": { MEMBER: {}, MANAGER: {}, ADMIN: {} } },
