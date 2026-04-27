@@ -9,6 +9,7 @@ import { copyToClipboard } from "../../lib/clipboard";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { highlightCode } from "../../lib/syntaxHighlight";
 import { LangIcon } from "../../lib/langIcon";
+import { splitBlocks, renderInlineMarkdown } from "../../lib/markdown";
 
 /**
  * 파일/이미지/동영상 메시지를 문서함으로 복사 저장.
@@ -1082,6 +1083,54 @@ function renderWithLinks(content: string, mine: boolean): React.ReactNode[] {
   return nodes;
 }
 
+/** 마크다운 블록(>, -, 1.) + 인라인(**, *, ~~, URL) 을 React 노드로. */
+function MarkdownText({ text, mine }: { text: string; mine: boolean }) {
+  const blocks = splitBlocks(text);
+  // 텍스트 안의 URL 링크화는 종전 renderWithLinks 를 그대로 쓰되, 인라인 마크다운 후에 호출.
+  const inline = (s: string, key: string) => <span key={key}>{renderWithLinks(s, mine)}</span>;
+  return (
+    <>
+      {blocks.map((b, i) => {
+        if (b.kind === "blockquote") {
+          return (
+            <blockquote
+              key={i}
+              style={{
+                margin: "4px 0",
+                padding: "2px 10px",
+                borderLeft: `3px solid ${mine ? "rgba(255,255,255,0.45)" : "var(--c-border-strong)"}`,
+                color: mine ? "rgba(255,255,255,0.9)" : "var(--c-text-2)",
+                fontStyle: "normal",
+              }}
+            >
+              {renderInlineMarkdown(b.text, inline)}
+            </blockquote>
+          );
+        }
+        if (b.kind === "ul") {
+          return (
+            <ul key={i} style={{ margin: "4px 0", paddingLeft: 22 }}>
+              {b.items.map((it, j) => (
+                <li key={j}>{renderInlineMarkdown(it, inline)}</li>
+              ))}
+            </ul>
+          );
+        }
+        if (b.kind === "ol") {
+          return (
+            <ol key={i} start={b.start} style={{ margin: "4px 0", paddingLeft: 22 }}>
+              {b.items.map((it, j) => (
+                <li key={j}>{renderInlineMarkdown(it, inline)}</li>
+              ))}
+            </ol>
+          );
+        }
+        return <span key={i}>{renderInlineMarkdown(b.text, inline)}</span>;
+      })}
+    </>
+  );
+}
+
 export function TextBubble({
   content,
   mine,
@@ -1116,7 +1165,7 @@ export function TextBubble({
       {segments.map((seg, i) => {
         if (seg.kind === "code") return <CodeBlockBubble key={i} code={seg.code} lang={seg.lang} mine={mine} />;
         if (seg.kind === "inline-code") return <InlineCode key={i} code={seg.code} mine={mine} />;
-        return <span key={i}>{renderWithLinks(seg.text, mine)}</span>;
+        return <MarkdownText key={i} text={seg.text} mine={mine} />;
       })}
     </div>
   );
