@@ -68,48 +68,167 @@ function RouteVisibilityGate({
   }, []);
   const isDeveloper = !!user?.isDeveloper;
   if (matchPath(loc.pathname, disabled)) {
-    return (
-      <div className="panel p-10 text-center">
-        <div className="text-[18px] font-extrabold text-ink-900 mb-2">사용할 수 없는 메뉴</div>
-        <div className="text-[13px] text-ink-600 leading-relaxed">
-          이 메뉴는 총관리자가 비활성화 했어요.
-          <br />
-          다시 사용하려면 총관리자에게 요청해 주세요.
-        </div>
-        <NavLink to="/" className="btn-primary inline-flex mt-5">
-          개요로 돌아가기
-        </NavLink>
-      </div>
-    );
+    return <BlockedPage />;
   }
   if (matchPath(loc.pathname, dev)) {
     // 개발자 + 토글 ON 이면 안내 없이 그대로 페이지 진입.
     if (isDeveloper && devPagesOn) return <>{children}</>;
-    return (
-      <div className="panel p-10 text-center">
-        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-extrabold tracking-[0.06em] uppercase mb-3"
-          style={{ background: "var(--c-warning)", color: "#fff" }}>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M12 9v4" /><path d="M12 17h.01" /><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-          </svg>
-          개발 중
-        </div>
-        <div className="text-[18px] font-extrabold text-ink-900 mb-2">아직 준비 중인 페이지예요</div>
-        <div className="text-[13px] text-ink-600 leading-relaxed">
-          기능이 완성되면 자동으로 활성화돼요. 조금만 기다려 주세요.
-        </div>
-        {isDeveloper && (
-          <div className="text-[12px] text-ink-500 mt-3">
-            개발자 권한 보유 — 마이페이지 \"개발자 옵션\" 에서 토글을 켜면 우회할 수 있어요.
-          </div>
-        )}
-        <NavLink to="/" className="btn-primary inline-flex mt-5">
-          개요로 돌아가기
-        </NavLink>
-      </div>
-    );
+    return <UnderConstructionPage isDeveloper={isDeveloper} />;
   }
   return <>{children}</>;
+}
+
+/** 비활성된 메뉴 진입 시 안내 — 자물쇠 모양 + 그라데이션 배경. */
+function BlockedPage() {
+  return (
+    <div className="grid place-items-center py-10">
+      <div className="w-full max-w-[480px] panel p-0 overflow-hidden text-center">
+        <div
+          className="px-8 pt-10 pb-7 text-white relative"
+          style={{
+            background: "linear-gradient(135deg, #475569 0%, #1F2937 100%)",
+          }}
+        >
+          <div
+            className="w-16 h-16 rounded-2xl mx-auto grid place-items-center mb-3"
+            style={{
+              background: "rgba(255,255,255,0.14)",
+              backdropFilter: "blur(8px)",
+              border: "1px solid rgba(255,255,255,0.18)",
+            }}
+          >
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <rect x="4" y="11" width="16" height="9" rx="2" />
+              <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+            </svg>
+          </div>
+          <div className="text-[11px] font-extrabold tracking-[0.18em] uppercase opacity-80">Restricted</div>
+          <div className="text-[20px] font-extrabold tracking-tight mt-1">사용할 수 없는 메뉴</div>
+        </div>
+        <div className="px-8 py-7">
+          <div className="text-[13.5px] text-ink-700 leading-relaxed">
+            총관리자가 이 메뉴를 일시적으로 닫아 두었어요.
+            <br />
+            계속 사용해야 한다면 총관리자에게 요청해 주세요.
+          </div>
+          <NavLink to="/" className="btn-primary inline-flex mt-6">
+            개요로 돌아가기
+          </NavLink>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** \"개발 중\" 페이지 — 망치/도구 아이콘 + 펄스 애니메이션 + 친근한 톤. */
+function UnderConstructionPage({ isDeveloper }: { isDeveloper: boolean }) {
+  return (
+    <div className="grid place-items-center py-10">
+      <style>{`
+        @keyframes hinest-uc-pulse {
+          0%, 100% { transform: scale(1); opacity: 0.55; }
+          50%       { transform: scale(1.18); opacity: 0.9; }
+        }
+        @keyframes hinest-uc-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
+      <div className="w-full max-w-[520px] panel p-0 overflow-hidden text-center">
+        <div
+          className="px-8 pt-12 pb-9 relative overflow-hidden"
+          style={{
+            background:
+              "radial-gradient(ellipse at top, rgba(124,58,237,0.18) 0%, transparent 60%), linear-gradient(135deg, #3B5CF0 0%, #7C3AED 100%)",
+            color: "#fff",
+          }}
+        >
+          {/* 배경 펄스 도형 */}
+          <div
+            aria-hidden
+            style={{
+              position: "absolute",
+              top: -40,
+              right: -60,
+              width: 220,
+              height: 220,
+              borderRadius: "50%",
+              background: "rgba(255,255,255,0.14)",
+              animation: "hinest-uc-pulse 3.4s ease-in-out infinite",
+              pointerEvents: "none",
+            }}
+          />
+          <div
+            aria-hidden
+            style={{
+              position: "absolute",
+              bottom: -50,
+              left: -40,
+              width: 160,
+              height: 160,
+              borderRadius: "50%",
+              background: "rgba(255,255,255,0.10)",
+              animation: "hinest-uc-pulse 4.2s ease-in-out infinite 0.8s",
+              pointerEvents: "none",
+            }}
+          />
+          <div className="relative">
+            {/* 회전하는 톱니바퀴 */}
+            <div
+              className="w-20 h-20 rounded-2xl mx-auto grid place-items-center mb-3"
+              style={{
+                background: "rgba(255,255,255,0.18)",
+                backdropFilter: "blur(8px)",
+                border: "1px solid rgba(255,255,255,0.25)",
+              }}
+            >
+              <svg
+                width="34"
+                height="34"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+                style={{ animation: "hinest-uc-spin 9s linear infinite" }}
+              >
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33h.04a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.04a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+            </div>
+            <div className="text-[10.5px] font-extrabold tracking-[0.18em] uppercase opacity-90">Under Construction</div>
+            <div className="text-[22px] font-extrabold tracking-tight mt-1">개발 중인 페이지예요</div>
+          </div>
+        </div>
+        <div className="px-8 py-7">
+          <div className="text-[13.5px] text-ink-700 leading-relaxed">
+            아직 만드는 중이라 완성되면 알려드릴게요.
+            <br />
+            기능이 마무리되면 자동으로 켜져요.
+          </div>
+          {isDeveloper && (
+            <div
+              className="mt-4 mx-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold"
+              style={{
+                background: "var(--c-brand-soft)",
+                color: "var(--c-brand-soft-fg)",
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <polyline points="16 18 22 12 16 6" />
+                <polyline points="8 6 2 12 8 18" />
+              </svg>
+              개발자 — 마이페이지에서 \"개발 페이지 보기\" 토글로 우회 가능
+            </div>
+          )}
+          <div className="flex justify-center gap-2 mt-6">
+            <NavLink to="/" className="btn-primary">
+              개요로 돌아가기
+            </NavLink>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /** 총관리자가 끈/개발중 사이드바 path 들. /api/nav/visibility 응답 + 이벤트로 다른 탭 동기화. */
