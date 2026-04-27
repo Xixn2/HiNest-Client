@@ -545,10 +545,17 @@ function ImageLightbox({
 
   // 채팅 미니앱 컨테이너에 transform 이 걸려있어 position:fixed 가 viewport 가 아니라
   // 그 컨테이너 기준으로 잡히는 문제 → document.body 로 portal 해서 진짜 풀 화면.
+  // [중요] React portal 은 React 트리 따라 이벤트가 버블링되므로, 여기서 mousedown 을
+  // stopPropagation 안 하면 닫기 직후 사라진 모달 위치의 React 부모(LongPress)가
+  // mousedown 만 받고 mouseup 은 못 받아 롱프레스 타이머가 발동되는 버그가 생김.
   return createPortal(
     <div
       role="dialog"
-      onMouseDown={onClose}
+      onMouseDown={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
+      onClick={(e) => e.stopPropagation()}
       style={{
         position: "fixed",
         inset: 0,
@@ -1356,7 +1363,13 @@ function CodeViewerModal({ code, lang, onClose }: { code: string; lang?: string;
         placeItems: "center",
         padding: "max(env(safe-area-inset-top), 16px) 16px max(env(safe-area-inset-bottom), 16px)",
       }}
-      onClick={onClose}
+      // 같은 portal 버블링 방지 — 닫기 후 React 부모 LongPress 가 mousedown 만 받고
+      // mouseup 못 받아 롱프레스 메뉴가 자동으로 뜨는 사고 차단.
+      onMouseDown={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
+      onClick={(e) => e.stopPropagation()}
     >
       <div
         onClick={(e) => e.stopPropagation()}
