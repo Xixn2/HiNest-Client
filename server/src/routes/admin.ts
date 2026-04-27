@@ -791,6 +791,7 @@ router.post("/console", requireSuperAdminStepUp, async (req, res) => {
         "  [유저 조회]",
         "  users list [limit]                  최근 가입 N명 (기본 20, 최대 200)",
         "  users find <query>                  이름/이메일/사번 부분 매치",
+        "  users devs                           개발자 권한 보유자 전체",
         "  user info <id|email|사번>            유저 상세",
         "",
         "  [유저 권한·계정]",
@@ -827,13 +828,13 @@ router.post("/console", requireSuperAdminStepUp, async (req, res) => {
       const list = await prisma.user.findMany({
         orderBy: { createdAt: "desc" },
         take: limit,
-        select: { id: true, name: true, email: true, role: true, superAdmin: true, active: true, createdAt: true },
+        select: { id: true, name: true, email: true, role: true, superAdmin: true, isDeveloper: true, active: true, createdAt: true },
       });
       const rows = list.map(
         (x) =>
-          `${x.id}  ${x.role.padEnd(7)} ${x.superAdmin ? "S" : " "} ${x.active ? "A" : "X"}  ${x.email.padEnd(28)} ${x.name}`,
+          `${x.id}  ${x.role.padEnd(7)} ${x.superAdmin ? "S" : " "}${x.isDeveloper ? "D" : " "} ${x.active ? "A" : "X"}  ${x.email.padEnd(28)} ${x.name}`,
       );
-      result = out([`최근 ${list.length}명 (역할 / S=super / A=active):`, ...rows]);
+      result = out([`최근 ${list.length}명 (역할 / S=super / D=developer / A=active):`, ...rows]);
     } else if (head === "users" && sub === "find") {
       const q = arg1;
       if (!q) { result = err("쿼리가 비었어요. 예: users find 김"); }
@@ -848,32 +849,47 @@ router.post("/console", requireSuperAdminStepUp, async (req, res) => {
             ],
           },
           take: 50,
-          select: { id: true, name: true, email: true, role: true, superAdmin: true, active: true, employeeNo: true },
+          select: { id: true, name: true, email: true, role: true, superAdmin: true, isDeveloper: true, active: true, employeeNo: true },
         });
         if (list.length === 0) { result = out("매치 0건"); }
         else {
           const rows = list.map(
             (x) =>
-              `${x.id}  ${x.role.padEnd(7)} ${x.superAdmin ? "S" : " "} ${x.active ? "A" : "X"}  ${(x.employeeNo ?? "-").padEnd(12)} ${x.email.padEnd(28)} ${x.name}`,
+              `${x.id}  ${x.role.padEnd(7)} ${x.superAdmin ? "S" : " "}${x.isDeveloper ? "D" : " "} ${x.active ? "A" : "X"}  ${(x.employeeNo ?? "-").padEnd(12)} ${x.email.padEnd(28)} ${x.name}`,
           );
-          result = out([`매치 ${list.length}건:`, ...rows]);
+          result = out([`매치 ${list.length}건 (S=super / D=developer / A=active):`, ...rows]);
         }
+      }
+    } else if (head === "users" && sub === "devs") {
+      const list = await prisma.user.findMany({
+        where: { isDeveloper: true },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, email: true, role: true, active: true },
+      });
+      if (list.length === 0) { result = out("개발자 권한을 가진 사용자가 없어요."); }
+      else {
+        const rows = list.map(
+          (x) =>
+            `${x.id}  ${x.role.padEnd(7)} ${x.active ? "A" : "X"}  ${x.email.padEnd(28)} ${x.name}`,
+        );
+        result = out([`개발자 ${list.length}명:`, ...rows]);
       }
     } else if (head === "user" && sub === "info") {
       const target = await findUser(arg1);
       if (!target) { result = err(`유저를 찾을 수 없음: ${arg1}`); }
       else {
         result = out([
-          `id        : ${target.id}`,
-          `name      : ${target.name}`,
-          `email     : ${target.email}`,
-          `employeeNo: ${target.employeeNo ?? "-"}`,
-          `role      : ${target.role}`,
-          `superAdmin: ${target.superAdmin ? "true" : "false"}`,
-          `active    : ${target.active ? "true" : "false"}`,
-          `team      : ${target.team ?? "-"}`,
-          `position  : ${target.position ?? "-"}`,
-          `createdAt : ${target.createdAt.toISOString()}`,
+          `id         : ${target.id}`,
+          `name       : ${target.name}`,
+          `email      : ${target.email}`,
+          `employeeNo : ${target.employeeNo ?? "-"}`,
+          `role       : ${target.role}`,
+          `superAdmin : ${target.superAdmin ? "true" : "false"}`,
+          `isDeveloper: ${(target as any).isDeveloper ? "true" : "false"}`,
+          `active     : ${target.active ? "true" : "false"}`,
+          `team       : ${target.team ?? "-"}`,
+          `position   : ${target.position ?? "-"}`,
+          `createdAt  : ${target.createdAt.toISOString()}`,
         ]);
       }
     } else if (head === "user" && (sub === "grant" || sub === "revoke")) {
