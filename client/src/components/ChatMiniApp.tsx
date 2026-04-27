@@ -42,6 +42,7 @@ import { parseCodeSegments } from "../lib/codeDetect";
 import { copyToClipboard } from "../lib/clipboard";
 import { highlightCode } from "../lib/syntaxHighlight";
 import { LangIcon } from "../lib/langIcon";
+import { isDevAccount, DevBadge } from "../lib/devBadge";
 
 /**
  * 팝업 내부 사내톡 — 토스(Toss) 스타일 코디네이터.
@@ -2131,8 +2132,9 @@ function RoomView({
                   ) : null}
                   <div style={{ minWidth: 0, flex: "0 1 auto", position: "relative" }}>
                     {!mine && m.showMeta && (
-                      <div style={{ fontSize: 11.5, fontWeight: 600, color: C.gray600, marginLeft: 4, marginBottom: 3 }}>
+                      <div style={{ fontSize: 11.5, fontWeight: 600, color: C.gray600, marginLeft: 4, marginBottom: 3, display: "inline-flex", alignItems: "center", gap: 4 }}>
                         {m.sender.name}
+                        {isDevAccount(m.sender) && <DevBadge />}
                       </div>
                     )}
                     <div

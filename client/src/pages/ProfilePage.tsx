@@ -19,6 +19,7 @@ import {
   type NotifCategory,
   type NotifPrefs,
 } from "../lib/notifPrefs";
+import { isDevAccount, DevBadge } from "../lib/devBadge";
 
 // 아바타 색상 팔레트.
 // 다크 모드 surface (#17191F 부근) 와 거의 같은 `#17191F` 를 빼고
@@ -178,7 +179,10 @@ export default function ProfilePage() {
                 </div>
               )}
               <div className="min-w-0">
-                <div className="text-[18px] font-extrabold text-ink-900 tracking-tight truncate">{name}</div>
+                <div className="text-[18px] font-extrabold text-ink-900 tracking-tight truncate flex items-center gap-1.5 min-w-0">
+                  <span className="truncate min-w-0">{name}</span>
+                  {isDevAccount({ name }) && <DevBadge size="md" />}
+                </div>
                 <div className="text-[12px] text-ink-500 truncate">{user.email}</div>
               </div>
             </div>
