@@ -10,6 +10,7 @@ import CreateProjectModal from "./CreateProjectModal";
 import { NotificationProvider, useNotifications } from "../notifications";
 import { PinsProvider, usePins, pinLinkUrl } from "../pins";
 import { ROUTE_PREFETCH, loadProject } from "../routes";
+import { isDevAccount, DevBadge } from "../lib/devBadge";
 
 /**
  * 사이드바 hover/focus prefetch — 사용자가 클릭하기 전에 해당 페이지 청크를
@@ -28,6 +29,42 @@ function prefetchRoute(to: string) {
 }
 
 type NavItem = { to: string; label: string; icon: (p: { active?: boolean }) => JSX.Element; end?: boolean };
+
+/** 토글 path → 영향받는 자식 path prefix 매핑.
+ *  /meetings 끄면 /meetings/123 도 막아야 하니까 startsWith 비교. */
+function isPathBlocked(pathname: string, disabled: Set<string>): string | null {
+  if (disabled.size === 0) return null;
+  // 정확히 일치하거나(/journal), 자식 경로(/meetings/abc) 도 차단.
+  for (const p of disabled) {
+    // "/" 자체를 끈 경우는 정확 매치만 (다른 모든 경로의 prefix 라 너무 광범위).
+    if (p === "/") {
+      if (pathname === "/") return p;
+      continue;
+    }
+    if (pathname === p || pathname.startsWith(p + "/")) return p;
+  }
+  return null;
+}
+
+/** 끈 메뉴는 라우트 진입도 차단 — Outlet 자리에 안내 화면. */
+function RouteVisibilityGate({ disabled, children }: { disabled: Set<string>; children: React.ReactNode }) {
+  const loc = useLocation();
+  const blocked = isPathBlocked(loc.pathname, disabled);
+  if (!blocked) return <>{children}</>;
+  return (
+    <div className="panel p-10 text-center">
+      <div className="text-[18px] font-extrabold text-ink-900 mb-2">사용할 수 없는 메뉴</div>
+      <div className="text-[13px] text-ink-600 leading-relaxed">
+        이 메뉴는 총관리자가 비활성화 했어요.
+        <br />
+        다시 사용하려면 총관리자에게 요청해 주세요.
+      </div>
+      <NavLink to="/" className="btn-primary inline-flex mt-5">
+        개요로 돌아가기
+      </NavLink>
+    </div>
+  );
+}
 
 /** 총관리자가 끈 사이드바 path 들. /api/nav/visibility 응답 + storage 이벤트로 다른 탭 동기화. */
 function useDisabledNav() {
@@ -225,7 +262,10 @@ function AppLayoutInner() {
                 </div>
               )}
               <div className="min-w-0 flex-1">
-                <div className="text-[13px] font-semibold text-ink-900 truncate">{user?.name}</div>
+                <div className="text-[13px] font-semibold text-ink-900 truncate flex items-center gap-1">
+                  <span className="truncate">{user?.name}</span>
+                  {isDevAccount({ name: user?.name }) && <DevBadge />}
+                </div>
                 <div className="text-[11px] text-ink-500 truncate">{user?.email}</div>
               </div>
             </NavLink>
@@ -262,7 +302,9 @@ function AppLayoutInner() {
         <TopBar draggable={showTitlebarSpace} onOpenNav={() => setMobileNavOpen(true)} />
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-[1400px] mx-auto px-4 md:px-8 py-4 md:py-6">
-            <Outlet />
+            <RouteVisibilityGate disabled={disabledNav}>
+              <Outlet />
+            </RouteVisibilityGate>
           </div>
         </main>
       </div>

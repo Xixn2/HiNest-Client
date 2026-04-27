@@ -4,6 +4,7 @@ import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
 import { resolvePresence, type PresenceStatus, type WorkStatus } from "../lib/presence";
 import { alertAsync } from "../components/ConfirmHost";
+import { isDevAccount, DevBadge } from "../lib/devBadge";
 
 type DirectoryUser = {
   id: string;
@@ -318,7 +319,10 @@ function GridCard({
             <PresenceDot u={u} size={12} ring={2} />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-[15px] font-extrabold text-ink-900 tracking-tight truncate">{u.name}</div>
+            <div className="text-[15px] font-extrabold text-ink-900 tracking-tight truncate inline-flex items-center gap-1.5">
+              {u.name}
+              {isDevAccount(u) && <DevBadge />}
+            </div>
             <div className="text-[12px] text-ink-600 truncate mt-0.5">
               {u.position ?? "—"}
             </div>
@@ -396,7 +400,10 @@ function ListRow({ u, onDM, divider, dmBusy }: { u: DirectoryUser; onDM: () => v
       </div>
       <div className="min-w-0 flex-1 md:w-[28%] md:flex-initial">
         <div className="flex items-center gap-1.5">
-          <div className="text-[14px] font-extrabold text-ink-900 truncate tracking-tight">{u.name}</div>
+          <div className="text-[14px] font-extrabold text-ink-900 truncate tracking-tight inline-flex items-center gap-1.5">
+            {u.name}
+            {isDevAccount(u) && <DevBadge />}
+          </div>
           <PresenceBadge u={u} />
         </div>
         <div className="text-[11px] text-ink-500 tabular truncate">{u.email}</div>

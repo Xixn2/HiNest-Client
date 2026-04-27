@@ -784,7 +784,12 @@ function ConsolePanel() {
       if (!aliveRef.current) return;
       setHistory((h) => [...h, { kind: "output", ok: false, text: `요청 실패: ${e?.message ?? "unknown"}`, ts: Date.now() }]);
     } finally {
-      if (aliveRef.current) setBusy(false);
+      if (aliveRef.current) {
+        setBusy(false);
+        // disabled 가 풀린 직후 포커스 복구 — busy 동안 input 이 disabled 라 포커스가 빠지므로
+        // 다음 페인트 사이클에서 다시 잡아줘야 사용자가 곧장 다음 명령을 칠 수 있음.
+        requestAnimationFrame(() => inputRef.current?.focus());
+      }
     }
   }
 
