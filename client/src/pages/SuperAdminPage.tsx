@@ -122,12 +122,42 @@ function SuperAdminContent() {
     return true;
   }
 
+  function lockChat() {
+    try { sessionStorage.removeItem(CHAT_LOG_KEY); } catch {}
+    setChatUnlocked(false);
+    // 현재 사내톡 탭 보고 있었으면 활동 로그로 되돌림.
+    if (tab === "chat") setTab("logs");
+  }
+
+  // 콘솔 \`chat lock\` 명령으로도 즉시 잠금 가능 — escape hatch.
+  useEffect(() => {
+    function onLock() { lockChat(); }
+    window.addEventListener("hinest:chatAuditLock", onLock);
+    return () => window.removeEventListener("hinest:chatAuditLock", onLock);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
   return (
     <>
       <div className="flex items-center gap-1 mb-4 border-b border-ink-150">
         <TabBtn active={tab === "logs"} onClick={() => setTab("logs")}>활동 로그</TabBtn>
         {chatUnlocked && (
-          <TabBtn active={tab === "chat"} onClick={() => setTab("chat")}>사내톡 감사</TabBtn>
+          <div className="flex items-center">
+            <TabBtn active={tab === "chat"} onClick={() => setTab("chat")}>사내톡 감사</TabBtn>
+            <button
+              type="button"
+              onClick={lockChat}
+              className="ml-1 text-ink-500 hover:text-red-600 transition"
+              title="사내톡 감사 즉시 잠그기"
+              aria-label="사내톡 감사 잠그기"
+              style={{ width: 22, height: 22, display: "grid", placeItems: "center", borderRadius: 999 }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="4" y="11" width="16" height="9" rx="2" />
+                <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+              </svg>
+            </button>
+          </div>
         )}
         <TabBtn active={tab === "api"} onClick={() => setTab("api")}>API 명세</TabBtn>
         <TabBtn active={tab === "console"} onClick={() => setTab("console")}>콘솔</TabBtn>
@@ -1024,6 +1054,15 @@ function ConsolePanel() {
       setHistory((h) => [
         ...h,
         { kind: "output", ok: true, text: "사내톡 감사 접근 — 암호 입력창을 띄웠어요.", ts: Date.now() },
+      ]);
+      return;
+    }
+    // 즉시 잠금 — 30분 만료 안 기다리고 곧장 OFF.
+    if (/^chat\s+lock\s*$/i.test(cmd)) {
+      window.dispatchEvent(new Event("hinest:chatAuditLock"));
+      setHistory((h) => [
+        ...h,
+        { kind: "output", ok: true, text: "사내톡 감사 즉시 잠금됨.", ts: Date.now() },
       ]);
       return;
     }
