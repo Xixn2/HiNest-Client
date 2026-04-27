@@ -552,6 +552,98 @@ router.delete("/positions/:id", async (req, res) => {
 });
 
 /* ===== 로그 (총관리자 전용 · step-up 필요) ===== */
+/* ===== API 명세 (총관리자) =====
+ * Express 라우터 트리를 깊이우선으로 훑어 등록된 모든 (METHOD, PATH) + 사용된 미들웨어 이름을 수집.
+ * - 인증/권한 미들웨어 이름이 검출되면 auth: \"PUBLIC\" | \"AUTH\" | \"ADMIN\" | \"SUPER\" 로 라벨링.
+ * - 정렬: 첫 path segment 별 그룹 + 그 안에서 path 알파벳 순.
+ */
+router.get("/api-spec", requireSuperAdminStepUp, async (req, res) => {
+  type SpecRoute = {
+    method: string;
+    path: string;
+    auth: "PUBLIC" | "AUTH" | "ADMIN" | "SUPER";
+    middlewares: string[];
+  };
+
+  const AUTH_NAMES = new Set(["requireAuth"]);
+  const ADMIN_NAMES = new Set(["requireAdmin"]);
+  const SUPER_NAMES = new Set(["requireSuperAdmin", "requireSuperAdminStepUp"]);
+
+  function authOf(names: string[]): SpecRoute["auth"] {
+    if (names.some((n) => SUPER_NAMES.has(n))) return "SUPER";
+    if (names.some((n) => ADMIN_NAMES.has(n))) return "ADMIN";
+    if (names.some((n) => AUTH_NAMES.has(n))) return "AUTH";
+    return "PUBLIC";
+  }
+
+  /** Layer.regexp 에서 prefix path 복원. fast_slash 인 경우 빈 prefix.
+   *  복잡한 정규식 라우트(파라미터 포함)는 layer.regexp.fast_slash 가 false 일 때 정규식 toString
+   *  자체에서 \"^\\/api\\/x\\/?\" 패턴을 추출 시도 — 못 찾으면 빈 문자열로 두고 자식 path 만 사용. */
+  function prefixOfRouter(layer: any): string {
+    if (layer.regexp?.fast_slash) return "";
+    const src = layer.regexp?.toString?.() ?? "";
+    // /^\/api\/snippet\/?(?=\/|$)/i  → /api/snippet
+    const m = /^\/\^\\?(\/[^\\\/?]+(?:\\\/[^\\\/?]+)*)\\?\\?\(\?=\\?\/\|\$\)/i.exec(src);
+    if (!m) return "";
+    return m[1].replace(/\\\//g, "/");
+  }
+
+  const routes: SpecRoute[] = [];
+
+  function walk(stack: any[], parentPath: string, parentMw: string[]) {
+    for (const layer of stack) {
+      // 라우터 자체에 박힌 미들웨어 (router.use(requireAuth) 형태)는 layer.handle 에 stack 이 있는 router.
+      // 단순 미들웨어 layer 는 method 가 없고 route 도 없음 → 다음 형제 layer 들에 적용되는 게이트.
+      if (layer.route) {
+        const subPath = layer.route.path;
+        const fullPath = (parentPath + subPath).replace(/\/+/g, "/");
+        // 한 path 에 여러 method 가 등록될 수 있음 (route.methods 객체).
+        const methods = Object.keys(layer.route.methods ?? {}).filter((m) => layer.route.methods[m]);
+        // route 자체에 deps 로 박힌 미들웨어들 (e.g. router.get(path, requireSuperAdminStepUp, handler))
+        const routeMw: string[] = (layer.route.stack ?? [])
+          .map((s: any) => s.name || s.handle?.name || "")
+          .filter(Boolean);
+        const allMw = [...parentMw, ...routeMw];
+        const auth = authOf(allMw);
+        for (const m of methods) {
+          if (m === "_all") continue;
+          routes.push({
+            method: m.toUpperCase(),
+            path: fullPath,
+            auth,
+            middlewares: allMw.filter((n) => n !== "<anonymous>"),
+          });
+        }
+      } else if (layer.name === "router" && layer.handle?.stack) {
+        const prefix = prefixOfRouter(layer);
+        walk(layer.handle.stack, parentPath + prefix, parentMw);
+      } else if (layer.handle?.name && !layer.route) {
+        // 라우터에 직접 박힌 미들웨어(use) — 이름이 있으면 게이트로 누적.
+        // 단, app.use 의 글로벌 미들웨어는 어떤 라우터든 자식이라 부모 컨텍스트로 들어가야 하지만,
+        // 단순화를 위해 이름만 누적. 부모 router.use(requireAuth) 도 여기 걸림.
+        if (!["query", "expressInit", "<anonymous>", "bound dispatch"].includes(layer.handle.name)) {
+          parentMw.push(layer.handle.name);
+        }
+      }
+    }
+  }
+
+  const app = req.app as any;
+  const root = app._router?.stack ?? app.router?.stack ?? [];
+  walk(root, "", []);
+
+  // 중복 제거(같은 path/method 가 여러 layer 매칭될 수 있음) + 정렬.
+  const dedup = new Map<string, SpecRoute>();
+  for (const r of routes) {
+    const k = `${r.method} ${r.path}`;
+    if (!dedup.has(k)) dedup.set(k, r);
+  }
+  const sorted = [...dedup.values()].sort((a, b) =>
+    a.path === b.path ? a.method.localeCompare(b.method) : a.path.localeCompare(b.path),
+  );
+  res.json({ routes: sorted, total: sorted.length });
+});
+
 router.get("/logs", requireSuperAdminStepUp, async (req, res) => {
   const limit = Math.min(Number(req.query.limit ?? 200), 500);
   const logs = await prisma.auditLog.findMany({

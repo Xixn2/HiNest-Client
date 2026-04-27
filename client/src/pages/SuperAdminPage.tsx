@@ -38,7 +38,14 @@ type Message = {
   sender: { id: string; name: string; avatarColor: string; avatarUrl?: string | null };
 };
 
-type Tab = "logs" | "chat";
+type Tab = "logs" | "chat" | "api";
+
+type ApiSpecRoute = {
+  method: string;
+  path: string;
+  auth: "PUBLIC" | "AUTH" | "ADMIN" | "SUPER";
+  middlewares: string[];
+};
 
 export default function SuperAdminPage() {
   return (
@@ -58,7 +65,8 @@ export default function SuperAdminPage() {
 function SuperAdminContent() {
   // 새로고침 유지 — URL 쿼리로 탭 동기화.
   const [sp, setSp] = useSearchParams();
-  const tab = (sp.get("tab") === "chat" ? "chat" : "logs") as Tab;
+  const raw = sp.get("tab");
+  const tab: Tab = raw === "chat" ? "chat" : raw === "api" ? "api" : "logs";
   const setTab = (t: Tab) => {
     const next = new URLSearchParams(sp);
     if (t === "logs") next.delete("tab");
@@ -70,9 +78,11 @@ function SuperAdminContent() {
       <div className="flex items-center gap-1 mb-4 border-b border-ink-150">
         <TabBtn active={tab === "logs"} onClick={() => setTab("logs")}>활동 로그</TabBtn>
         <TabBtn active={tab === "chat"} onClick={() => setTab("chat")}>사내톡 감사</TabBtn>
+        <TabBtn active={tab === "api"} onClick={() => setTab("api")}>API 명세</TabBtn>
       </div>
       {tab === "logs" && <LogsPanel />}
       {tab === "chat" && <ChatAuditPanel />}
+      {tab === "api" && <ApiSpecPanel />}
     </>
   );
 }
@@ -414,4 +424,125 @@ function humanSize(n: number) {
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
   return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+/* =============== API 명세 =============== */
+function ApiSpecPanel() {
+  const [routes, setRoutes] = useState<ApiSpecRoute[]>([]);
+  const [q, setQ] = useState("");
+  const [authFilter, setAuthFilter] = useState<"" | ApiSpecRoute["auth"]>("");
+  const [methodFilter, setMethodFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  const aliveRef = useRef(true);
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => { aliveRef.current = false; };
+  }, []);
+
+  useEffect(() => {
+    api<{ routes: ApiSpecRoute[]; total: number }>("/api/admin/api-spec")
+      .then((r) => {
+        if (!aliveRef.current) return;
+        setRoutes(r.routes);
+      })
+      .catch((e) => { if (aliveRef.current) setErr(e?.message ?? "불러오기 실패"); })
+      .finally(() => { if (aliveRef.current) setLoading(false); });
+  }, []);
+
+  // path 의 첫 segment 로 그룹핑(예: /api/snippet → \"api/snippet\").
+  // 두 번째 segment까지 묶으면 그룹이 너무 잘게 쪼개져서 /api/<리소스> 단위로 통일.
+  const grouped = useMemo(() => {
+    const filtered = routes.filter((r) => {
+      if (authFilter && r.auth !== authFilter) return false;
+      if (methodFilter && r.method !== methodFilter) return false;
+      if (q) {
+        const k = q.toLowerCase();
+        if (!r.path.toLowerCase().includes(k) && !r.method.toLowerCase().includes(k)) return false;
+      }
+      return true;
+    });
+    const map = new Map<string, ApiSpecRoute[]>();
+    for (const r of filtered) {
+      const segs = r.path.split("/").filter(Boolean);
+      const key = segs.length >= 2 ? `/${segs[0]}/${segs[1]}` : `/${segs[0] ?? ""}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(r);
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [routes, q, authFilter, methodFilter]);
+
+  if (loading) return <div className="panel p-8 text-center text-ink-500 text-[13px]">불러오는 중…</div>;
+  if (err) return <div className="panel p-6 text-red-600 text-[13px]">{err}</div>;
+
+  const totalShown = grouped.reduce((acc, [, list]) => acc + list.length, 0);
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <input
+          className="input flex-1 min-w-[220px]"
+          placeholder="path 또는 method 검색 — 예: /chat, GET"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <select className="input !w-auto" value={methodFilter} onChange={(e) => setMethodFilter(e.target.value)}>
+          <option value="">메소드 전체</option>
+          {["GET", "POST", "PATCH", "PUT", "DELETE"].map((m) => <option key={m} value={m}>{m}</option>)}
+        </select>
+        <select className="input !w-auto" value={authFilter} onChange={(e) => setAuthFilter(e.target.value as any)}>
+          <option value="">권한 전체</option>
+          <option value="PUBLIC">PUBLIC</option>
+          <option value="AUTH">AUTH</option>
+          <option value="ADMIN">ADMIN</option>
+          <option value="SUPER">SUPER</option>
+        </select>
+        <div className="text-[11px] text-ink-500">
+          총 <b className="text-ink-800">{routes.length}</b> 개 · 표시 <b className="text-ink-800">{totalShown}</b>
+        </div>
+      </div>
+
+      {grouped.length === 0 ? (
+        <div className="panel p-10 text-center text-ink-500 text-[13px]">조건에 맞는 라우트가 없어요</div>
+      ) : (
+        <div className="space-y-3">
+          {grouped.map(([groupKey, list]) => (
+            <div key={groupKey} className="panel p-0 overflow-hidden">
+              <div className="px-3 py-2 bg-ink-25 border-b border-ink-150 flex items-center justify-between">
+                <div className="text-[12.5px] font-bold text-ink-800 font-mono">{groupKey}</div>
+                <div className="text-[11px] text-ink-500">{list.length}개</div>
+              </div>
+              <ul className="divide-y divide-ink-100">
+                {list.map((r) => (
+                  <li key={`${r.method} ${r.path}`} className="px-3 py-2 flex items-center gap-3">
+                    <MethodChip method={r.method} />
+                    <code className="flex-1 min-w-0 text-[12.5px] font-mono text-ink-900 truncate">{r.path}</code>
+                    <AuthChip auth={r.auth} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MethodChip({ method }: { method: string }) {
+  const tone =
+    method === "GET" ? "chip-blue"
+    : method === "POST" ? "chip-green"
+    : method === "PATCH" || method === "PUT" ? "chip-amber"
+    : method === "DELETE" ? "chip-red"
+    : "chip-gray";
+  return <span className={`chip ${tone} font-mono`} style={{ minWidth: 56, justifyContent: "center" }}>{method}</span>;
+}
+
+function AuthChip({ auth }: { auth: ApiSpecRoute["auth"] }) {
+  if (auth === "SUPER") return <span className="chip chip-violet">SUPER</span>;
+  if (auth === "ADMIN") return <span className="chip chip-orange">ADMIN</span>;
+  if (auth === "AUTH") return <span className="chip chip-gray">AUTH</span>;
+  return <span className="chip" style={{ background: "transparent", color: "var(--c-text-3)", border: "1px dashed var(--c-border)" }}>PUBLIC</span>;
 }
