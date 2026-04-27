@@ -49,6 +49,7 @@ const RESOURCE_NAV: NavItem[] = [
   { to: "/documents", label: "문서함", icon: DocsIcon },
   { to: "/expense", label: "법인카드", icon: CardIcon },
   { to: "/accounts", label: "계정 관리", icon: KeyIcon },
+  { to: "/snippets", label: "스니펫", icon: SnippetIcon },
 ];
 
 export default function AppLayout() {
@@ -496,6 +497,7 @@ const BREADCRUMB: Record<string, string> = {
   "/org": "조직도",
   "/documents": "문서함",
   "/accounts": "계정 관리",
+  "/snippets": "스니펫",
   "/approvals": "전자결재",
   "/expense": "법인카드",
   "/admin": "관리자",
@@ -601,6 +603,7 @@ function DocsIcon({ active }: I) { return svgBase(!!active, <><path d="M14 2H6a2
 function ApprovalIcon({ active }: I) { return svgBase(!!active, <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="m9 14 2 2 4-4" /></>); }
 function CardIcon({ active }: I) { return svgBase(!!active, <><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 11h18M7 16h4" /></>); }
 function KeyIcon({ active }: I) { return svgBase(!!active, <><circle cx="7.5" cy="15.5" r="4.5" /><path d="m10.5 12.5 10-10M17 7l3 3M15.5 8.5l3 3" /></>); }
+function SnippetIcon({ active }: I) { return svgBase(!!active, <><path d="m8 3-4 4 4 4M16 3l4 4-4 4" /><path d="M14 4 10 20" /></>); }
 function ShieldIcon({ active }: I) { return svgBase(!!active, <><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z" /><path d="m9 12 2 2 4-4" /></>); }
 function CrownIcon({ active }: I) { return svgBase(!!active, <><path d="M3 18h18" /><path d="M3 8l4 5 5-8 5 8 4-5v10H3z" /></>); }
 const _unused_swInv = swInv;

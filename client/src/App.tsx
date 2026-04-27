@@ -25,6 +25,7 @@ import {
   MeetingsPage,
   MeetingDetailPage,
   ServiceAccountsPage,
+  SnippetsPage,
   AdminPage,
   SuperAdminPage,
 } from "./routes";
@@ -97,6 +98,7 @@ export default function App() {
           <Route path="meetings" element={<MeetingsPage />} />
           <Route path="meetings/:id" element={<MeetingDetailPage />} />
           <Route path="accounts" element={<ServiceAccountsPage />} />
+          <Route path="snippets" element={<SnippetsPage />} />
           <Route
             path="admin"
             element={
