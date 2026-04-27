@@ -29,6 +29,34 @@ function prefetchRoute(to: string) {
 
 type NavItem = { to: string; label: string; icon: (p: { active?: boolean }) => JSX.Element; end?: boolean };
 
+/** 총관리자가 끈 사이드바 path 들. /api/nav/visibility 응답 + storage 이벤트로 다른 탭 동기화. */
+function useDisabledNav() {
+  const [disabled, setDisabled] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    let cancelled = false;
+    function load() {
+      api<{ disabled: string[] }>("/api/nav/visibility")
+        .then((r) => {
+          if (cancelled) return;
+          setDisabled(new Set(r.disabled ?? []));
+        })
+        .catch(() => {});
+    }
+    load();
+    // 다른 탭/창에서 토글이 바뀌면 즉시 반영.
+    function onChange() { load(); }
+    window.addEventListener("hinest:navVisibilityChange", onChange);
+    // 페이지 포커스 복귀 시에도 한 번 더 — 다른 디바이스의 토글까지.
+    window.addEventListener("focus", onChange);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("hinest:navVisibilityChange", onChange);
+      window.removeEventListener("focus", onChange);
+    };
+  }, []);
+  return disabled;
+}
+
 const WORK_NAV: NavItem[] = [
   { to: "/", label: "개요", icon: HomeIcon, end: true },
   { to: "/schedule", label: "일정", icon: CalendarIcon },
@@ -66,6 +94,8 @@ function AppLayoutInner() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
   const loc = useLocation();
+  const disabledNav = useDisabledNav();
+  const filterByVisibility = (items: NavItem[]) => items.filter((i) => !disabledNav.has(i.to));
   const isMacDesktop = !!window.hinest?.isDesktop && window.hinest?.platform === "darwin";
   const [isFullscreen, setIsFullscreen] = useState(false);
   // 모바일 사이드바 드로어 — md 미만에서만 의미 있음 (md 이상은 항상 고정 배치)
@@ -127,9 +157,10 @@ function AppLayoutInner() {
         </div>
 
         <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-5">
-          <NavSection label="워크스페이스" items={WORK_NAV} />
-          <NavSection label="커뮤니케이션" items={COMM_NAV} />
-          <NavSection label="자료·재무" items={RESOURCE_NAV} />
+          {/* 총관리자가 끈 항목은 메뉴에서 제외. 섹션 자체가 비면 라벨도 안 보이게. */}
+          {(() => { const items = filterByVisibility(WORK_NAV); return items.length > 0 && <NavSection label="워크스페이스" items={items} />; })()}
+          {(() => { const items = filterByVisibility(COMM_NAV); return items.length > 0 && <NavSection label="커뮤니케이션" items={items} />; })()}
+          {(() => { const items = filterByVisibility(RESOURCE_NAV); return items.length > 0 && <NavSection label="자료·재무" items={items} />; })()}
           <PinsSection />
           <ProjectsSection />
 

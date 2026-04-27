@@ -12,6 +12,16 @@ import { requireAuth } from "../lib/auth.js";
 const router = Router();
 router.use(requireAuth);
 
+/** 사이드바 메뉴 가시성 — 총관리자가 NavConfig 에서 끈 항목 path 목록 반환.
+ *  행이 없는 path 는 기본 노출(true) 로 간주 → 클라는 disabled set 만 알면 됨. */
+router.get("/visibility", async (_req, res) => {
+  const rows = await prisma.navConfig.findMany({
+    where: { enabled: false },
+    select: { path: true },
+  });
+  res.json({ disabled: rows.map((r) => r.path) });
+});
+
 function parseSince(v: unknown): Date | null {
   if (typeof v !== "string" || !v) return null;
   const d = new Date(v);

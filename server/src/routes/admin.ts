@@ -1034,6 +1034,30 @@ router.post("/console", requireSuperAdminStepUp, async (req, res) => {
   res.json(result);
 });
 
+/** 사이드바 메뉴 가시성 관리 (총관리자 전용).
+ *  GET  /api/admin/nav-visibility           전체 NavConfig 행 (disabled 만 의미 있음)
+ *  POST /api/admin/nav-visibility           { path, enabled } upsert.
+ */
+router.get("/nav-visibility", requireSuperAdminStepUp, async (_req, res) => {
+  const rows = await prisma.navConfig.findMany({ orderBy: { path: "asc" } });
+  res.json({ items: rows });
+});
+
+router.post("/nav-visibility", requireSuperAdminStepUp, async (req, res) => {
+  const u = (req as any).user;
+  const schema = z.object({ path: z.string().min(1).max(120), enabled: z.boolean() });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid input" });
+  const { path: p, enabled } = parsed.data;
+  await prisma.navConfig.upsert({
+    where: { path: p },
+    create: { path: p, enabled, updatedBy: u.id },
+    update: { enabled, updatedBy: u.id },
+  });
+  await writeLog(u.id, "NAV_TOGGLE", p, JSON.stringify({ enabled }), req.ip).catch(() => {});
+  res.json({ ok: true });
+});
+
 /** 서버 인메모리 로그 — 콘솔 출력 + HTTP 액세스 라인. 프로세스 재기동 시 초기화. */
 router.get("/server-logs", requireSuperAdminStepUp, async (req, res) => {
   const since = req.query.since ? Number(req.query.since) : undefined;
