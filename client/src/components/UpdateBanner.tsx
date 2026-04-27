@@ -25,6 +25,23 @@ function dismissFor(ms: number) {
   localStorage.setItem(DISMISS_KEY, String(Date.now() + ms));
 }
 
+/** 사용자가 지금 뭔가 작성 중인지 휴리스틱.
+ *  - 입력창에 포커스가 있거나
+ *  - 마지막 키 입력이 5초 이내거나
+ *  → 자동 적용을 미루고 배너만 띄움(사용자가 직접 누르도록).
+ *  내부 도구라 거의 항상 누군가 무언가 치고 있음 → 너무 길게 잡으면 영영 자동 적용 안 됨. */
+const TYPING_QUIET_MS = 5_000;
+
+function isTypingNow(lastKey: number): boolean {
+  if (Date.now() - lastKey < TYPING_QUIET_MS) return true;
+  const a = document.activeElement;
+  if (!a) return false;
+  const tag = a.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  if ((a as HTMLElement).isContentEditable) return true;
+  return false;
+}
+
 export default function UpdateBanner() {
   const [reg, setReg] = useState<ServiceWorkerRegistration | null>(null);
   const [applying, setApplying] = useState(false);
@@ -33,16 +50,49 @@ export default function UpdateBanner() {
   useEffect(() => {
     if (isDesktop) return;
 
+    let lastKey = 0;
+    const onKey = () => { lastKey = Date.now(); };
+    window.addEventListener("keydown", onKey, true);
+
+    let pendingReg: ServiceWorkerRegistration | null = null;
+    let autoTimer: number | null = null;
+
+    /** 자동 적용 시도. 입력 중이면 다음 기회로 미루고 배너만 띄움. */
+    function tryAutoApply() {
+      if (!pendingReg) return;
+      if (isTypingNow(lastKey)) {
+        setReg(pendingReg); // 배너 표시 → 사용자 직접 클릭하면 적용
+        return;
+      }
+      // 한가함 → 즉시 적용. SKIP_WAITING + controllerchange 가 main.tsx 에서 reload.
+      const w = pendingReg.waiting;
+      if (w) {
+        w.postMessage("SKIP_WAITING");
+        // 안전망 — controllerchange 이벤트가 안 오는 환경 대응.
+        window.setTimeout(() => window.location.reload(), 1500);
+      } else {
+        window.location.reload();
+      }
+    }
+
     function onReady(e: Event) {
       const detail = (e as CustomEvent<{ reg?: ServiceWorkerRegistration }>).detail;
       const r = detail?.reg ?? null;
       if (!r) return;
       if (isDismissed()) return;
+      pendingReg = r;
+      // 배너를 일단 노출 + 6초 뒤 자동 적용 시도. 그 사이 사용자가 닫으면 취소.
       setReg(r);
+      if (autoTimer) window.clearTimeout(autoTimer);
+      autoTimer = window.setTimeout(tryAutoApply, 6_000);
     }
 
     window.addEventListener("hinest:update-ready", onReady as EventListener);
-    return () => window.removeEventListener("hinest:update-ready", onReady as EventListener);
+    return () => {
+      window.removeEventListener("hinest:update-ready", onReady as EventListener);
+      window.removeEventListener("keydown", onKey, true);
+      if (autoTimer) window.clearTimeout(autoTimer);
+    };
   }, [isDesktop]);
 
   if (isDesktop || !reg) return null;
