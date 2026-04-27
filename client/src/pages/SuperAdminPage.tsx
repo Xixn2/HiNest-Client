@@ -38,7 +38,7 @@ type Message = {
   sender: { id: string; name: string; avatarColor: string; avatarUrl?: string | null };
 };
 
-type Tab = "logs" | "chat" | "api";
+type Tab = "logs" | "chat" | "api" | "console";
 
 type ApiSpecRoute = {
   method: string;
@@ -66,7 +66,8 @@ function SuperAdminContent() {
   // 새로고침 유지 — URL 쿼리로 탭 동기화.
   const [sp, setSp] = useSearchParams();
   const raw = sp.get("tab");
-  const tab: Tab = raw === "chat" ? "chat" : raw === "api" ? "api" : "logs";
+  const tab: Tab =
+    raw === "chat" ? "chat" : raw === "api" ? "api" : raw === "console" ? "console" : "logs";
   const setTab = (t: Tab) => {
     const next = new URLSearchParams(sp);
     if (t === "logs") next.delete("tab");
@@ -79,10 +80,12 @@ function SuperAdminContent() {
         <TabBtn active={tab === "logs"} onClick={() => setTab("logs")}>활동 로그</TabBtn>
         <TabBtn active={tab === "chat"} onClick={() => setTab("chat")}>사내톡 감사</TabBtn>
         <TabBtn active={tab === "api"} onClick={() => setTab("api")}>API 명세</TabBtn>
+        <TabBtn active={tab === "console"} onClick={() => setTab("console")}>콘솔</TabBtn>
       </div>
       {tab === "logs" && <LogsPanel />}
       {tab === "chat" && <ChatAuditPanel />}
       {tab === "api" && <ApiSpecPanel />}
+      {tab === "console" && <ConsolePanel />}
     </>
   );
 }
@@ -538,6 +541,173 @@ function MethodChip({ method }: { method: string }) {
     : method === "DELETE" ? "chip-red"
     : "chip-gray";
   return <span className={`chip ${tone} font-mono`} style={{ minWidth: 56, justifyContent: "center" }}>{method}</span>;
+}
+
+/* =============== 콘솔 — 명령어로 권한·계정 제어 =============== */
+type ConsoleEntry =
+  | { kind: "input"; text: string; ts: number }
+  | { kind: "output"; text: string; ok: boolean; ts: number };
+
+function ConsolePanel() {
+  const [history, setHistory] = useState<ConsoleEntry[]>(() => [
+    {
+      kind: "output",
+      ok: true,
+      ts: Date.now(),
+      text:
+        "총관리자 콘솔. `help` 입력으로 명령 목록.\n" +
+        "예: users find 김 / user grant admin <id|email|사번>",
+    },
+  ]);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  // 위/아래 화살표로 이전 명령 재호출.
+  const cmdHistRef = useRef<string[]>([]);
+  const cmdHistIdxRef = useRef(-1);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const aliveRef = useRef(true);
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => { aliveRef.current = false; };
+  }, []);
+
+  // 출력이 추가되면 항상 최하단으로.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [history]);
+
+  async function execute(raw: string) {
+    const cmd = raw.trim();
+    if (!cmd) return;
+    cmdHistRef.current.push(cmd);
+    cmdHistIdxRef.current = cmdHistRef.current.length;
+    setHistory((h) => [...h, { kind: "input", text: cmd, ts: Date.now() }]);
+    if (cmd === "clear" || cmd === "cls") {
+      setHistory([]);
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await api<{ ok: boolean; output: string }>("/api/admin/console", {
+        method: "POST",
+        json: { cmd },
+      });
+      if (!aliveRef.current) return;
+      setHistory((h) => [...h, { kind: "output", ok: r.ok, text: r.output, ts: Date.now() }]);
+    } catch (e: any) {
+      if (!aliveRef.current) return;
+      setHistory((h) => [...h, { kind: "output", ok: false, text: `요청 실패: ${e?.message ?? "unknown"}`, ts: Date.now() }]);
+    } finally {
+      if (aliveRef.current) setBusy(false);
+    }
+  }
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      const v = input;
+      setInput("");
+      void execute(v);
+    } else if (e.key === "ArrowUp") {
+      const list = cmdHistRef.current;
+      if (list.length === 0) return;
+      e.preventDefault();
+      const next = Math.max(0, cmdHistIdxRef.current - 1);
+      cmdHistIdxRef.current = next;
+      setInput(list[next] ?? "");
+    } else if (e.key === "ArrowDown") {
+      const list = cmdHistRef.current;
+      if (list.length === 0) return;
+      e.preventDefault();
+      const next = Math.min(list.length, cmdHistIdxRef.current + 1);
+      cmdHistIdxRef.current = next;
+      setInput(list[next] ?? "");
+    }
+  }
+
+  return (
+    <div
+      style={{
+        background: "#0E1014",
+        color: "#E5E9F0",
+        borderRadius: 12,
+        border: "1px solid var(--c-border)",
+        overflow: "hidden",
+        fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+      }}
+    >
+      <div
+        ref={scrollRef}
+        style={{
+          height: "min(60vh, 540px)",
+          overflowY: "auto",
+          padding: "12px 14px",
+          fontSize: 12.5,
+          lineHeight: 1.55,
+        }}
+      >
+        {history.map((h, i) => {
+          if (h.kind === "input") {
+            return (
+              <div key={i} style={{ color: "#7896FF", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                <span style={{ color: "#9CA3AF", marginRight: 6 }}>$</span>
+                {h.text}
+              </div>
+            );
+          }
+          return (
+            <div
+              key={i}
+              style={{
+                color: h.ok ? "#D4D8DE" : "#FCA5A5",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                marginBottom: 6,
+              }}
+            >
+              {h.text}
+            </div>
+          );
+        })}
+        {busy && <div style={{ color: "#7F8792" }}>실행 중…</div>}
+      </div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "8px 12px",
+          borderTop: "1px solid rgba(255,255,255,0.08)",
+          background: "#171A20",
+        }}
+      >
+        <span style={{ color: "#9CA3AF", fontSize: 13, fontWeight: 700 }}>{">"}</span>
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={onKeyDown}
+          disabled={busy}
+          autoFocus
+          spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
+          placeholder='help (사용법) · 예: user grant admin user@hi.com'
+          style={{
+            flex: 1,
+            border: 0,
+            outline: 0,
+            background: "transparent",
+            color: "#E5E9F0",
+            fontFamily: "inherit",
+            fontSize: 13,
+            padding: "4px 0",
+          }}
+        />
+      </div>
+    </div>
+  );
 }
 
 function AuthChip({ auth }: { auth: ApiSpecRoute["auth"] }) {
