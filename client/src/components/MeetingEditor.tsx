@@ -17,6 +17,21 @@ import { createRoot, type Root } from "react-dom/client";
 import "./MeetingEditor.css";
 import { promptAsync } from "./ConfirmHost";
 import MentionList, { type MentionUser } from "./MentionList";
+import { parseCodeSegments } from "../lib/codeDetect";
+
+/** 페이스트된 평문이 코드처럼 보이는지 — codeDetect 의 휴리스틱 재사용.
+ *  parseCodeSegments 가 반환하는 segment 중 코드(펜스/휴리스틱)가 본문 대부분을 차지하면 true. */
+function looksLikeCodeForEditor(text: string): boolean {
+  if (text.length < 10) return false;
+  const segs = parseCodeSegments(text);
+  // 모든 segment 가 code 거나, 단일 code segment 면 명백히 코드.
+  if (segs.length === 1 && segs[0].kind === "code") return true;
+  const codeChars = segs
+    .filter((s) => s.kind === "code")
+    .reduce((sum, s) => sum + (s.kind === "code" ? s.code.length : 0), 0);
+  // 본문의 60% 이상이 코드 영역이면 통째로 코드 취급.
+  return codeChars >= text.length * 0.6;
+}
 
 /** 노션식 글씨 크기(픽셀) — textStyle 의 `data-font-size` 속성으로 직렬화. */
 const FONT_SIZES = [
@@ -127,6 +142,27 @@ export default function MeetingEditor({ value, onChange, editable = true, placeh
           ]
         : []),
     ],
+    // 평문 붙여넣기를 가로채서 코드처럼 보이면 codeBlock 으로 변환.
+    // - HTML 페이스트(워드/노션 등 서식 있는 출처)는 건드리지 않음
+    // - 휴리스틱은 lib/codeDetect.ts 와 동일 규칙 (한글 비율·코드 토큰 비율)
+    editorProps: {
+      handlePaste: (view, event) => {
+        const html = event.clipboardData?.getData("text/html");
+        if (html) return false; // HTML 페이스트는 기본 동작 유지
+        const text = event.clipboardData?.getData("text/plain");
+        if (!text) return false;
+        if (!looksLikeCodeForEditor(text)) return false;
+        event.preventDefault();
+        // 현재 셀렉션 위치에 codeBlock 노드 삽입.
+        const { schema } = view.state;
+        const codeBlock = schema.nodes.codeBlock;
+        if (!codeBlock) return false;
+        const node = codeBlock.create({}, schema.text(text));
+        const tr = view.state.tr.replaceSelectionWith(node);
+        view.dispatch(tr);
+        return true;
+      },
+    },
     content: value ?? "",
     editable,
     onUpdate: ({ editor }) => {
