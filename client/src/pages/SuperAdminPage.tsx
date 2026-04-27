@@ -1336,7 +1336,7 @@ function ServerLogsPanel() {
       const params = new URLSearchParams();
       if (level) params.set("level", level);
       if (q) params.set("q", q);
-      params.set("limit", "1000");
+      params.set("limit", "9999");
       const r = await api<{ logs: ServerLog[] }>(`/api/admin/server-logs?${params}`);
       if (!aliveRef.current) return;
       setLogs(r.logs);
@@ -1441,7 +1441,7 @@ function ServerLogsPanel() {
         )}
       </div>
       <div className="text-[11px] text-ink-500 mt-2">
-        프로세스 재기동(배포 등) 시 버퍼 초기화. 디스크/CloudWatch 영속화 없음 — 최근 2,000줄만 메모리에 보관.
+        프로세스 재기동(배포 등) 시 버퍼 초기화. 디스크/CloudWatch 영속화 없음 — 최근 9,999줄만 메모리에 보관.
       </div>
     </div>
   );
@@ -1480,7 +1480,54 @@ const NAV_GROUPS: { label: string; items: { to: string; label: string }[] }[] = 
   },
 ];
 
-type NavConfigRow = { path: string; enabled: boolean; updatedAt: string; updatedBy?: string | null };
+type NavConfigRow = { path: string; enabled: boolean; inDev?: boolean; updatedAt: string; updatedBy?: string | null };
+type NavStatus = "ON" | "DEV" | "OFF";
+
+function NavStatusGroup({ value, saving, onChange }: { value: NavStatus; saving: boolean; onChange: (s: NavStatus) => void }) {
+  const opts: { v: NavStatus; label: string; color: string }[] = [
+    { v: "ON", label: "활성", color: "var(--c-brand)" },
+    { v: "DEV", label: "개발중", color: "var(--c-warning)" },
+    { v: "OFF", label: "끔", color: "var(--c-border-strong)" },
+  ];
+  return (
+    <div
+      style={{
+        display: "inline-flex",
+        background: "var(--c-surface-3)",
+        borderRadius: 8,
+        padding: 2,
+        gap: 2,
+        flexShrink: 0,
+        opacity: saving ? 0.6 : 1,
+      }}
+    >
+      {opts.map((o) => {
+        const active = value === o.v;
+        return (
+          <button
+            key={o.v}
+            type="button"
+            disabled={saving}
+            onClick={() => onChange(o.v)}
+            style={{
+              padding: "5px 10px",
+              borderRadius: 6,
+              border: 0,
+              cursor: "pointer",
+              fontSize: 11.5,
+              fontWeight: 700,
+              background: active ? o.color : "transparent",
+              color: active ? "#fff" : "var(--c-text-2)",
+              transition: "background .15s ease",
+            }}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 function NavVisibilityPanel() {
   const [items, setItems] = useState<NavConfigRow[]>([]);
@@ -1509,28 +1556,28 @@ function NavVisibilityPanel() {
 
   useEffect(() => { void load(); }, []);
 
-  const disabledMap = useMemo(() => {
-    const m = new Set<string>();
-    for (const r of items) if (!r.enabled) m.add(r.path);
-    return m;
-  }, [items]);
+  function statusOf(path: string): NavStatus {
+    const r = items.find((x) => x.path === path);
+    if (!r) return "ON"; // 행 없으면 기본값
+    if (!r.enabled) return "OFF";
+    if (r.inDev) return "DEV";
+    return "ON";
+  }
 
-  async function toggle(path: string, nextEnabled: boolean) {
+  async function setStatus(path: string, next: NavStatus) {
     setSaving(path);
     try {
-      await api("/api/admin/nav-visibility", {
-        method: "POST",
-        json: { path, enabled: nextEnabled },
-      });
+      const body =
+        next === "ON" ? { path, enabled: true, inDev: false }
+        : next === "DEV" ? { path, enabled: true, inDev: true }
+        : { path, enabled: false, inDev: false };
+      await api("/api/admin/nav-visibility", { method: "POST", json: body });
       // 낙관적 업데이트.
       setItems((prev) => {
         const exist = prev.find((r) => r.path === path);
-        if (exist) {
-          return prev.map((r) => (r.path === path ? { ...r, enabled: nextEnabled } : r));
-        }
-        return [...prev, { path, enabled: nextEnabled, updatedAt: new Date().toISOString() }];
+        const merged = { ...(exist ?? { path, updatedAt: new Date().toISOString() }), enabled: body.enabled, inDev: body.inDev };
+        return exist ? prev.map((r) => (r.path === path ? merged as NavConfigRow : r)) : [...prev, merged as NavConfigRow];
       });
-      // 같은 탭 / 다른 탭의 AppLayout 사이드바도 즉시 갱신.
       window.dispatchEvent(new Event("hinest:navVisibilityChange"));
     } catch (e: any) {
       alert(e?.message ?? "저장 실패");
@@ -1544,8 +1591,10 @@ function NavVisibilityPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="text-[12px] text-ink-500">
-        끈 항목은 사이드바에서 즉시 사라져요 (전사 적용). 페이지 자체는 직접 URL 입력으로 들어갈 순 있고, 라우트는 살아있어요.
+      <div className="text-[12px] text-ink-500 leading-relaxed">
+        <b className="text-ink-700">활성</b> — 사이드바 노출 + 정상 동작.
+        &nbsp;<b className="text-amber-700">개발중</b> — 사이드바 노출 + 진입 시 \"개발 중\" 안내(개발자 권한 사용자는 통과).
+        &nbsp;<b className="text-ink-700">끔</b> — 사이드바 숨김 + 라우트 차단.
       </div>
       {NAV_GROUPS.map((g) => (
         <div key={g.label} className="panel p-0 overflow-hidden">
@@ -1554,7 +1603,7 @@ function NavVisibilityPanel() {
           </div>
           <ul className="divide-y divide-ink-100">
             {g.items.map((it) => {
-              const off = disabledMap.has(it.to);
+              const cur = statusOf(it.to);
               const isSaving = saving === it.to;
               return (
                 <li key={it.to} className="px-4 py-3 flex items-center gap-3">
@@ -1562,32 +1611,11 @@ function NavVisibilityPanel() {
                     <div className="text-[13.5px] font-semibold text-ink-900">{it.label}</div>
                     <code className="text-[11px] text-ink-500 font-mono">{it.to}</code>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => toggle(it.to, off)}
-                    disabled={isSaving}
-                    aria-label={off ? "켜기" : "끄기"}
-                    style={{
-                      width: 46, height: 26, borderRadius: 999,
-                      background: off ? "var(--c-border-strong)" : "var(--c-brand)",
-                      position: "relative",
-                      transition: "background .18s ease",
-                      flexShrink: 0,
-                      border: 0, cursor: "pointer",
-                      opacity: isSaving ? 0.6 : 1,
-                    }}
-                  >
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: 2, left: off ? 2 : 22,
-                        width: 22, height: 22, borderRadius: "50%",
-                        background: "#fff",
-                        boxShadow: "0 1px 3px rgba(0,0,0,.15)",
-                        transition: "left .18s ease",
-                      }}
-                    />
-                  </button>
+                  <NavStatusGroup
+                    value={cur}
+                    saving={isSaving}
+                    onChange={(next) => setStatus(it.to, next)}
+                  />
                 </li>
               );
             })}

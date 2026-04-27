@@ -11,6 +11,7 @@ export type User = {
   avatarColor?: string;
   avatarUrl?: string | null;
   superAdmin?: boolean;
+  isDeveloper?: boolean;
   employeeNo?: string | null;
   presenceStatus?: string | null;
   presenceMessage?: string | null;

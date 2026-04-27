@@ -12,14 +12,17 @@ import { requireAuth } from "../lib/auth.js";
 const router = Router();
 router.use(requireAuth);
 
-/** 사이드바 메뉴 가시성 — 총관리자가 NavConfig 에서 끈 항목 path 목록 반환.
- *  행이 없는 path 는 기본 노출(true) 로 간주 → 클라는 disabled set 만 알면 됨. */
+/** 사이드바 메뉴 상태:
+ *  - disabled: 사이드바에서 숨김 + 라우트 차단 (enabled=false 인 path)
+ *  - dev:       사이드바엔 노출하되 진입 시 \"개발 중\" 안내 (enabled=true && inDev=true)
+ *  행이 없는 path 는 기본 enabled=true / inDev=false 로 간주 — 클라는 두 set 만 알면 됨. */
 router.get("/visibility", async (_req, res) => {
   const rows = await prisma.navConfig.findMany({
-    where: { enabled: false },
-    select: { path: true },
+    select: { path: true, enabled: true, inDev: true },
   });
-  res.json({ disabled: rows.map((r) => r.path) });
+  const disabled = rows.filter((r) => !r.enabled).map((r) => r.path);
+  const dev = rows.filter((r) => r.enabled && r.inDev).map((r) => r.path);
+  res.json({ disabled, dev });
 });
 
 function parseSince(v: unknown): Date | null {

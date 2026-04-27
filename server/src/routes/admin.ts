@@ -795,8 +795,8 @@ router.post("/console", requireSuperAdminStepUp, async (req, res) => {
         "",
         "  [유저 권한·계정]",
         "  user role <id> <MEMBER|MANAGER|ADMIN>   role 직접 지정",
-        "  user grant admin|super <id>          ADMIN 또는 superAdmin true",
-        "  user revoke admin|super <id>         ADMIN→MEMBER / superAdmin false",
+        "  user grant admin|super|dev <id>      ADMIN / superAdmin / HiNest 개발자 부여",
+        "  user revoke admin|super|dev <id>     ADMIN→MEMBER / superAdmin false / 개발자 해제",
         "  user lock <id>                       active=false (로그인 차단)",
         "  user unlock <id>                     active=true",
         "  user resign <id> [YYYY-MM-DD]        퇴사 처리 (resignedAt + active=false)",
@@ -893,8 +893,13 @@ router.post("/console", requireSuperAdminStepUp, async (req, res) => {
         await prisma.user.update({ where: { id: target.id }, data: { superAdmin: next } });
         await evictUserCache(target.id);
         result = out(`OK · ${target.email} superAdmin: ${target.superAdmin} → ${next}`);
+      } else if (what === "dev" || what === "developer") {
+        const next = sub === "grant";
+        await prisma.user.update({ where: { id: target.id }, data: { isDeveloper: next } });
+        await evictUserCache(target.id);
+        result = out(`OK · ${target.email} isDeveloper: ${(target as any).isDeveloper ?? false} → ${next}`);
       } else {
-        result = err(`알 수 없는 권한: ${arg1}. admin 또는 super 만 지원.`);
+        result = err(`알 수 없는 권한: ${arg1}. admin / super / dev 만 지원.`);
       }
     } else if (head === "user" && (sub === "lock" || sub === "unlock")) {
       const target = await findUser(arg1);
@@ -1073,16 +1078,27 @@ router.get("/nav-visibility", requireSuperAdminStepUp, async (_req, res) => {
 
 router.post("/nav-visibility", requireSuperAdminStepUp, async (req, res) => {
   const u = (req as any).user;
-  const schema = z.object({ path: z.string().min(1).max(120), enabled: z.boolean() });
+  const schema = z.object({
+    path: z.string().min(1).max(120),
+    enabled: z.boolean().optional(),
+    inDev: z.boolean().optional(),
+  });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid input" });
-  const { path: p, enabled } = parsed.data;
+  const { path: p, enabled, inDev } = parsed.data;
+  if (enabled === undefined && inDev === undefined) {
+    return res.status(400).json({ error: "enabled 또는 inDev 중 하나는 필요해요" });
+  }
+  // partial update — 클라가 한 필드만 보내도 다른 필드는 유지.
+  const existing = await prisma.navConfig.findUnique({ where: { path: p } });
+  const nextEnabled = enabled ?? existing?.enabled ?? true;
+  const nextInDev = inDev ?? existing?.inDev ?? false;
   await prisma.navConfig.upsert({
     where: { path: p },
-    create: { path: p, enabled, updatedBy: u.id },
-    update: { enabled, updatedBy: u.id },
+    create: { path: p, enabled: nextEnabled, inDev: nextInDev, updatedBy: u.id },
+    update: { enabled: nextEnabled, inDev: nextInDev, updatedBy: u.id },
   });
-  await writeLog(u.id, "NAV_TOGGLE", p, JSON.stringify({ enabled }), req.ip).catch(() => {});
+  await writeLog(u.id, "NAV_TOGGLE", p, JSON.stringify({ enabled: nextEnabled, inDev: nextInDev }), req.ip).catch(() => {});
   res.json({ ok: true });
 });
 
@@ -1094,7 +1110,7 @@ router.get("/server-logs", requireSuperAdminStepUp, async (req, res) => {
     ? (levelRaw as LogLevel)
     : undefined;
   const q = typeof req.query.q === "string" ? req.query.q : undefined;
-  const limit = req.query.limit ? Math.min(2000, Math.max(1, Number(req.query.limit))) : 500;
+  const limit = req.query.limit ? Math.min(9999, Math.max(1, Number(req.query.limit))) : 500;
   const logs = getLogs({ since, level, q, limit });
   res.json({ logs, now: Date.now() });
 });

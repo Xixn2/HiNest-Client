@@ -1,12 +1,17 @@
 /**
- * \"HiNest 개발자\" 딱지 — 서지완(이 앱 만든 사람) 계정에만 노출.
+ * \"HiNest 개발자\" 딱지 — 총관리자가 사용자에게 부여하는 권한 플래그.
  *
- * 식별 기준은 이름. 동일 회사에 동명 이인이 생기면 그 때 DB 컬럼으로 승격.
- * (지금은 한 명이라 어디든 import 해서 isDevAccount(user) 만 체크하면 됨.)
+ * 우선순위:
+ *  1) 명시적 isDeveloper 필드 (서버 응답에 포함된 경우)
+ *  2) 이름이 \"서지완\" 인 경우 (서버 필드가 빠진 응답을 받았을 때의 fallback —
+ *     마이그레이션 직전 캐시된 페이로드 등)
  */
 
-export function isDevAccount(u: { name?: string | null } | null | undefined): boolean {
+export function isDevAccount(
+  u: { isDeveloper?: boolean | null; name?: string | null } | null | undefined,
+): boolean {
   if (!u) return false;
+  if (typeof u.isDeveloper === "boolean") return u.isDeveloper;
   return u.name === "서지완";
 }
 

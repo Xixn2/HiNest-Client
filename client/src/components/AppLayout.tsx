@@ -11,6 +11,7 @@ import { NotificationProvider, useNotifications } from "../notifications";
 import { PinsProvider, usePins, pinLinkUrl } from "../pins";
 import { ROUTE_PREFETCH, loadProject } from "../routes";
 import { isDevAccount, DevBadge } from "../lib/devBadge";
+import { getDevPagesEnabled } from "../lib/devPagesPref";
 
 /**
  * 사이드바 hover/focus prefetch — 사용자가 클릭하기 전에 해당 페이지 청크를
@@ -30,13 +31,10 @@ function prefetchRoute(to: string) {
 
 type NavItem = { to: string; label: string; icon: (p: { active?: boolean }) => JSX.Element; end?: boolean };
 
-/** 토글 path → 영향받는 자식 path prefix 매핑.
- *  /meetings 끄면 /meetings/123 도 막아야 하니까 startsWith 비교. */
-function isPathBlocked(pathname: string, disabled: Set<string>): string | null {
-  if (disabled.size === 0) return null;
-  // 정확히 일치하거나(/journal), 자식 경로(/meetings/abc) 도 차단.
-  for (const p of disabled) {
-    // "/" 자체를 끈 경우는 정확 매치만 (다른 모든 경로의 prefix 라 너무 광범위).
+/** 토글 path → 영향받는 자식 path prefix 매핑. /meetings 끄면 /meetings/123 도 차단. */
+function matchPath(pathname: string, set: Set<string>): string | null {
+  if (set.size === 0) return null;
+  for (const p of set) {
     if (p === "/") {
       if (pathname === "/") return p;
       continue;
@@ -46,44 +44,92 @@ function isPathBlocked(pathname: string, disabled: Set<string>): string | null {
   return null;
 }
 
-/** 끈 메뉴는 라우트 진입도 차단 — Outlet 자리에 안내 화면. */
-function RouteVisibilityGate({ disabled, children }: { disabled: Set<string>; children: React.ReactNode }) {
+/** 끈 메뉴는 라우트 진입도 차단 / 개발중은 \"개발 중\" 안내 (단, 개발자 + 토글 ON 이면 통과). */
+function RouteVisibilityGate({
+  disabled,
+  dev,
+  children,
+}: {
+  disabled: Set<string>;
+  dev: Set<string>;
+  children: React.ReactNode;
+}) {
   const loc = useLocation();
-  const blocked = isPathBlocked(loc.pathname, disabled);
-  if (!blocked) return <>{children}</>;
-  return (
-    <div className="panel p-10 text-center">
-      <div className="text-[18px] font-extrabold text-ink-900 mb-2">사용할 수 없는 메뉴</div>
-      <div className="text-[13px] text-ink-600 leading-relaxed">
-        이 메뉴는 총관리자가 비활성화 했어요.
-        <br />
-        다시 사용하려면 총관리자에게 요청해 주세요.
+  const { user } = useAuth();
+  const [devPagesOn, setOn] = useState(getDevPagesEnabled);
+  useEffect(() => {
+    function refresh() { setOn(getDevPagesEnabled()); }
+    window.addEventListener("hinest:devPagesChange", refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("hinest:devPagesChange", refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+  const isDeveloper = !!user?.isDeveloper;
+  if (matchPath(loc.pathname, disabled)) {
+    return (
+      <div className="panel p-10 text-center">
+        <div className="text-[18px] font-extrabold text-ink-900 mb-2">사용할 수 없는 메뉴</div>
+        <div className="text-[13px] text-ink-600 leading-relaxed">
+          이 메뉴는 총관리자가 비활성화 했어요.
+          <br />
+          다시 사용하려면 총관리자에게 요청해 주세요.
+        </div>
+        <NavLink to="/" className="btn-primary inline-flex mt-5">
+          개요로 돌아가기
+        </NavLink>
       </div>
-      <NavLink to="/" className="btn-primary inline-flex mt-5">
-        개요로 돌아가기
-      </NavLink>
-    </div>
-  );
+    );
+  }
+  if (matchPath(loc.pathname, dev)) {
+    // 개발자 + 토글 ON 이면 안내 없이 그대로 페이지 진입.
+    if (isDeveloper && devPagesOn) return <>{children}</>;
+    return (
+      <div className="panel p-10 text-center">
+        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-extrabold tracking-[0.06em] uppercase mb-3"
+          style={{ background: "var(--c-warning)", color: "#fff" }}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M12 9v4" /><path d="M12 17h.01" /><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+          </svg>
+          개발 중
+        </div>
+        <div className="text-[18px] font-extrabold text-ink-900 mb-2">아직 준비 중인 페이지예요</div>
+        <div className="text-[13px] text-ink-600 leading-relaxed">
+          기능이 완성되면 자동으로 활성화돼요. 조금만 기다려 주세요.
+        </div>
+        {isDeveloper && (
+          <div className="text-[12px] text-ink-500 mt-3">
+            개발자 권한 보유 — 마이페이지 \"개발자 옵션\" 에서 토글을 켜면 우회할 수 있어요.
+          </div>
+        )}
+        <NavLink to="/" className="btn-primary inline-flex mt-5">
+          개요로 돌아가기
+        </NavLink>
+      </div>
+    );
+  }
+  return <>{children}</>;
 }
 
-/** 총관리자가 끈 사이드바 path 들. /api/nav/visibility 응답 + storage 이벤트로 다른 탭 동기화. */
-function useDisabledNav() {
+/** 총관리자가 끈/개발중 사이드바 path 들. /api/nav/visibility 응답 + 이벤트로 다른 탭 동기화. */
+function useNavStatus() {
   const [disabled, setDisabled] = useState<Set<string>>(new Set());
+  const [dev, setDev] = useState<Set<string>>(new Set());
   useEffect(() => {
     let cancelled = false;
     function load() {
-      api<{ disabled: string[] }>("/api/nav/visibility")
+      api<{ disabled: string[]; dev?: string[] }>("/api/nav/visibility")
         .then((r) => {
           if (cancelled) return;
           setDisabled(new Set(r.disabled ?? []));
+          setDev(new Set(r.dev ?? []));
         })
         .catch(() => {});
     }
     load();
-    // 다른 탭/창에서 토글이 바뀌면 즉시 반영.
     function onChange() { load(); }
     window.addEventListener("hinest:navVisibilityChange", onChange);
-    // 페이지 포커스 복귀 시에도 한 번 더 — 다른 디바이스의 토글까지.
     window.addEventListener("focus", onChange);
     return () => {
       cancelled = true;
@@ -91,7 +137,7 @@ function useDisabledNav() {
       window.removeEventListener("focus", onChange);
     };
   }, []);
-  return disabled;
+  return { disabled, dev };
 }
 
 const WORK_NAV: NavItem[] = [
@@ -131,7 +177,7 @@ function AppLayoutInner() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
   const loc = useLocation();
-  const disabledNav = useDisabledNav();
+  const { disabled: disabledNav, dev: devNav } = useNavStatus();
   const filterByVisibility = (items: NavItem[]) => items.filter((i) => !disabledNav.has(i.to));
   const isMacDesktop = !!window.hinest?.isDesktop && window.hinest?.platform === "darwin";
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -195,9 +241,9 @@ function AppLayoutInner() {
 
         <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-5">
           {/* 총관리자가 끈 항목은 메뉴에서 제외. 섹션 자체가 비면 라벨도 안 보이게. */}
-          {(() => { const items = filterByVisibility(WORK_NAV); return items.length > 0 && <NavSection label="워크스페이스" items={items} />; })()}
-          {(() => { const items = filterByVisibility(COMM_NAV); return items.length > 0 && <NavSection label="커뮤니케이션" items={items} />; })()}
-          {(() => { const items = filterByVisibility(RESOURCE_NAV); return items.length > 0 && <NavSection label="자료·재무" items={items} />; })()}
+          {(() => { const items = filterByVisibility(WORK_NAV); return items.length > 0 && <NavSection label="워크스페이스" items={items} dev={devNav} />; })()}
+          {(() => { const items = filterByVisibility(COMM_NAV); return items.length > 0 && <NavSection label="커뮤니케이션" items={items} dev={devNav} />; })()}
+          {(() => { const items = filterByVisibility(RESOURCE_NAV); return items.length > 0 && <NavSection label="자료·재무" items={items} dev={devNav} />; })()}
           <PinsSection />
           <ProjectsSection />
 
@@ -302,7 +348,7 @@ function AppLayoutInner() {
         <TopBar draggable={showTitlebarSpace} onOpenNav={() => setMobileNavOpen(true)} />
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-[1400px] mx-auto px-4 md:px-8 py-4 md:py-6">
-            <RouteVisibilityGate disabled={disabledNav}>
+            <RouteVisibilityGate disabled={disabledNav} dev={devNav}>
               <Outlet />
             </RouteVisibilityGate>
           </div>
@@ -313,7 +359,7 @@ function AppLayoutInner() {
   );
 }
 
-function NavSection({ label, items }: { label: string; items: NavItem[] }) {
+function NavSection({ label, items, dev }: { label: string; items: NavItem[]; dev?: Set<string> }) {
   // 공지사항 미읽음 알림 개수 — 사이드바에 배지로 표시
   const { bellItems, ready } = useNotifications();
   const noticeUnread = bellItems.filter((n) => n.type === "NOTICE" && !n.readAt).length;
@@ -355,7 +401,18 @@ function NavSection({ label, items }: { label: string; items: NavItem[] }) {
               {({ isActive }) => (
                 <>
                   <Icon active={isActive} />
-                  <span className="flex-1">{n.label}</span>
+                  <span className="flex-1 inline-flex items-center gap-1.5 min-w-0">
+                    <span className="truncate min-w-0">{n.label}</span>
+                    {dev?.has(n.to) && (
+                      <span
+                        className="text-[9px] font-extrabold uppercase tracking-[0.06em] px-1 py-0.5 rounded-[3px] flex-shrink-0"
+                        style={{ background: "var(--c-warning)", color: "#fff", lineHeight: 1 }}
+                        title="개발 중 — 들어가면 안내 화면이 뜹니다"
+                      >
+                        DEV
+                      </span>
+                    )}
+                  </span>
                   {badgeCount > 0 && (
                     <span className="ml-auto min-w-[18px] h-[18px] px-1.5 rounded-full bg-danger text-white text-[10px] font-bold grid place-items-center tabular">
                       {badgeCount > 99 ? "99+" : badgeCount}
