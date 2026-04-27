@@ -673,23 +673,41 @@ function AccountCard({
             </div>
             {canEdit && (
               <div className="flex items-center gap-1.5 flex-shrink-0">
-                {/* 활성 토글 — absolute 로 thumb 배치해 translate 계산 없이 정확한 위치.
-                     편집/삭제 버튼과는 세로선으로 분리해 시각적으로 다른 그룹임을 표시. */}
+                {/* 활성 토글 — 다른 페이지(슈퍼관리자 메뉴 관리 / 마이페이지 알림)와
+                    동일한 inline-style 패턴으로 통일. 종전 Tailwind inline-block + align-middle
+                    조합이 옆 버튼들의 baseline 정렬과 부딪혀 thumb 가 잘려 보이는 버그가 있었음. */}
                 <button
                   type="button"
                   role="switch"
                   aria-checked={a.active}
                   onClick={onToggleActive}
                   title={a.active ? "비활성화" : "활성화"}
-                  className={`relative inline-block h-[18px] w-8 rounded-full transition-colors align-middle ${
-                    a.active ? "bg-brand-600" : "bg-ink-300"
-                  }`}
+                  style={{
+                    position: "relative",
+                    width: 36,
+                    height: 20,
+                    borderRadius: 999,
+                    border: 0,
+                    cursor: "pointer",
+                    background: a.active ? "var(--c-brand)" : "var(--c-border-strong)",
+                    transition: "background .18s ease",
+                    flexShrink: 0,
+                    padding: 0,
+                  }}
                 >
                   <span
                     aria-hidden
-                    className={`absolute top-[2px] h-[14px] w-[14px] rounded-full bg-white shadow transition-[left] ${
-                      a.active ? "left-[16px]" : "left-[2px]"
-                    }`}
+                    style={{
+                      position: "absolute",
+                      top: 2,
+                      left: a.active ? 18 : 2,
+                      width: 16,
+                      height: 16,
+                      borderRadius: "50%",
+                      background: "#fff",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                      transition: "left .18s ease",
+                    }}
                   />
                 </button>
                 <span className="h-5 w-px bg-ink-200" aria-hidden />
