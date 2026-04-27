@@ -1,4 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { C, FONT, formatBytes } from "./theme";
 import type { Attachment, Message, Reaction } from "./types";
 import { api } from "../../api";
@@ -538,7 +539,9 @@ function ImageLightbox({
     };
   }, [onClose]);
 
-  return (
+  // 채팅 미니앱 컨테이너에 transform 이 걸려있어 position:fixed 가 viewport 가 아니라
+  // 그 컨테이너 기준으로 잡히는 문제 → document.body 로 portal 해서 진짜 풀 화면.
+  return createPortal(
     <div
       role="dialog"
       onMouseDown={onClose}
@@ -559,8 +562,8 @@ function ImageLightbox({
         alt={alt}
         onMouseDown={(e) => e.stopPropagation()}
         style={{
-          maxWidth: "min(92vw, 1200px)",
-          maxHeight: "90vh",
+          maxWidth: "min(96vw, 1600px)",
+          maxHeight: "94vh",
           width: "auto",
           height: "auto",
           objectFit: "contain",
@@ -619,7 +622,8 @@ function ImageLightbox({
           <path d="M12 15V3" />
         </svg>
       </a>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -1257,17 +1261,19 @@ function CodeBlockBubble({ code, lang, mine }: { code: string; lang?: string; mi
 function CodeViewerModal({ code, lang, onClose }: { code: string; lang?: string; onClose: () => void }) {
   useModalDismiss(true, onClose);
   const lines = code.split("\n");
-  const lineNumWidth = String(lines.length).length * 8 + 12; // 자릿수에 따라 좌측 패딩.
-  return (
+  const lineNumWidth = String(lines.length).length * 9 + 16; // 자릿수에 따라 좌측 패딩.
+  // 채팅 미니앱 컨테이너에 transform 이 걸려있어 자식의 position:fixed 가 viewport 가 아니라
+  // 그 컨테이너 기준으로 잡힘 → portal 로 document.body 에 직접 마운트.
+  return createPortal(
     <div
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 200,
-        background: "rgba(0,0,0,0.55)",
+        zIndex: 9999,
+        background: "rgba(0,0,0,0.65)",
         display: "grid",
         placeItems: "center",
-        padding: "max(env(safe-area-inset-top), 12px) 12px max(env(safe-area-inset-bottom), 12px)",
+        padding: "max(env(safe-area-inset-top), 16px) 16px max(env(safe-area-inset-bottom), 16px)",
       }}
       onClick={onClose}
     >
@@ -1386,7 +1392,8 @@ function CodeViewerModal({ code, lang, onClose }: { code: string; lang?: string;
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
