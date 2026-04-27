@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
+import { alertAsync } from "./ConfirmHost";
 
 type Results = {
   people?: any[];
@@ -45,6 +46,7 @@ export default function SearchModal({ open, onClose }: { open: boolean; onClose:
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Results>({});
   const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // 마운트 유지 + visible 플래그로 enter/exit 애니메이션 분리
@@ -81,15 +83,20 @@ export default function SearchModal({ open, onClose }: { open: boolean; onClose:
   const searchTokenRef = useRef(0);
   useEffect(() => {
     if (!open) return;
-    if (!q.trim()) { setResults({}); return; }
+    if (!q.trim()) { setResults({}); setSearchError(null); return; }
     setLoading(true);
+    setSearchError(null);
     const t = setTimeout(async () => {
       const my = ++searchTokenRef.current;
       try {
         const res = await api<{ results: Results }>(`/api/search?q=${encodeURIComponent(q.trim())}`);
         if (my !== searchTokenRef.current) return;
         setResults(res.results);
-      } catch {} finally {
+      } catch (e: any) {
+        if (my !== searchTokenRef.current) return;
+        setResults({});
+        setSearchError(e?.message ?? "검색에 실패했어요. 잠시 후 다시 시도해주세요.");
+      } finally {
         if (my === searchTokenRef.current) setLoading(false);
       }
     }, 180);
@@ -111,9 +118,14 @@ export default function SearchModal({ open, onClose }: { open: boolean; onClose:
       onClose();
       window.dispatchEvent(new CustomEvent("chat:open"));
       window.dispatchEvent(new CustomEvent("chat:open-room", { detail: { roomId: res.room.id } }));
-    } catch {
-      // 실패 시 fallback — 팀원 페이지로 이동
-      go("/directory");
+    } catch (e: any) {
+      // 실패 시 팀원 페이지로 이동하되, 왜 DM 이 안 열렸는지 토스트로 안내
+      onClose();
+      alertAsync({
+        title: "대화방을 열지 못했어요",
+        description: e?.message ?? "잠시 후 팀원 페이지에서 다시 시도해주세요.",
+      });
+      nav("/directory");
     }
   }
 
@@ -180,6 +192,11 @@ export default function SearchModal({ open, onClose }: { open: boolean; onClose:
         <div className="max-h-[60vh] overflow-y-auto">
           {!q.trim() ? (
             <div className="py-12 text-center t-caption">원하는 항목을 검색해보세요.</div>
+          ) : searchError && totalCount === 0 ? (
+            <div className="py-12 text-center">
+              <div className="text-[13px] font-bold text-rose-600">{searchError}</div>
+              <div className="text-[11px] text-ink-500 mt-1">다시 입력하면 자동으로 재시도돼요.</div>
+            </div>
           ) : loading && totalCount === 0 ? (
             <div className="py-12 text-center t-caption">검색 중…</div>
           ) : totalCount === 0 ? (

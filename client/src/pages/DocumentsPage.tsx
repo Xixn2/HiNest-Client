@@ -71,6 +71,8 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
   ];
   const [folders, setFolders] = useState<Folder[]>([]);
   const [docs, setDocs] = useState<Doc[]>([]);
+  // 문서/폴더 목록 조회 실패 시 상단에 표시 — empty state 로 오인되는 걸 방지
+  const [loadErr, setLoadErr] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [creating, setCreating] = useState<null | "folder" | "doc">(null);
   const [uploading, setUploading] = useState(false);
@@ -168,19 +170,26 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
       pid
         ? `projectId=${encodeURIComponent(pid)}&${extra}`
         : `scope=${scopeTab}&${extra}`;
-    const [f, d] = await Promise.all([
-      api<{ folders: Folder[] }>(
-        pid
-          ? `/api/document/folders?projectId=${encodeURIComponent(pid)}`
-          : `/api/document/folders?scope=${scopeTab}`,
-      ),
-      api<{ documents: Doc[] }>(
-        `/api/document?${qs(`folderId=${encodeURIComponent(currentFolder)}${q ? `&q=${encodeURIComponent(q)}` : ""}`)}`,
-      ),
-    ]);
-    if (aliveRef && !aliveRef.current) return;
-    setFolders(f.folders);
-    setDocs(d.documents);
+    try {
+      const [f, d] = await Promise.all([
+        api<{ folders: Folder[] }>(
+          pid
+            ? `/api/document/folders?projectId=${encodeURIComponent(pid)}`
+            : `/api/document/folders?scope=${scopeTab}`,
+        ),
+        api<{ documents: Doc[] }>(
+          `/api/document?${qs(`folderId=${encodeURIComponent(currentFolder)}${q ? `&q=${encodeURIComponent(q)}` : ""}`)}`,
+        ),
+      ]);
+      if (aliveRef && !aliveRef.current) return;
+      setFolders(f.folders);
+      setDocs(d.documents);
+      setLoadErr(null);
+    } catch (e: any) {
+      if (aliveRef && !aliveRef.current) return;
+      // 기존에는 uncaught 로 조용히 empty state 처럼 보였음 — 상단에 사유 노출
+      setLoadErr(e?.message ?? "문서 목록을 불러오지 못했어요. 잠시 후 다시 시도해주세요.");
+    }
   }
 
   // 프로젝트 칩 목록 로드 — 임베드 모드 아니고 고정 프로젝트가 없을 때만 필요.
@@ -189,7 +198,11 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
     let alive = true;
     api<{ projects: ProjectChip[] }>("/api/document/projects")
       .then((r) => { if (alive) setProjects(r.projects); })
-      .catch(() => {});
+      .catch((e: any) => {
+        if (!alive) return;
+        // 프로젝트 칩은 보조 UI — 실패해도 페이지는 쓸 수 있으니 콘솔에만 남겨서 디버깅 가능하게
+        console.warn("[documents] 프로젝트 칩 로드 실패:", e?.message ?? e);
+      });
     return () => { alive = false; };
   }, [embedded, fixedProjectId]);
 
@@ -218,7 +231,11 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
     let alive = true;
     api<{ users: DirUser[] }>("/api/users")
       .then((r) => { if (alive) setAllUsers(r.users); })
-      .catch(() => {});
+      .catch((e: any) => {
+        if (!alive) return;
+        // 모달의 CUSTOM 범위 선택용 — 실패 시 모달 내 에러 영역에 노출
+        setModalErr(e?.message ?? "사용자 목록을 불러오지 못했어요.");
+      });
     return () => { alive = false; };
   }, [creating, allUsers.length]);
 
@@ -1222,6 +1239,17 @@ export default function DocumentsPage({ projectId: fixedProjectId, embedded = fa
 
       {/* 문서 리스트 */}
       <div className="mb-2 text-[11px] font-extrabold text-ink-500 uppercase tracking-[0.08em]">문서</div>
+      {loadErr && (
+        <div className="mb-2 p-3 rounded-xl bg-rose-50 border border-rose-200 text-[12px] text-rose-700 flex items-center justify-between gap-2">
+          <span>{loadErr}</span>
+          <button
+            className="btn-ghost !px-2 !py-1 text-[11px]"
+            onClick={() => { const ref = { current: true }; load(ref); }}
+          >
+            다시 시도
+          </button>
+        </div>
+      )}
       {docs.length === 0 ? (
         <div className="panel py-14 text-center">
           <div className="mx-auto w-12 h-12 rounded-2xl bg-ink-100 grid place-items-center mb-3">

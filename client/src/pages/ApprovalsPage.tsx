@@ -308,7 +308,12 @@ export default function ApprovalsPage() {
                 if (m) setSelected(m);
                 else {
                   // 체인상 다른 스코프의 결재일 수 있음 — 직접 조회해 띄움.
-                  api<{ approval: Approval }>(`/api/approval/${id}`).then((r) => setSelected(r.approval)).catch(() => {});
+                  api<{ approval: Approval }>(`/api/approval/${id}`)
+                    .then((r) => setSelected(r.approval))
+                    .catch((e: any) => alertAsync({
+                      title: "결재를 불러오지 못했어요",
+                      description: e?.message ?? "권한이 없거나 삭제된 결재일 수 있어요.",
+                    }));
                 }
               }}
               onRevise={(origId, prefill) => setRevising({ origId, prefill })}
@@ -340,7 +345,14 @@ export default function ApprovalsPage() {
           onDone={(newId) => {
             setRevising(null);
             load().then(() => {
-              if (newId) api<{ approval: Approval }>(`/api/approval/${newId}`).then((r) => setSelected(r.approval)).catch(() => {});
+              if (newId) {
+                api<{ approval: Approval }>(`/api/approval/${newId}`)
+                  .then((r) => setSelected(r.approval))
+                  .catch((e: any) => alertAsync({
+                    title: "새 결재를 불러오지 못했어요",
+                    description: e?.message ?? "목록에서 다시 선택해주세요.",
+                  }));
+              }
             });
           }}
         />
