@@ -54,8 +54,8 @@ export default function SuperAdminPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="관리 › 총관리자"
-        title="총관리자 콘솔"
+        eyebrow="관리 › 개발자"
+        title="개발자 콘솔"
         description="시스템 전반의 활동 로그와 모든 대화를 조회할 수 있습니다."
       />
       <SuperStepUpGate>
@@ -967,7 +967,7 @@ function ConsolePanel() {
       ok: true,
       ts: Date.now(),
       text:
-        "총관리자 콘솔. `help` 로 사용법.\n" +
+        "개발자 콘솔. `help` 로 사용법.\n" +
         "Tab — 명령어 자동완성, @ — 유저/팀/직급 자동완성.",
     },
   ]);
@@ -1065,7 +1065,7 @@ function ConsolePanel() {
             kind: "output",
             ok: false,
             ts: Date.now(),
-            text: "자동완성 실패 — 총관리자 세션이 만료된 것 같아요. 페이지 새로고침 후 다시 진입해 주세요.",
+            text: "자동완성 실패 — 개발자 세션이 만료된 것 같아요. 페이지 새로고침 후 다시 진입해 주세요.",
           },
         ]);
       }
@@ -1187,7 +1187,7 @@ function ConsolePanel() {
               kind: "output",
               ok: false,
               ts: Date.now(),
-              text: "자동완성 실패 — 총관리자 세션이 만료된 것 같아요. 페이지 새로고침 후 다시 진입해 주세요.",
+              text: "자동완성 실패 — 개발자 세션이 만료된 것 같아요. 페이지 새로고침 후 다시 진입해 주세요.",
             },
           ]);
         }

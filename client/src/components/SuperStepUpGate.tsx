@@ -137,7 +137,7 @@ export default function SuperStepUpGate({ children }: { children: React.ReactNod
     try {
       const r = await authenticateWithPasskey();
       if (r.super) setSession({ active: true, expiresAt: r.expiresAt });
-      else setErr("패스키 인증은 완료됐지만 총관리자 권한이 아닙니다");
+      else setErr("패스키 인증은 완료됐지만 개발자 권한이 아닙니다");
     } catch (e: any) {
       if (e?.name === "NotAllowedError" || e?.message?.includes("operation either timed out")) {
         setErr("인증이 취소되었거나 시간이 초과됐어요");
@@ -153,7 +153,7 @@ export default function SuperStepUpGate({ children }: { children: React.ReactNod
     if (!bridge?.promptTouchID || !deviceId) return;
     setErr(""); setBioLoading(true);
     try {
-      const r = await bridge.promptTouchID("HiNest 총관리자 접근을 위해 Touch ID 로 인증해주세요");
+      const r = await bridge.promptTouchID("HiNest 개발자 접근을 위해 Touch ID 로 인증해주세요");
       if (!r?.ok) throw new Error(r?.error || "Touch ID 인증 실패");
       const res = await api<{ expiresAt: number }>("/api/auth/desktop-biometric/stepup", {
         method: "POST",
@@ -191,12 +191,12 @@ export default function SuperStepUpGate({ children }: { children: React.ReactNod
               </div>
               <div>
                 <div className="text-[11px] font-extrabold text-ink-500 uppercase tracking-[0.08em]">민감한 영역</div>
-                <div className="h-title">총관리자 콘솔 접근</div>
+                <div className="h-title">개발자 콘솔 접근</div>
               </div>
             </div>
 
             <p className="text-[12.5px] text-ink-600 leading-[1.55] mb-5">
-              로그·채팅 감사는 15분 단위 재확인 후에만 열람할 수 있어요. 모든 접근은 감사 로그에 기록됩니다.
+              민감한 영역이라 15분 단위 재확인이 필요해요.
             </p>
 
             {/* 데스크톱 앱 — 네이티브 Touch ID (이 기기가 등록되어있을 때만) */}
@@ -299,7 +299,6 @@ export default function SuperStepUpGate({ children }: { children: React.ReactNod
 
           <ul className="mt-4 text-[11px] text-ink-500 space-y-1 px-2">
             <li>· 세션은 <b>15분</b>간 유지되며 만료 시 자동 잠깁니다.</li>
-            <li>· 모든 시도(성공/실패)가 <b>감사 로그</b>에 남습니다.</li>
             <li>· 브라우저를 닫거나 로그아웃하면 즉시 해제됩니다.</li>
           </ul>
         </div>
@@ -341,9 +340,9 @@ function SuperSessionBanner({ remaining, onLock }: { remaining: number; onLock: 
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-[12px] font-bold text-ink-900">
-            총관리자 세션 활성 <span className={`ml-2 tabular ${warn ? "text-amber-700" : "text-ink-500"}`}>{mm}:{ss.toString().padStart(2, "0")} 남음</span>
+            개발자 세션 활성 <span className={`ml-2 tabular ${warn ? "text-amber-700" : "text-ink-500"}`}>{mm}:{ss.toString().padStart(2, "0")} 남음</span>
           </div>
-          <div className="text-[11px] text-ink-500">이 세션 동안의 모든 조회는 감사 로그에 기록됩니다.</div>
+          <div className="text-[11px] text-ink-500">만료 시 자동 잠금. \"잠그기\" 로 즉시 해제 가능.</div>
         </div>
         <button className="btn-ghost btn-xs" onClick={onLock}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -424,7 +423,7 @@ function DesktopBiometricPanel({
       // 등록할 때도 본인 확인용으로 Touch ID 한 번 더 받자 — 실수 등록 방지
       const bridge = window.hinest;
       if (bridge?.promptTouchID) {
-        const r = await bridge.promptTouchID("이 기기를 총관리자 Touch ID 잠금 해제에 등록합니다");
+        const r = await bridge.promptTouchID("이 기기를 개발자 Touch ID 잠금 해제에 등록합니다");
         if (!r?.ok) throw new Error(r?.error || "Touch ID 확인 실패");
       }
       await api("/api/auth/desktop-biometric/enroll", {
@@ -675,10 +674,10 @@ function SuperPwSetupForm({
       className="space-y-3"
     >
       <div className="p-3 rounded-md bg-brand-50 border border-brand-100 text-[12px] text-brand-700">
-        총관리자 권한이 부여됐어요. 처음 진입이라 <b>총관리자 전용 비밀번호</b> 를 설정해 주세요. (8자 이상, 일반 로그인 비밀번호와 달라야 함)
+        개발자 권한이 부여됐어요. 처음 진입이라 <b>개발자 전용 비밀번호</b> 를 설정해 주세요. (8자 이상, 일반 로그인 비밀번호와 달라야 함)
       </div>
       <div>
-        <label className="field-label">새 총관리자 비밀번호</label>
+        <label className="field-label">새 개발자 비밀번호</label>
         <input className="input" type="password" autoFocus value={next} onChange={(e) => setNext(e.target.value)} minLength={8} maxLength={128} required />
       </div>
       <div>
