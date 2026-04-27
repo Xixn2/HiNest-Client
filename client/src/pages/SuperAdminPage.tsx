@@ -1015,19 +1015,43 @@ function ConsolePanel() {
       if (seq !== fetchSeq.current) return;
       const items: Suggestion[] = (res.items ?? []).map((it) => {
         if (r.ctx.kind === "user") {
+          // 이름·이메일 어느 쪽이라도 비어있을 수 있어 안전한 라벨 조합.
+          const name = String(it?.name ?? "(이름없음)");
+          const email = String(it?.email ?? "");
+          const team = it?.team ? ` · ${it.team}` : "";
+          const role = String(it?.role ?? "");
           return {
-            label: `${it.name} · ${it.email}${it.team ? ` · ${it.team}` : ""}`,
-            insert: it.id,
-            hint: it.role + (it.active ? "" : " (비활성)"),
+            label: `${name}${email ? ` · ${email}` : ""}${team}`,
+            insert: String(it?.id ?? ""),
+            hint: role + (it?.active === false ? " (비활성)" : ""),
           };
         }
-        return { label: it.value, insert: /\s/.test(it.value) ? `"${it.value}"` : it.value };
+        const value = String(it?.value ?? "");
+        return { label: value, insert: /\s/.test(value) ? `"${value}"` : value };
       });
       setSuggestions(items);
       setActive(0);
       setOpen(items.length > 0);
-    } catch {
+      if (items.length === 0) {
+        // 매치 없음을 사용자에게 작게 알려주는 placeholder. 직접 history 에 흐름 끊지 않도록 표시만.
+      }
+    } catch (e: any) {
+      // 종전엔 catch{} 무음 — 401/500 시 사용자가 \"왜 안 뜨지\" 알 길 없었음. 콘솔에 한 줄 박고
+      // 401(Super stepup 만료) 의 경우엔 history 에도 안내해서 재인증 유도.
+      // eslint-disable-next-line no-console
+      console.warn("[console] 자동완성 실패:", e?.status, e?.message);
       setOpen(false);
+      if (e?.status === 401) {
+        setHistory((h) => [
+          ...h,
+          {
+            kind: "output",
+            ok: false,
+            ts: Date.now(),
+            text: "자동완성 실패 — 총관리자 세션이 만료된 것 같아요. 페이지 새로고침 후 다시 진입해 주세요.",
+          },
+        ]);
+      }
     }
   }
 
@@ -1124,15 +1148,32 @@ function ConsolePanel() {
         );
         items = (res.items ?? []).map((it) => {
           if (r.ctx.kind === "user") {
+            const name = String(it?.name ?? "(이름없음)");
+            const email = String(it?.email ?? "");
+            const team = it?.team ? ` · ${it.team}` : "";
             return {
-              label: `${it.name} · ${it.email}${it.team ? ` · ${it.team}` : ""}`,
-              insert: it.id,
-              hint: it.role + (it.active ? "" : " (비활성)"),
+              label: `${name}${email ? ` · ${email}` : ""}${team}`,
+              insert: String(it?.id ?? ""),
+              hint: String(it?.role ?? "") + (it?.active === false ? " (비활성)" : ""),
             };
           }
-          return { label: it.value, insert: /\s/.test(it.value) ? `"${it.value}"` : it.value };
+          const value = String(it?.value ?? "");
+          return { label: value, insert: /\s/.test(value) ? `"${value}"` : value };
         });
-      } catch {
+      } catch (e: any) {
+        // eslint-disable-next-line no-console
+        console.warn("[console] Tab 자동완성 실패:", e?.status, e?.message);
+        if (e?.status === 401) {
+          setHistory((h) => [
+            ...h,
+            {
+              kind: "output",
+              ok: false,
+              ts: Date.now(),
+              text: "자동완성 실패 — 총관리자 세션이 만료된 것 같아요. 페이지 새로고침 후 다시 진입해 주세요.",
+            },
+          ]);
+        }
         items = [];
       }
     }
