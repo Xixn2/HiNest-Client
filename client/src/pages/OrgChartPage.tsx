@@ -268,7 +268,7 @@ function MemberRow({
       <div className="flex-1 min-w-0">
         <div className="text-[13px] font-bold text-ink-900 truncate inline-flex items-center gap-1.5">
           <span className="truncate min-w-0">{u.name}</span>
-          {isDevAccount(u) && <DevBadge />}
+          {isDevAccount(u) && <DevBadge iconOnly />}
           {u.id === meId && <span className="chip-gray">나</span>}
         </div>
         <div className="text-[11px] text-ink-500 truncate">{u.position ?? "—"}</div>
@@ -464,7 +464,7 @@ function PersonNode({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1 min-w-0">
           <span className="text-[12px] font-bold text-ink-900 truncate">{u.name}</span>
-          {isDevAccount(u) && <DevBadge />}
+          {isDevAccount(u) && <DevBadge iconOnly />}
           {isMe && <span className="chip-gray !text-[9px] flex-shrink-0">나</span>}
         </div>
         <div className="text-[10px] text-ink-500 truncate">
