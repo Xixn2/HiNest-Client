@@ -555,9 +555,11 @@ function AppLayoutInner() {
                 </div>
               )}
               <div className="min-w-0 flex-1">
-                <div className="text-[13px] font-semibold text-ink-900 truncate flex items-center gap-1">
-                  <span className="truncate">{user?.name}</span>
-                  {isDevAccount(user) && <DevBadge />}
+                {/* 사이드바 폭이 좁아 라벨 풀버전 배지가 이름을 밀어내는 문제 — iconOnly 로 통일.
+                    풀 라벨은 마이페이지 미리보기에서 별도로 보이므로 정보 손실 없음. */}
+                <div className="text-[13px] font-semibold text-ink-900 flex items-center gap-1.5 min-w-0">
+                  <span className="truncate min-w-0">{user?.name}</span>
+                  {isDevAccount(user) && <DevBadge iconOnly />}
                 </div>
                 <div className="text-[11px] text-ink-500 truncate">{user?.email}</div>
               </div>
