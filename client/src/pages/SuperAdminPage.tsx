@@ -38,7 +38,7 @@ type Message = {
   sender: { id: string; name: string; avatarColor: string; avatarUrl?: string | null };
 };
 
-type Tab = "logs" | "chat" | "api" | "console";
+type Tab = "logs" | "chat" | "api" | "console" | "server";
 
 type ApiSpecRoute = {
   method: string;
@@ -67,7 +67,11 @@ function SuperAdminContent() {
   const [sp, setSp] = useSearchParams();
   const raw = sp.get("tab");
   const tab: Tab =
-    raw === "chat" ? "chat" : raw === "api" ? "api" : raw === "console" ? "console" : "logs";
+    raw === "chat" ? "chat"
+    : raw === "api" ? "api"
+    : raw === "console" ? "console"
+    : raw === "server" ? "server"
+    : "logs";
   const setTab = (t: Tab) => {
     const next = new URLSearchParams(sp);
     if (t === "logs") next.delete("tab");
@@ -81,11 +85,13 @@ function SuperAdminContent() {
         <TabBtn active={tab === "chat"} onClick={() => setTab("chat")}>사내톡 감사</TabBtn>
         <TabBtn active={tab === "api"} onClick={() => setTab("api")}>API 명세</TabBtn>
         <TabBtn active={tab === "console"} onClick={() => setTab("console")}>콘솔</TabBtn>
+        <TabBtn active={tab === "server"} onClick={() => setTab("server")}>서버 로그</TabBtn>
       </div>
       {tab === "logs" && <LogsPanel />}
       {tab === "chat" && <ChatAuditPanel />}
       {tab === "api" && <ApiSpecPanel />}
       {tab === "console" && <ConsolePanel />}
+      {tab === "server" && <ServerLogsPanel />}
     </>
   );
 }
@@ -548,6 +554,117 @@ type ConsoleEntry =
   | { kind: "input"; text: string; ts: number }
   | { kind: "output"; text: string; ok: boolean; ts: number };
 
+/** 명령어 트리 — 토큰 위치별로 다음에 올 수 있는 후보. 'arg:user' 같이 prefix 가
+ *  arg: 인 항목은 정적 후보가 아니라 동적 fetch 컨텍스트 (서버 자동완성). */
+const CMD_TREE: Record<string, any> = {
+  help: {},
+  "?": {},
+  whoami: {},
+  clear: {},
+  cls: {},
+  users: { list: { "arg:limit": {} }, find: { "arg:query": {} } },
+  user: {
+    info: { "arg:user": {} },
+    role: { "arg:user": { MEMBER: {}, MANAGER: {}, ADMIN: {} } },
+    grant: { admin: { "arg:user": {} }, super: { "arg:user": {} } },
+    revoke: { admin: { "arg:user": {} }, super: { "arg:user": {} } },
+    lock: { "arg:user": {} },
+    unlock: { "arg:user": {} },
+    resign: { "arg:user": { "arg:date": {} } },
+    "reset-pw": { "arg:user": {} },
+    team: { "arg:user": { "arg:team": {} } },
+    position: { "arg:user": { "arg:position": {} } },
+  },
+  rooms: { list: { "arg:limit": {} } },
+  room: { info: { "arg:roomId": {} } },
+  notice: { broadcast: { "arg:text": {} } },
+  system: { stats: {} },
+  audit: { recent: { "arg:limit": {} } },
+  cache: { evict: { user: { "arg:user": {} } } },
+};
+
+type Suggestion = {
+  /** 화면에 보일 라벨 */
+  label: string;
+  /** 입력에 삽입될 토큰 */
+  insert: string;
+  /** 보조 정보 우측 노출 */
+  hint?: string;
+};
+
+type CompCtx =
+  | { kind: "static"; tokens: string[] } // 트리에 박힌 정적 토큰 후보
+  | { kind: "user" }
+  | { kind: "team" }
+  | { kind: "position" };
+
+/** input + 커서 위치를 보고 현재 토큰 + 다음 후보 컨텍스트를 결정. */
+function resolveCompletion(
+  input: string,
+  cursor: number,
+): { ctx: CompCtx; tokenStart: number; tokenEnd: number; query: string } | null {
+  // 토큰 = 공백으로 잘랐을 때의 단어 단위.
+  const before = input.slice(0, cursor);
+  // 커서 직전 토큰 위치.
+  let s = cursor;
+  while (s > 0 && !/\s/.test(input[s - 1])) s--;
+  const currentToken = input.slice(s, cursor);
+  const completed = before.slice(0, s).trim();
+  const completedTokens = completed ? completed.split(/\s+/) : [];
+
+  // 트리를 따라 들어감.
+  let node: any = CMD_TREE;
+  for (const t of completedTokens) {
+    // 동적 arg: 자식이면 그 자식 노드의 자식 단계로 진입 (값은 무시하고 트리만 한 칸 깊게).
+    const argKey = Object.keys(node).find((k) => k.startsWith("arg:"));
+    if (node[t] !== undefined) {
+      node = node[t];
+    } else if (argKey) {
+      node = node[argKey];
+    } else {
+      // 알 수 없는 토큰 — 자유 입력 단계. 후보 없음.
+      return null;
+    }
+    if (!node || typeof node !== "object") return null;
+  }
+
+  // 현재 토큰이 @ 로 시작하면 동적 컨텍스트(user/team/position) 강제.
+  const atMatch = currentToken.startsWith("@");
+  if (atMatch) {
+    // 트리에서 arg:user|arg:team|arg:position 자식이 있는지 보고 그 컨텍스트 사용.
+    const argKey = Object.keys(node).find((k) => k.startsWith("arg:"));
+    let kind: CompCtx["kind"] = "user";
+    if (argKey === "arg:team") kind = "team";
+    else if (argKey === "arg:position") kind = "position";
+    else if (argKey === "arg:user") kind = "user";
+    else if (!argKey) kind = "user"; // 기본은 user (가장 자주 쓰이는 시나리오)
+    return {
+      ctx: { kind },
+      tokenStart: s,
+      tokenEnd: cursor,
+      query: currentToken.slice(1),
+    };
+  }
+
+  // 정적 후보 (Tab 완성).
+  const keys = Object.keys(node);
+  const staticKeys = keys.filter((k) => !k.startsWith("arg:"));
+  // 동적 자식이 있으면 — 컨텍스트도 같이 후보로 노출.
+  const argKey = keys.find((k) => k.startsWith("arg:"));
+  if (staticKeys.length > 0) {
+    return {
+      ctx: { kind: "static", tokens: staticKeys },
+      tokenStart: s,
+      tokenEnd: cursor,
+      query: currentToken,
+    };
+  }
+  if (argKey === "arg:user") return { ctx: { kind: "user" }, tokenStart: s, tokenEnd: cursor, query: currentToken };
+  if (argKey === "arg:team") return { ctx: { kind: "team" }, tokenStart: s, tokenEnd: cursor, query: currentToken };
+  if (argKey === "arg:position") return { ctx: { kind: "position" }, tokenStart: s, tokenEnd: cursor, query: currentToken };
+  return null;
+}
+
 function ConsolePanel() {
   const [history, setHistory] = useState<ConsoleEntry[]>(() => [
     {
@@ -555,13 +672,19 @@ function ConsolePanel() {
       ok: true,
       ts: Date.now(),
       text:
-        "총관리자 콘솔. `help` 입력으로 명령 목록.\n" +
-        "예: users find 김 / user grant admin <id|email|사번>",
+        "총관리자 콘솔. `help` 로 사용법.\n" +
+        "Tab — 명령어 자동완성, @ — 유저/팀/직급 자동완성.",
     },
   ]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  // 위/아래 화살표로 이전 명령 재호출.
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [active, setActive] = useState(0);
+  const [open, setOpen] = useState(false);
+  const compRef = useRef<{ tokenStart: number; tokenEnd: number } | null>(null);
+  const fetchSeq = useRef(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  // 위/아래 화살표로 이전 명령 재호출 (자동완성 닫혀있을 때만).
   const cmdHistRef = useRef<string[]>([]);
   const cmdHistIdxRef = useRef(-1);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -577,6 +700,64 @@ function ConsolePanel() {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [history]);
+
+  /** input 또는 cursor 가 바뀔 때 동적 컨텍스트(@) 면 자동으로 fetch. */
+  async function recomputeOpen() {
+    const el = inputRef.current;
+    if (!el) return;
+    const cursor = el.selectionStart ?? el.value.length;
+    const r = resolveCompletion(input, cursor);
+    if (!r) {
+      setOpen(false);
+      setSuggestions([]);
+      compRef.current = null;
+      return;
+    }
+    compRef.current = { tokenStart: r.tokenStart, tokenEnd: r.tokenEnd };
+    if (r.ctx.kind === "static") {
+      // @ 가 아닌 경우엔 Tab 누를 때만 메뉴 노출. 자동 표시는 안 함.
+      if (input.slice(r.tokenStart, r.tokenEnd).startsWith("@")) {
+        // 도달 안 함, 안전망
+      }
+      // 자동 노출 X
+      setOpen(false);
+      return;
+    }
+    // 동적 컨텍스트 — @ 토큰일 때만 자동 fetch + 표시.
+    const isAt = input.slice(r.tokenStart, r.tokenEnd).startsWith("@");
+    if (!isAt) {
+      setOpen(false);
+      return;
+    }
+    const seq = ++fetchSeq.current;
+    try {
+      const res = await api<{ items: any[] }>(
+        `/api/admin/console/complete?ctx=${r.ctx.kind}&q=${encodeURIComponent(r.query)}&limit=10`,
+      );
+      if (seq !== fetchSeq.current) return;
+      const items: Suggestion[] = (res.items ?? []).map((it) => {
+        if (r.ctx.kind === "user") {
+          return {
+            label: `${it.name} · ${it.email}${it.team ? ` · ${it.team}` : ""}`,
+            insert: it.id,
+            hint: it.role + (it.active ? "" : " (비활성)"),
+          };
+        }
+        return { label: it.value, insert: /\s/.test(it.value) ? `"${it.value}"` : it.value };
+      });
+      setSuggestions(items);
+      setActive(0);
+      setOpen(items.length > 0);
+    } catch {
+      setOpen(false);
+    }
+  }
+
+  // 입력 변할 때마다 컨텍스트 재계산. @ 면 자동으로 fetch+open.
+  useEffect(() => {
+    void recomputeOpen();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [input]);
 
   async function execute(raw: string) {
     const cmd = raw.trim();
@@ -604,7 +785,79 @@ function ConsolePanel() {
     }
   }
 
+  function applySuggestion(s: Suggestion) {
+    const range = compRef.current;
+    if (!range) return;
+    const next = input.slice(0, range.tokenStart) + s.insert + " " + input.slice(range.tokenEnd);
+    setInput(next);
+    setOpen(false);
+    setSuggestions([]);
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      const pos = range.tokenStart + s.insert.length + 1;
+      el.focus();
+      el.setSelectionRange(pos, pos);
+    });
+  }
+
+  /** Tab 핸들러 — 정적/동적 후보를 즉석에서 만들어 노출. 후보 1개면 곧장 삽입. */
+  async function handleTab() {
+    const el = inputRef.current;
+    if (!el) return;
+    const cursor = el.selectionStart ?? el.value.length;
+    const r = resolveCompletion(input, cursor);
+    if (!r) return;
+    compRef.current = { tokenStart: r.tokenStart, tokenEnd: r.tokenEnd };
+    let items: Suggestion[] = [];
+    if (r.ctx.kind === "static") {
+      const q = r.query.toLowerCase();
+      items = r.ctx.tokens
+        .filter((t) => !q || t.toLowerCase().startsWith(q))
+        .map((t) => ({ label: t, insert: t }));
+    } else {
+      try {
+        const res = await api<{ items: any[] }>(
+          `/api/admin/console/complete?ctx=${r.ctx.kind}&q=${encodeURIComponent(r.query)}&limit=10`,
+        );
+        items = (res.items ?? []).map((it) => {
+          if (r.ctx.kind === "user") {
+            return {
+              label: `${it.name} · ${it.email}${it.team ? ` · ${it.team}` : ""}`,
+              insert: it.id,
+              hint: it.role + (it.active ? "" : " (비활성)"),
+            };
+          }
+          return { label: it.value, insert: /\s/.test(it.value) ? `"${it.value}"` : it.value };
+        });
+      } catch {
+        items = [];
+      }
+    }
+    if (items.length === 0) return;
+    if (items.length === 1) {
+      applySuggestion(items[0]);
+      return;
+    }
+    setSuggestions(items);
+    setActive(0);
+    setOpen(true);
+  }
+
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    // Tab — 자동완성 트리거.
+    if (e.key === "Tab") {
+      e.preventDefault();
+      void handleTab();
+      return;
+    }
+    // 메뉴 열려있을 때 ↑↓/Enter/Esc 가 메뉴를 우선.
+    if (open && suggestions.length > 0) {
+      if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => (a + 1) % suggestions.length); return; }
+      if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => (a - 1 + suggestions.length) % suggestions.length); return; }
+      if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); applySuggestion(suggestions[active]); return; }
+      if (e.key === "Escape") { e.preventDefault(); setOpen(false); return; }
+    }
     if (e.key === "Enter" && !e.nativeEvent.isComposing) {
       e.preventDefault();
       const v = input;
@@ -681,10 +934,57 @@ function ConsolePanel() {
           padding: "8px 12px",
           borderTop: "1px solid rgba(255,255,255,0.08)",
           background: "#171A20",
+          position: "relative",
         }}
       >
+        {open && suggestions.length > 0 && (
+          <div
+            style={{
+              position: "absolute",
+              left: 12,
+              right: 12,
+              bottom: "100%",
+              marginBottom: 6,
+              background: "#171A20",
+              border: "1px solid rgba(255,255,255,0.12)",
+              borderRadius: 10,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+              maxHeight: 240,
+              overflowY: "auto",
+              zIndex: 10,
+            }}
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            {suggestions.map((s, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => applySuggestion(s)}
+                onMouseEnter={() => setActive(i)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  width: "100%",
+                  padding: "7px 10px",
+                  background: i === active ? "rgba(120,150,255,0.12)" : "transparent",
+                  border: 0,
+                  cursor: "pointer",
+                  textAlign: "left",
+                  fontFamily: "inherit",
+                }}
+              >
+                <span style={{ color: "#E5E9F0", fontSize: 12.5, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {s.label}
+                </span>
+                {s.hint && <span style={{ color: "#7F8792", fontSize: 11 }}>{s.hint}</span>}
+              </button>
+            ))}
+          </div>
+        )}
         <span style={{ color: "#9CA3AF", fontSize: 13, fontWeight: 700 }}>{">"}</span>
         <input
+          ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
@@ -693,7 +993,7 @@ function ConsolePanel() {
           spellCheck={false}
           autoCapitalize="off"
           autoCorrect="off"
-          placeholder='help (사용법) · 예: user grant admin user@hi.com'
+          placeholder="Tab 자동완성 / @ 유저·팀·직급 선택 / help"
           style={{
             flex: 1,
             border: 0,
@@ -705,6 +1005,141 @@ function ConsolePanel() {
             padding: "4px 0",
           }}
         />
+      </div>
+    </div>
+  );
+}
+
+/* =============== 서버 로그 — 인메모리 버퍼 폴링 =============== */
+type LogLevel = "info" | "warn" | "error" | "http";
+type ServerLog = { ts: number; level: LogLevel; msg: string };
+
+function ServerLogsPanel() {
+  const [logs, setLogs] = useState<ServerLog[]>([]);
+  const [level, setLevel] = useState<"" | LogLevel>("");
+  const [q, setQ] = useState("");
+  const [follow, setFollow] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  const aliveRef = useRef(true);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => { aliveRef.current = false; };
+  }, []);
+
+  async function load() {
+    try {
+      const params = new URLSearchParams();
+      if (level) params.set("level", level);
+      if (q) params.set("q", q);
+      params.set("limit", "1000");
+      const r = await api<{ logs: ServerLog[] }>(`/api/admin/server-logs?${params}`);
+      if (!aliveRef.current) return;
+      setLogs(r.logs);
+      setLoading(false);
+    } catch (e: any) {
+      if (!aliveRef.current) return;
+      setErr(e?.message ?? "불러오기 실패");
+      setLoading(false);
+    }
+  }
+
+  // 검색·레벨 변경 시 즉시 reload, 그리고 follow 켜져 있으면 3초마다 자동 갱신.
+  useEffect(() => {
+    void load();
+    if (!follow) return;
+    const id = window.setInterval(load, 3000);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [level, q, follow]);
+
+  // follow 켜져 있고 새 로그가 들어오면 자동으로 최하단 스크롤.
+  useEffect(() => {
+    if (!follow) return;
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [logs, follow]);
+
+  if (loading) return <div className="panel p-8 text-center text-ink-500 text-[13px]">불러오는 중…</div>;
+  if (err) return <div className="panel p-6 text-red-600 text-[13px]">{err}</div>;
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <input
+          className="input flex-1 min-w-[220px]"
+          placeholder="로그 본문 검색 — 예: error, /api/chat"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <select className="input !w-auto" value={level} onChange={(e) => setLevel(e.target.value as any)}>
+          <option value="">레벨 전체</option>
+          <option value="http">HTTP</option>
+          <option value="info">INFO</option>
+          <option value="warn">WARN</option>
+          <option value="error">ERROR</option>
+        </select>
+        <label className="flex items-center gap-1.5 text-[12px] text-ink-700 cursor-pointer">
+          <input
+            type="checkbox"
+            className="accent-brand-500"
+            checked={follow}
+            onChange={(e) => setFollow(e.target.checked)}
+          />
+          자동 갱신 (3초)
+        </label>
+        <button className="btn-ghost btn-xs" onClick={() => load()}>새로고침</button>
+        <div className="text-[11px] text-ink-500">{logs.length}건</div>
+      </div>
+
+      <div
+        ref={scrollRef}
+        style={{
+          background: "#0E1014",
+          color: "#D4D8DE",
+          borderRadius: 12,
+          border: "1px solid var(--c-border)",
+          padding: "10px 12px",
+          height: "min(64vh, 580px)",
+          overflowY: "auto",
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+          fontSize: 12,
+          lineHeight: 1.55,
+        }}
+      >
+        {logs.length === 0 ? (
+          <div style={{ color: "#7F8792", textAlign: "center", padding: 32 }}>
+            아직 로그가 없어요. 프로세스 재기동 후 새로 쌓인 줄만 보여요.
+          </div>
+        ) : (
+          logs.map((l, i) => (
+            <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+              <span style={{ color: "#7F8792", flexShrink: 0 }}>
+                {new Date(l.ts).toISOString().slice(11, 23)}
+              </span>
+              <span
+                style={{
+                  flexShrink: 0,
+                  fontWeight: 700,
+                  width: 50,
+                  color:
+                    l.level === "error" ? "#FCA5A5"
+                    : l.level === "warn" ? "#FCD34D"
+                    : l.level === "http" ? "#7896FF"
+                    : "#86EFAC",
+                }}
+              >
+                {l.level.toUpperCase()}
+              </span>
+              <span style={{ flex: 1, minWidth: 0 }}>{l.msg}</span>
+            </div>
+          ))
+        )}
+      </div>
+      <div className="text-[11px] text-ink-500 mt-2">
+        프로세스 재기동(배포 등) 시 버퍼 초기화. 디스크/CloudWatch 영속화 없음 — 최근 2,000줄만 메모리에 보관.
       </div>
     </div>
   );

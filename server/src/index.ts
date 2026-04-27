@@ -38,6 +38,11 @@ import { folderShareLinkAuthedRouter } from "./routes/folderShareLink.js";
 import serviceAccountRouter from "./routes/serviceAccount.js";
 import path from "node:path";
 import mime from "mime-types";
+import { installConsoleHook, pushHttpLog } from "./lib/logBuffer.js";
+
+// 콘솔 로그를 인메모리 버퍼에도 적재 — 총관리자 \"서버 로그\" 탭에서 조회.
+// 반드시 다른 import 가 끝난 뒤(이 시점), 첫 console.log 이전에 호출.
+installConsoleHook();
 
 const app = express();
 const PORT = Number(process.env.PORT ?? 4000);
@@ -89,6 +94,16 @@ app.use(
 );
 app.use(express.json({ limit: "2mb" }));
 app.use(cookieParser());
+
+// HTTP 액세스 라인을 인메모리 버퍼에 적재 — \"GET /api/x 200 12ms\" 형식.
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on("finish", () => {
+    const dur = Date.now() - start;
+    pushHttpLog(`${req.method} ${req.originalUrl || req.url} ${res.statusCode} ${dur}ms`);
+  });
+  next();
+});
 
 // CSRF 방어 — 쿠키 인증 + SameSite=lax 만으론 크로스 오리진 상태변경 요청에 완전히 안전하지 않음.
 // Origin / Referer 헤더를 허용 오리진 목록과 대조해 안 맞으면 403.
