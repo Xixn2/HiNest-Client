@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../lib/db.js";
 import { requireAdmin, requireAuth, requireSuperAdminStepUp, verifySuperToken, writeLog, evictUserCache } from "../lib/auth.js";
 import { todayStr } from "../lib/dates.js";
+import { getLogs, type LogLevel } from "../lib/logBuffer.js";
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -655,13 +656,78 @@ router.get("/api-spec", requireSuperAdminStepUp, async (req, res) => {
  */
 const consoleSchema = z.object({ cmd: z.string().min(1).max(200) });
 
+/** 콘솔 입력창의 @ 자동완성용 — ctx 에 따라 유저/팀/직급 후보 반환. */
+router.get("/console/complete", requireSuperAdminStepUp, async (req, res) => {
+  const ctx = String(req.query.ctx ?? "user").toLowerCase();
+  const q = String(req.query.q ?? "").trim();
+  const limit = Math.min(20, Math.max(1, parseInt(String(req.query.limit ?? 10), 10) || 10));
+
+  if (ctx === "user") {
+    // 빈 q 면 최근 가입 순. 검색은 이름/이메일/사번/HR코드 부분 매치.
+    const where = q
+      ? {
+          OR: [
+            { name: { contains: q, mode: "insensitive" as const } },
+            { email: { contains: q, mode: "insensitive" as const } },
+            { employeeNo: { contains: q, mode: "insensitive" as const } },
+            { hrCode: { contains: q, mode: "insensitive" as const } },
+          ],
+        }
+      : {};
+    const users = await prisma.user.findMany({
+      where,
+      take: limit,
+      orderBy: q ? { name: "asc" } : { createdAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        employeeNo: true,
+        team: true,
+        position: true,
+        role: true,
+        active: true,
+      },
+    });
+    return res.json({ items: users });
+  }
+
+  if (ctx === "team" || ctx === "position") {
+    // distinct — 유저 테이블에 들어있는 고유 팀/직급 값 모음.
+    const rows = await prisma.user.findMany({
+      where: ctx === "team" ? { team: { not: null } } : { position: { not: null } },
+      select: ctx === "team" ? { team: true } : { position: true },
+      distinct: ctx === "team" ? ["team"] : ["position"],
+      take: 200,
+    });
+    let values = rows
+      .map((r: any) => (ctx === "team" ? r.team : r.position))
+      .filter((v: any): v is string => !!v && typeof v === "string");
+    if (q) {
+      const k = q.toLowerCase();
+      values = values.filter((v) => v.toLowerCase().includes(k));
+    }
+    values.sort((a, b) => a.localeCompare(b, "ko"));
+    return res.json({ items: values.slice(0, limit).map((v) => ({ value: v })) });
+  }
+
+  return res.status(400).json({ error: "unknown ctx" });
+});
+
 router.post("/console", requireSuperAdminStepUp, async (req, res) => {
   const u = (req as any).user;
   const parsed = consoleSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid input" });
   const raw = parsed.data.cmd.trim();
-  // 간이 토크나이저 — quoted 인자는 미지원, 공백 분리. 사번/이메일/cuid 류는 공백 없음 가정.
-  const tokens = raw.split(/\s+/);
+  // 토크나이저 — \"공백 포함 값\" / '공백 포함 값' 지원. 그 외엔 공백 분리.
+  const tokens: string[] = [];
+  {
+    const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(raw)) !== null) {
+      tokens.push(m[1] ?? m[2] ?? m[3] ?? "");
+    }
+  }
   const head = (tokens[0] || "").toLowerCase();
   const sub = (tokens[1] || "").toLowerCase();
   const arg1 = tokens[2] || "";
@@ -864,7 +930,11 @@ router.post("/console", requireSuperAdminStepUp, async (req, res) => {
       const target = await findUser(arg1);
       if (!target) { result = err(`유저를 찾을 수 없음: ${arg1}`); }
       else {
-        const value = arg2 === "-" ? null : tokens.slice(3).join(" ").trim() || null;
+        // 토크나이저가 quoted 처리하므로 arg2 가 그대로 \"디자인팀\" 같은 값 한 덩어리로 들어옴.
+        // 빈값(\"-\") → null. 추가 토큰이 더 있으면 공백 결합(quote 없이 입력한 케이스 대비).
+        const tail = tokens.slice(3).join(" ").trim();
+        const combined = tail ? `${arg2} ${tail}` : arg2;
+        const value = combined === "-" || !combined ? null : combined;
         await prisma.user.update({
           where: { id: target.id },
           data: sub === "team" ? { team: value } : { position: value },
@@ -905,6 +975,7 @@ router.post("/console", requireSuperAdminStepUp, async (req, res) => {
         ]);
       }
     } else if (head === "notice" && sub === "broadcast") {
+      // 따옴표로 감싸 보내거나 그냥 공백 단어들로 보내거나 둘 다 허용.
       const body = tokens.slice(2).join(" ").trim();
       if (!body) { result = err("본문이 비었어요. 예: notice broadcast 내일 점검 있어요"); }
       else {
@@ -961,6 +1032,19 @@ router.post("/console", requireSuperAdminStepUp, async (req, res) => {
   // 모든 명령(성공/실패 무관) 감사 로그.
   await writeLog(u.id, "SUPER_CONSOLE", undefined, raw, req.ip).catch(() => {});
   res.json(result);
+});
+
+/** 서버 인메모리 로그 — 콘솔 출력 + HTTP 액세스 라인. 프로세스 재기동 시 초기화. */
+router.get("/server-logs", requireSuperAdminStepUp, async (req, res) => {
+  const since = req.query.since ? Number(req.query.since) : undefined;
+  const levelRaw = String(req.query.level ?? "");
+  const level = (["info", "warn", "error", "http"] as const).includes(levelRaw as any)
+    ? (levelRaw as LogLevel)
+    : undefined;
+  const q = typeof req.query.q === "string" ? req.query.q : undefined;
+  const limit = req.query.limit ? Math.min(2000, Math.max(1, Number(req.query.limit))) : 500;
+  const logs = getLogs({ since, level, q, limit });
+  res.json({ logs, now: Date.now() });
 });
 
 router.get("/logs", requireSuperAdminStepUp, async (req, res) => {
