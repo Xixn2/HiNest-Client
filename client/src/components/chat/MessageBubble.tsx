@@ -1141,13 +1141,18 @@ export function TextBubble({
 }) {
   // 코드(펜스/인라인/휴리스틱) 영역을 떼어내고 일반 텍스트만 URL 링크화.
   const segments = parseCodeSegments(content);
-  // 코드 블록이 하나라도 있으면 둥근모서리 안쪽 패딩이 너무 작으면 보기 안 좋아서
-  // 살짝 늘려준다 (펜스 코드는 자체 padding 갖는 박스라 충돌 없음).
   const hasBlockCode = segments.some((s) => s.kind === "code");
+  // 메시지가 사실상 "코드 블록만" 일 때(텍스트 segment 가 모두 비었음) 채팅 버블의 색·패딩
+  // 전체를 떼어낸다. 종전엔 mine 의 파란 배경이 좌우 8px 띠로 남아 코드 박스 옆에 어색한
+  // 프레임처럼 보였음. 이 경우엔 코드 박스 자체가 메시지의 시각적 컨테이너.
+  const codeOnly =
+    hasBlockCode &&
+    segments.every((s) => s.kind === "code" || (s.kind === "text" && !s.text.trim()));
   return (
     <div
       style={{
-        padding: hasBlockCode ? "8px 8px" : "9px 13px",
+        // codeOnly 면 패딩/배경 제거 → 코드 박스가 끝까지 차지.
+        padding: codeOnly ? 0 : hasBlockCode ? "8px 8px" : "9px 13px",
         fontSize: 14,
         fontWeight: 500,
         lineHeight: 1.4,
@@ -1158,7 +1163,7 @@ export function TextBubble({
         minWidth: 0,
         maxWidth: "100%",
         color: mine ? C.brandFg : C.ink,
-        background: mine ? C.blue : C.bubbleOther,
+        background: codeOnly ? "transparent" : (mine ? C.blue : C.bubbleOther),
         borderRadius: 16,
         fontFamily: FONT,
       }}
