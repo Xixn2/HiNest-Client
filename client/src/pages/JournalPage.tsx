@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, apiSWR } from "../api";
 import PageHeader from "../components/PageHeader";
 import DateTimePicker from "../components/DateTimePicker";
@@ -14,8 +14,7 @@ type Journal = {
 };
 
 /**
- * "오늘" 은 항상 KST 기준. 브라우저 로케일이 한국이 아니어도 일지 날짜 기본값이 서울 날짜가 되도록
- * 명시적 timeZone 사용. 서버 쪽도 동일 규칙(server/src/lib/dates.ts 참고)을 쓰도록 최근 수정됨.
+ * "오늘" 은 항상 KST 기준. 브라우저 로케일이 한국이 아니어도 일지 날짜 기본값이 서울 날짜가 되도록.
  */
 const KST_TODAY = new Intl.DateTimeFormat("sv-SE", {
   timeZone: "Asia/Seoul",
@@ -36,20 +35,17 @@ export default function JournalPage() {
   const [mode, setMode] = useState<Mode>("view");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const [q, setQ] = useState("");
   // 삭제 버튼 중복 클릭 방지 + native confirm() 대체용 모달 상태.
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
   // 삭제 확인 모달: 실행 중이 아니면 Esc / 배경 클릭으로 닫기.
   useModalDismiss(!!confirmRemoveId && !removingId, () => setConfirmRemoveId(null));
 
-  // save/remove 후 setState 가 또 돌고, 이때 사용자가 이탈하면 언마운트된 컴포넌트에
-  // setState 가 박히며 경고+누수. apiSWR 의 stale→fresh 콜백도 가드 대상.
   const aliveRef = useRef(true);
   useEffect(() => {
     aliveRef.current = true;
-    return () => {
-      aliveRef.current = false;
-    };
+    return () => { aliveRef.current = false; };
   }, []);
 
   // SWR — 탭 안에서 재진입 시 즉시 리스트 렌더.
@@ -95,14 +91,11 @@ export default function JournalPage() {
           json: form,
         });
         if (!aliveRef.current) return;
-        // 낙관적 업데이트 — 전체 load() 대신 응답값으로 리스트 내 해당 항목만 교체.
-        // 서버 왕복 한 번 아끼고 스크롤 위치·선택 상태 유지.
         setList((arr) => arr.map((j) => (j.id === res.journal.id ? res.journal : j)));
         setSelected(res.journal);
       } else {
         const res = await api<{ journal: Journal }>("/api/journal", { method: "POST", json: form });
         if (!aliveRef.current) return;
-        // 새 일지를 리스트 맨 앞에 넣음 — 서버도 createdAt desc 로 정렬하므로 동일 순서.
         setList((arr) => [res.journal, ...arr.filter((j) => j.id !== res.journal.id)]);
         setSelected(res.journal);
       }
@@ -136,6 +129,23 @@ export default function JournalPage() {
   }
 
   const editing = mode !== "view";
+  const filtered = useMemo(() => {
+    const k = q.trim().toLowerCase();
+    if (!k) return list;
+    return list.filter(
+      (j) => j.title.toLowerCase().includes(k) || j.content.toLowerCase().includes(k) || j.date.includes(k),
+    );
+  }, [list, q]);
+  // 같은 달끼리 그룹핑 — 사이드바 시각 구조 강화.
+  const grouped = useMemo(() => {
+    const map = new Map<string, Journal[]>();
+    for (const j of filtered) {
+      const ym = j.date.slice(0, 7);
+      if (!map.has(ym)) map.set(ym, []);
+      map.get(ym)!.push(j);
+    }
+    return Array.from(map.entries());
+  }, [filtered]);
 
   return (
     <div>
@@ -143,65 +153,151 @@ export default function JournalPage() {
         title="업무일지"
         description="하루의 업무를 기록하고 회고하세요."
         right={
-          <button className="btn-primary" onClick={openCreate}>
+          <button className="btn-primary btn-lg" onClick={openCreate}>
             + 새 일지
           </button>
         }
       />
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="card p-0 overflow-hidden">
-          <div className="p-4 border-b border-slate-100 text-sm font-bold text-slate-800">
-            내 일지 ({list.length})
-          </div>
-          <div className="divide-y divide-slate-100 max-h-[70vh] overflow-auto">
-            {list.map((j) => (
-              <button
-                key={j.id}
-                onClick={() => { setSelected(j); setMode("view"); }}
-                className={`w-full text-left px-4 py-3 hover:bg-slate-50 ${selected?.id === j.id && mode === "view" ? "bg-brand-50" : ""}`}
+      <div className="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] gap-5">
+        {/* 사이드 리스트 */}
+        <aside className="panel p-0 overflow-hidden flex flex-col" style={{ maxHeight: "calc(100vh - 220px)" }}>
+          <div className="px-4 py-3 border-b border-ink-100">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-[13.5px] font-extrabold text-ink-900">내 일지</div>
+              <span className="chip chip-gray !text-[10.5px]">{list.length}</span>
+            </div>
+            <div className="relative">
+              <input
+                className="input !h-9 !text-[12.5px] !pl-8"
+                placeholder="제목·날짜·본문 검색"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+              />
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{
+                  position: "absolute",
+                  left: 10,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: "var(--c-text-3)",
+                }}
               >
-                <div className="text-xs text-slate-500">{j.date}</div>
-                <div className="font-semibold text-slate-900 truncate">{j.title}</div>
-              </button>
-            ))}
-            {list.length === 0 && <div className="px-4 py-10 text-center text-sm text-slate-400">일지가 없습니다.</div>}
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
+              </svg>
+            </div>
           </div>
-        </div>
-
-        <div className="lg:col-span-2 card">
-          {editing ? (
-            <form onSubmit={save} className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="label">날짜</label>
-                  <DateTimePicker mode="date" value={form.date} onChange={(v) => setForm({ ...form, date: v })} />
+          <div className="flex-1 overflow-auto">
+            {filtered.length === 0 ? (
+              <div className="px-4 py-12 text-center">
+                <div className="text-[34px] mb-2">📝</div>
+                <div className="text-[13px] font-bold text-ink-900">{q ? "검색 결과가 없어요" : "아직 일지가 없어요"}</div>
+                <div className="text-[11.5px] text-ink-500 mt-1">{q ? "다른 키워드로 찾아보세요" : "오늘 한 일을 정리해 보세요"}</div>
+                {!q && (
+                  <button className="btn-ghost btn-xs mt-3" onClick={openCreate}>+ 새 일지 작성</button>
+                )}
+              </div>
+            ) : (
+              grouped.map(([ym, items]) => (
+                <div key={ym}>
+                  <div className="sticky top-0 z-[1] px-4 py-1.5 bg-ink-25 text-[10.5px] font-extrabold text-ink-500 uppercase tracking-[0.06em] border-b border-ink-100">
+                    {formatYearMonth(ym)}
+                  </div>
+                  {items.map((j) => {
+                    const active = selected?.id === j.id && mode === "view";
+                    return (
+                      <button
+                        key={j.id}
+                        onClick={() => { setSelected(j); setMode("view"); }}
+                        className="w-full text-left px-4 py-3 hover:bg-ink-25 transition border-b border-ink-100 flex items-start gap-3"
+                        style={active ? { background: "var(--c-brand-soft)" } : undefined}
+                      >
+                        <div
+                          className="flex-shrink-0 w-10 h-10 rounded-xl grid place-items-center text-[10.5px] font-extrabold leading-none"
+                          style={{
+                            background: active ? "var(--c-brand)" : "var(--c-surface-3)",
+                            color: active ? "#fff" : "var(--c-text)",
+                          }}
+                        >
+                          <div>
+                            <div className="text-[15px] font-extrabold tabular-nums text-center">
+                              {parseInt(j.date.slice(8, 10), 10)}
+                            </div>
+                            <div className="text-[9px] opacity-80 text-center">{dowOf(j.date)}</div>
+                          </div>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[13.5px] font-bold text-ink-900 truncate">{j.title || "(제목 없음)"}</div>
+                          <div className="text-[11px] text-ink-500 mt-0.5 line-clamp-1">
+                            {j.content.replace(/\s+/g, " ").trim() || "(내용 없음)"}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
-                <div>
-                  <label className="label">제목</label>
-                  <input
-                    className="input"
-                    value={form.title}
-                    onChange={(e) => setForm({ ...form, title: e.target.value })}
-                    required
-                    maxLength={200}
-                  />
+              ))
+            )}
+          </div>
+        </aside>
+
+        {/* 본문 */}
+        <main className="panel p-0 overflow-hidden flex flex-col" style={{ minHeight: "60vh" }}>
+          {editing ? (
+            <form onSubmit={save} className="flex flex-col h-full">
+              <div className="px-6 pt-5 pb-4 border-b border-ink-100">
+                <div className="text-[10.5px] font-extrabold tracking-[0.18em] uppercase text-brand-600">
+                  {mode === "edit" ? "EDIT" : "NEW"}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-[180px_minmax(0,1fr)] gap-3 mt-2">
+                  <div>
+                    <label className="field-label">날짜</label>
+                    <DateTimePicker mode="date" value={form.date} onChange={(v) => setForm({ ...form, date: v })} />
+                  </div>
+                  <div>
+                    <label className="field-label">제목</label>
+                    <input
+                      className="input !text-[15px] !font-bold"
+                      value={form.title}
+                      onChange={(e) => setForm({ ...form, title: e.target.value })}
+                      required
+                      maxLength={200}
+                      placeholder="오늘 한 일 한 줄 요약"
+                      autoFocus={mode === "create"}
+                    />
+                  </div>
                 </div>
               </div>
-              <div>
-                <label className="label">내용</label>
+              <div className="flex-1 px-6 py-4 overflow-auto">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="field-label !mb-0">내용</label>
+                  <span className="text-[11px] text-ink-500 tabular-nums">
+                    {form.content.length.toLocaleString()} / 20,000
+                  </span>
+                </div>
                 <textarea
                   className="input"
-                  rows={14}
+                  rows={16}
                   value={form.content}
                   onChange={(e) => setForm({ ...form, content: e.target.value })}
                   required
                   maxLength={20_000}
+                  placeholder="오늘 한 일 / 잘된 점 / 막힌 점 / 내일 할 일 ..."
+                  style={{ resize: "vertical", lineHeight: 1.6, minHeight: 320 }}
                 />
+                {err && (
+                  <div className="mt-3 text-[12px] font-semibold text-red-600">{err}</div>
+                )}
               </div>
-              {err && (
-                <div className="text-[12px] font-semibold text-red-600">{err}</div>
-              )}
-              <div className="flex justify-end gap-2">
+              <div className="px-6 py-3 border-t border-ink-100 flex justify-end gap-2">
                 <button
                   type="button"
                   className="btn-ghost"
@@ -209,7 +305,6 @@ export default function JournalPage() {
                   onClick={() => {
                     setMode("view");
                     setErr("");
-                    // 편집 중이었다면 원본이 그대로 selected 로 유지되어 바로 보기 화면으로 복귀.
                   }}
                 >
                   취소
@@ -220,46 +315,70 @@ export default function JournalPage() {
               </div>
             </form>
           ) : selected ? (
-            <div>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-xs text-slate-500">{selected.date}</div>
-                  <h2 className="text-xl font-bold mt-1 break-words">{selected.title}</h2>
-                </div>
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <button className="btn-ghost btn-xs" onClick={() => openEdit(selected)} disabled={removingId === selected.id}>
-                    수정
-                  </button>
-                  <button
-                    className="btn-ghost btn-xs text-red-600 hover:text-red-700 disabled:opacity-60"
-                    onClick={() => setConfirmRemoveId(selected.id)}
-                    disabled={removingId === selected.id}
-                  >
-                    {removingId === selected.id ? "삭제 중…" : "삭제"}
-                  </button>
+            <article className="flex flex-col h-full">
+              <div className="px-6 pt-5 pb-4 border-b border-ink-100">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="inline-flex items-center gap-2 text-[11.5px] text-ink-500 font-bold">
+                      <span className="chip chip-brand !text-[10.5px]">{formatDateLong(selected.date)}</span>
+                      <span>·</span>
+                      <span className="font-mono tabular-nums">{selected.date}</span>
+                    </div>
+                    <h2 className="text-[24px] font-extrabold mt-2 break-words tracking-tight text-ink-900">
+                      {selected.title || "(제목 없음)"}
+                    </h2>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button className="btn-ghost btn-xs" onClick={() => openEdit(selected)} disabled={removingId === selected.id}>
+                      수정
+                    </button>
+                    <button
+                      className="btn-ghost btn-xs"
+                      style={{ color: "var(--c-danger)" }}
+                      onClick={() => setConfirmRemoveId(selected.id)}
+                      disabled={removingId === selected.id}
+                    >
+                      {removingId === selected.id ? "삭제 중…" : "삭제"}
+                    </button>
+                  </div>
                 </div>
               </div>
-              <div className="mt-6 whitespace-pre-wrap text-slate-700 leading-relaxed break-words">
-                {selected.content}
+              <div className="flex-1 px-6 py-6 overflow-auto">
+                <div className="whitespace-pre-wrap text-[14.5px] text-ink-800 leading-[1.75] break-words">
+                  {selected.content || <span className="text-ink-400">(내용 없음)</span>}
+                </div>
               </div>
-            </div>
+            </article>
           ) : (
-            <div className="text-center text-slate-400 py-20">일지를 선택하거나 새로 작성하세요.</div>
+            <EmptyDetail onCreate={openCreate} />
           )}
-        </div>
+        </main>
       </div>
 
       {confirmRemoveId && (
         <div
-          className="fixed inset-0 bg-slate-900/40 grid place-items-center p-4 z-50"
+          className="fixed inset-0 z-50 grid place-items-center p-4"
+          style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)" }}
           onClick={() => removingId ? null : setConfirmRemoveId(null)}
         >
-          <div className="card w-full max-w-[400px]" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold">일지 삭제</h3>
-            <p className="text-sm text-slate-600 mt-2">
-              이 일지를 삭제하시겠습니까? 삭제 후에는 복구할 수 없습니다.
-            </p>
-            <div className="flex justify-end gap-2 mt-4">
+          <div className="panel p-5 w-full max-w-[420px]" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-3">
+              <div
+                className="w-10 h-10 rounded-xl grid place-items-center flex-shrink-0"
+                style={{ background: "rgba(220,38,38,0.10)", color: "var(--c-danger)" }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-[15px] font-extrabold text-ink-900">일지 삭제</h3>
+                <p className="text-[12.5px] text-ink-600 mt-1 leading-relaxed">
+                  이 일지를 삭제할까요? 삭제 후에는 복구할 수 없어요.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
               <button
                 className="btn-ghost"
                 onClick={() => setConfirmRemoveId(null)}
@@ -268,7 +387,8 @@ export default function JournalPage() {
                 취소
               </button>
               <button
-                className="btn-primary bg-red-600 hover:bg-red-700"
+                className="btn-primary"
+                style={{ background: "var(--c-danger)" }}
                 onClick={() => remove(confirmRemoveId)}
                 disabled={!!removingId}
               >
@@ -280,4 +400,34 @@ export default function JournalPage() {
       )}
     </div>
   );
+}
+
+function EmptyDetail({ onCreate }: { onCreate: () => void }) {
+  return (
+    <div className="flex-1 grid place-items-center px-6 py-16">
+      <div className="text-center max-w-[360px]">
+        <div className="text-[40px] mb-3">📝</div>
+        <div className="text-[16px] font-extrabold text-ink-900">일지를 선택하거나 새로 작성하세요</div>
+        <div className="text-[12.5px] text-ink-500 mt-1.5 leading-relaxed">
+          하루를 기록해 두면 회고가 쉬워져요.
+          <br />
+          오늘 한 일·막힌 점·내일 할 일 셋만 남겨도 충분.
+        </div>
+        <button className="btn-primary mt-5" onClick={onCreate}>+ 새 일지 작성</button>
+      </div>
+    </div>
+  );
+}
+
+function dowOf(date: string) {
+  const d = new Date(date + "T00:00:00");
+  return ["일", "월", "화", "수", "목", "금", "토"][d.getDay()] ?? "";
+}
+function formatYearMonth(ym: string) {
+  const [y, m] = ym.split("-");
+  return `${y}년 ${parseInt(m, 10)}월`;
+}
+function formatDateLong(date: string) {
+  const d = new Date(date + "T00:00:00");
+  return d.toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" });
 }
