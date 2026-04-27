@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
 import { alertAsync } from "../components/ConfirmHost";
+import { isDevAccount, DevBadge } from "../lib/devBadge";
 
 type DirUser = {
   id: string;
@@ -265,9 +266,10 @@ function MemberRow({
     <div className="group flex items-center gap-3 px-4 py-2.5 hover:bg-ink-25">
       <UserAvatar u={u} size={36} />
       <div className="flex-1 min-w-0">
-        <div className="text-[13px] font-bold text-ink-900 truncate">
-          {u.name}
-          {u.id === meId && <span className="chip-gray ml-1.5">나</span>}
+        <div className="text-[13px] font-bold text-ink-900 truncate inline-flex items-center gap-1.5">
+          <span className="truncate min-w-0">{u.name}</span>
+          {isDevAccount(u) && <DevBadge />}
+          {u.id === meId && <span className="chip-gray">나</span>}
         </div>
         <div className="text-[11px] text-ink-500 truncate">{u.position ?? "—"}</div>
       </div>
@@ -462,6 +464,7 @@ function PersonNode({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1 min-w-0">
           <span className="text-[12px] font-bold text-ink-900 truncate">{u.name}</span>
+          {isDevAccount(u) && <DevBadge />}
           {isMe && <span className="chip-gray !text-[9px] flex-shrink-0">나</span>}
         </div>
         <div className="text-[10px] text-ink-500 truncate">

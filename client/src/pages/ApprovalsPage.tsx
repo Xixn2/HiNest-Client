@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
 import DateTimePicker from "../components/DateTimePicker";
 import { alertAsync } from "../components/ConfirmHost";
+import { isDevAccount, DevBadge } from "../lib/devBadge";
 
 type ApprovalType = "TRIP" | "OFFSITE" | "EXPENSE" | "PURCHASE" | "GENERAL" | "OTHER";
 type Step = {
@@ -598,8 +599,9 @@ function ApprovalDetail({
                     {c.author.avatarUrl ? <img src={c.author.avatarUrl} alt={c.author.name} className="w-full h-full object-cover" /> : c.author.name[0]}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-baseline gap-1.5">
+                    <div className="flex items-baseline gap-1.5 flex-wrap">
                       <div className="text-[12px] font-bold text-ink-900">{c.author.name}</div>
+                      {isDevAccount(c.author) && <DevBadge />}
                       <div className="text-[10px] text-ink-400 tabular">{new Date(c.createdAt).toLocaleString("ko-KR")}</div>
                     </div>
                     <div className="text-[13px] text-ink-800 whitespace-pre-wrap leading-[1.55] mt-0.5">{c.content}</div>

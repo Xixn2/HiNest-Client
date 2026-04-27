@@ -6,6 +6,7 @@ import { confirmAsync, alertAsync } from "../components/ConfirmHost";
 import PinButton from "../components/PinButton";
 import RevisionHistoryModal from "../components/RevisionHistoryModal";
 import { copyToClipboard, absoluteUrl } from "../lib/clipboard";
+import { isDevAccount, DevBadge } from "../lib/devBadge";
 // TipTap 에디터는 ~300KB 덩어리 — 회의록 상세 페이지 안에서 다시 한 번 나눠서
 // 제목/메타/공개범위 UI 가 먼저 보이고, 에디터는 뒤따라 로드되도록 함.
 const MeetingEditor = lazy(() => import("../components/MeetingEditor"));
@@ -295,6 +296,7 @@ export default function MeetingDetailPage() {
             )}
           </span>
           {meeting.author.name}
+          {isDevAccount(meeting.author) && <DevBadge />}
         </span>
         <span>·</span>
         <span>{new Date(meeting.createdAt).toLocaleString("ko-KR", { year: "numeric", month: "short", day: "numeric" })}</span>
@@ -455,6 +457,7 @@ function ViewerPicker({
                 )}
               </span>
               <span>{u.name}</span>
+              {isDevAccount(u) && <DevBadge />}
               <span className="text-[10px] text-slate-400">{u.team ?? ""}</span>
             </button>
           );
