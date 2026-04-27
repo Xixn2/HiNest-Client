@@ -38,7 +38,7 @@ type Message = {
   sender: { id: string; name: string; avatarColor: string; avatarUrl?: string | null };
 };
 
-type Tab = "logs" | "chat" | "api" | "console" | "server";
+type Tab = "logs" | "chat" | "api" | "console" | "server" | "nav";
 
 type ApiSpecRoute = {
   method: string;
@@ -71,6 +71,7 @@ function SuperAdminContent() {
     : raw === "api" ? "api"
     : raw === "console" ? "console"
     : raw === "server" ? "server"
+    : raw === "nav" ? "nav"
     : "logs";
   const setTab = (t: Tab) => {
     const next = new URLSearchParams(sp);
@@ -86,12 +87,14 @@ function SuperAdminContent() {
         <TabBtn active={tab === "api"} onClick={() => setTab("api")}>API 명세</TabBtn>
         <TabBtn active={tab === "console"} onClick={() => setTab("console")}>콘솔</TabBtn>
         <TabBtn active={tab === "server"} onClick={() => setTab("server")}>서버 로그</TabBtn>
+        <TabBtn active={tab === "nav"} onClick={() => setTab("nav")}>메뉴 관리</TabBtn>
       </div>
       {tab === "logs" && <LogsPanel />}
       {tab === "chat" && <ChatAuditPanel />}
       {tab === "api" && <ApiSpecPanel />}
       {tab === "console" && <ConsolePanel />}
       {tab === "server" && <ServerLogsPanel />}
+      {tab === "nav" && <NavVisibilityPanel />}
     </>
   );
 }
@@ -1141,6 +1144,157 @@ function ServerLogsPanel() {
       <div className="text-[11px] text-ink-500 mt-2">
         프로세스 재기동(배포 등) 시 버퍼 초기화. 디스크/CloudWatch 영속화 없음 — 최근 2,000줄만 메모리에 보관.
       </div>
+    </div>
+  );
+}
+
+/* =============== 메뉴 가시성 — 사이드바 항목 켜고 끄기 =============== */
+// AppLayout 의 NAV 그룹과 동일한 path/label 매핑.
+const NAV_GROUPS: { label: string; items: { to: string; label: string }[] }[] = [
+  {
+    label: "워크스페이스",
+    items: [
+      { to: "/", label: "개요" },
+      { to: "/schedule", label: "일정" },
+      { to: "/attendance", label: "근태·월차" },
+      { to: "/journal", label: "업무일지" },
+      { to: "/meetings", label: "회의록" },
+      { to: "/approvals", label: "전자결재" },
+    ],
+  },
+  {
+    label: "커뮤니케이션",
+    items: [
+      { to: "/notice", label: "공지사항" },
+      { to: "/directory", label: "팀원" },
+      { to: "/org", label: "조직도" },
+    ],
+  },
+  {
+    label: "자료·재무",
+    items: [
+      { to: "/documents", label: "문서함" },
+      { to: "/expense", label: "법인카드" },
+      { to: "/accounts", label: "계정 관리" },
+      { to: "/snippets", label: "스니펫" },
+    ],
+  },
+];
+
+type NavConfigRow = { path: string; enabled: boolean; updatedAt: string; updatedBy?: string | null };
+
+function NavVisibilityPanel() {
+  const [items, setItems] = useState<NavConfigRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  const [saving, setSaving] = useState<string | null>(null);
+  const aliveRef = useRef(true);
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => { aliveRef.current = false; };
+  }, []);
+
+  async function load() {
+    try {
+      const r = await api<{ items: NavConfigRow[] }>("/api/admin/nav-visibility");
+      if (!aliveRef.current) return;
+      setItems(r.items);
+      setLoading(false);
+    } catch (e: any) {
+      if (!aliveRef.current) return;
+      setErr(e?.message ?? "불러오기 실패");
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { void load(); }, []);
+
+  const disabledMap = useMemo(() => {
+    const m = new Set<string>();
+    for (const r of items) if (!r.enabled) m.add(r.path);
+    return m;
+  }, [items]);
+
+  async function toggle(path: string, nextEnabled: boolean) {
+    setSaving(path);
+    try {
+      await api("/api/admin/nav-visibility", {
+        method: "POST",
+        json: { path, enabled: nextEnabled },
+      });
+      // 낙관적 업데이트.
+      setItems((prev) => {
+        const exist = prev.find((r) => r.path === path);
+        if (exist) {
+          return prev.map((r) => (r.path === path ? { ...r, enabled: nextEnabled } : r));
+        }
+        return [...prev, { path, enabled: nextEnabled, updatedAt: new Date().toISOString() }];
+      });
+      // 같은 탭 / 다른 탭의 AppLayout 사이드바도 즉시 갱신.
+      window.dispatchEvent(new Event("hinest:navVisibilityChange"));
+    } catch (e: any) {
+      alert(e?.message ?? "저장 실패");
+    } finally {
+      if (aliveRef.current) setSaving(null);
+    }
+  }
+
+  if (loading) return <div className="panel p-8 text-center text-ink-500 text-[13px]">불러오는 중…</div>;
+  if (err) return <div className="panel p-6 text-red-600 text-[13px]">{err}</div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="text-[12px] text-ink-500">
+        끈 항목은 사이드바에서 즉시 사라져요 (전사 적용). 페이지 자체는 직접 URL 입력으로 들어갈 순 있고, 라우트는 살아있어요.
+      </div>
+      {NAV_GROUPS.map((g) => (
+        <div key={g.label} className="panel p-0 overflow-hidden">
+          <div className="px-4 py-2 bg-ink-25 border-b border-ink-150 text-[12.5px] font-bold text-ink-800">
+            {g.label}
+          </div>
+          <ul className="divide-y divide-ink-100">
+            {g.items.map((it) => {
+              const off = disabledMap.has(it.to);
+              const isSaving = saving === it.to;
+              return (
+                <li key={it.to} className="px-4 py-3 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13.5px] font-semibold text-ink-900">{it.label}</div>
+                    <code className="text-[11px] text-ink-500 font-mono">{it.to}</code>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => toggle(it.to, off)}
+                    disabled={isSaving}
+                    aria-label={off ? "켜기" : "끄기"}
+                    style={{
+                      width: 46, height: 26, borderRadius: 999,
+                      background: off ? "var(--c-border-strong)" : "var(--c-brand)",
+                      position: "relative",
+                      transition: "background .18s ease",
+                      flexShrink: 0,
+                      border: 0, cursor: "pointer",
+                      opacity: isSaving ? 0.6 : 1,
+                    }}
+                  >
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 2, left: off ? 2 : 22,
+                        width: 22, height: 22, borderRadius: "50%",
+                        background: "#fff",
+                        boxShadow: "0 1px 3px rgba(0,0,0,.15)",
+                        transition: "left .18s ease",
+                      }}
+                    />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
     </div>
   );
 }

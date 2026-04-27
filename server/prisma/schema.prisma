@@ -873,3 +873,12 @@ model Snippet {
   @@index([scope, updatedAt])
   @@index([trigger])
 }
+
+/// 사이드바 메뉴 항목 표시 여부 (전사 단위) — 총관리자 토글로 즉시 숨김/노출.
+/// path 가 키. 행이 없으면 기본 enabled=true 로 간주(누락된 항목까지 굳이 row 안 남김).
+model NavConfig {
+  path      String   @id // 예: "/snippets", "/expense"
+  enabled   Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
