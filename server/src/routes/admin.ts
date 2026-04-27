@@ -644,6 +644,325 @@ router.get("/api-spec", requireSuperAdminStepUp, async (req, res) => {
   res.json({ routes: sorted, total: sorted.length });
 });
 
+/* ===== 총관리자 콘솔 — 명령어 기반 빠른 제어 (UI 안 만들고도 즉시 가능한 액션) =====
+ * 단일 엔드포인트에서 명령어 문자열을 토큰화 → 화이트리스트 dispatch.
+ * 모든 명령은 AuditLog 에 기록(action: \"SUPER_CONSOLE\", detail: 명령어 + 인자).
+ *
+ * 보안:
+ *  - requireSuperAdminStepUp 게이트(이 endpoint 만으로 권한 상승 가능하므로 step-up 필수)
+ *  - body.cmd 200자 상한
+ *  - dispatch 화이트리스트만 실행, prisma 직접 노출 없음
+ */
+const consoleSchema = z.object({ cmd: z.string().min(1).max(200) });
+
+router.post("/console", requireSuperAdminStepUp, async (req, res) => {
+  const u = (req as any).user;
+  const parsed = consoleSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid input" });
+  const raw = parsed.data.cmd.trim();
+  // 간이 토크나이저 — quoted 인자는 미지원, 공백 분리. 사번/이메일/cuid 류는 공백 없음 가정.
+  const tokens = raw.split(/\s+/);
+  const head = (tokens[0] || "").toLowerCase();
+  const sub = (tokens[1] || "").toLowerCase();
+  const arg1 = tokens[2] || "";
+  const arg2 = tokens[3] || "";
+
+  function out(lines: string[] | string): { ok: true; output: string } {
+    return { ok: true, output: Array.isArray(lines) ? lines.join("\n") : lines };
+  }
+  function err(msg: string) {
+    return { ok: false as const, output: msg };
+  }
+  // 사용자 식별자 — id(cuid) / email / employeeNo 자동 매치.
+  async function findUser(key: string) {
+    if (!key) return null;
+    if (/@/.test(key)) return prisma.user.findUnique({ where: { email: key } });
+    const byId = await prisma.user.findUnique({ where: { id: key } }).catch(() => null);
+    if (byId) return byId;
+    return prisma.user.findFirst({ where: { OR: [{ employeeNo: key }, { hrCode: key }] } });
+  }
+
+  let result: { ok: boolean; output: string };
+
+  try {
+    if (head === "help" || head === "?") {
+      result = out([
+        "사용 가능한 명령:",
+        "",
+        "  [세션]",
+        "  help / ?                            이 목록",
+        "  whoami                              현재 세션 정보",
+        "  clear / cls                          (클라 측) 콘솔 비우기",
+        "",
+        "  [유저 조회]",
+        "  users list [limit]                  최근 가입 N명 (기본 20, 최대 200)",
+        "  users find <query>                  이름/이메일/사번 부분 매치",
+        "  user info <id|email|사번>            유저 상세",
+        "",
+        "  [유저 권한·계정]",
+        "  user role <id> <MEMBER|MANAGER|ADMIN>   role 직접 지정",
+        "  user grant admin|super <id>          ADMIN 또는 superAdmin true",
+        "  user revoke admin|super <id>         ADMIN→MEMBER / superAdmin false",
+        "  user lock <id>                       active=false (로그인 차단)",
+        "  user unlock <id>                     active=true",
+        "  user resign <id> [YYYY-MM-DD]        퇴사 처리 (resignedAt + active=false)",
+        "  user reset-pw <id>                    임시 비밀번호 생성·반환",
+        "  user team <id> <team>                팀 변경 ('-' 입력 시 비움)",
+        "  user position <id> <position>         직급 변경 ('-' 입력 시 비움)",
+        "",
+        "  [방·메시지]",
+        "  rooms list [limit]                  최근 방 N개",
+        "  room info <roomId>                  방 상세 + 멤버",
+        "",
+        "  [공지·시스템]",
+        "  notice broadcast <text>             고정 공지 즉시 발행",
+        "  system stats                        전체 카운트 한눈에",
+        "  audit recent [limit]                감사 로그 최근 N건 (기본 20)",
+        "  cache evict user <id>               유저 메모리 캐시 무효화",
+      ]);
+    } else if (head === "whoami") {
+      result = out([
+        `id        : ${u.id}`,
+        `name      : ${u.name}`,
+        `email     : ${u.email}`,
+        `role      : ${u.role}`,
+        `superAdmin: ${u.superAdmin ? "true" : "false"}`,
+      ]);
+    } else if (head === "users" && sub === "list") {
+      const limit = Math.min(200, Math.max(1, parseInt(arg1 || "20", 10) || 20));
+      const list = await prisma.user.findMany({
+        orderBy: { createdAt: "desc" },
+        take: limit,
+        select: { id: true, name: true, email: true, role: true, superAdmin: true, active: true, createdAt: true },
+      });
+      const rows = list.map(
+        (x) =>
+          `${x.id}  ${x.role.padEnd(7)} ${x.superAdmin ? "S" : " "} ${x.active ? "A" : "X"}  ${x.email.padEnd(28)} ${x.name}`,
+      );
+      result = out([`최근 ${list.length}명 (역할 / S=super / A=active):`, ...rows]);
+    } else if (head === "users" && sub === "find") {
+      const q = arg1;
+      if (!q) { result = err("쿼리가 비었어요. 예: users find 김"); }
+      else {
+        const list = await prisma.user.findMany({
+          where: {
+            OR: [
+              { name: { contains: q, mode: "insensitive" } },
+              { email: { contains: q, mode: "insensitive" } },
+              { employeeNo: { contains: q, mode: "insensitive" } },
+              { hrCode: { contains: q, mode: "insensitive" } },
+            ],
+          },
+          take: 50,
+          select: { id: true, name: true, email: true, role: true, superAdmin: true, active: true, employeeNo: true },
+        });
+        if (list.length === 0) { result = out("매치 0건"); }
+        else {
+          const rows = list.map(
+            (x) =>
+              `${x.id}  ${x.role.padEnd(7)} ${x.superAdmin ? "S" : " "} ${x.active ? "A" : "X"}  ${(x.employeeNo ?? "-").padEnd(12)} ${x.email.padEnd(28)} ${x.name}`,
+          );
+          result = out([`매치 ${list.length}건:`, ...rows]);
+        }
+      }
+    } else if (head === "user" && sub === "info") {
+      const target = await findUser(arg1);
+      if (!target) { result = err(`유저를 찾을 수 없음: ${arg1}`); }
+      else {
+        result = out([
+          `id        : ${target.id}`,
+          `name      : ${target.name}`,
+          `email     : ${target.email}`,
+          `employeeNo: ${target.employeeNo ?? "-"}`,
+          `role      : ${target.role}`,
+          `superAdmin: ${target.superAdmin ? "true" : "false"}`,
+          `active    : ${target.active ? "true" : "false"}`,
+          `team      : ${target.team ?? "-"}`,
+          `position  : ${target.position ?? "-"}`,
+          `createdAt : ${target.createdAt.toISOString()}`,
+        ]);
+      }
+    } else if (head === "user" && (sub === "grant" || sub === "revoke")) {
+      const what = arg1.toLowerCase();
+      const target = await findUser(arg2);
+      if (!target) { result = err(`유저를 찾을 수 없음: ${arg2}`); }
+      else if (target.id === u.id && (what === "super" || what === "admin")) {
+        // 자기 자신의 권한을 콘솔로 토글하는 사고 방지.
+        result = err("본인의 권한은 콘솔에서 변경할 수 없어요.");
+      } else if (what === "admin") {
+        const nextRole = sub === "grant" ? "ADMIN" : "MEMBER";
+        await prisma.user.update({ where: { id: target.id }, data: { role: nextRole } });
+        await evictUserCache(target.id);
+        result = out(`OK · ${target.email} role: ${target.role} → ${nextRole}`);
+      } else if (what === "super") {
+        const next = sub === "grant";
+        await prisma.user.update({ where: { id: target.id }, data: { superAdmin: next } });
+        await evictUserCache(target.id);
+        result = out(`OK · ${target.email} superAdmin: ${target.superAdmin} → ${next}`);
+      } else {
+        result = err(`알 수 없는 권한: ${arg1}. admin 또는 super 만 지원.`);
+      }
+    } else if (head === "user" && (sub === "lock" || sub === "unlock")) {
+      const target = await findUser(arg1);
+      if (!target) { result = err(`유저를 찾을 수 없음: ${arg1}`); }
+      else if (target.id === u.id) {
+        result = err("본인 계정은 콘솔에서 잠글 수 없어요.");
+      } else {
+        const nextActive = sub === "unlock";
+        await prisma.user.update({
+          where: { id: target.id },
+          data: { active: nextActive, ...(nextActive ? {} : { resignedAt: target.resignedAt ?? new Date() }) },
+        });
+        await evictUserCache(target.id);
+        result = out(`OK · ${target.email} active: ${target.active} → ${nextActive}`);
+      }
+    } else if (head === "user" && sub === "role") {
+      const target = await findUser(arg1);
+      if (!target) { result = err(`유저를 찾을 수 없음: ${arg1}`); }
+      else if (target.id === u.id) {
+        result = err("본인 role 은 콘솔에서 변경할 수 없어요.");
+      } else {
+        const next = arg2.toUpperCase();
+        if (!["MEMBER", "MANAGER", "ADMIN"].includes(next)) {
+          result = err(`role 은 MEMBER / MANAGER / ADMIN 중 하나. 받은 값: ${arg2}`);
+        } else {
+          await prisma.user.update({ where: { id: target.id }, data: { role: next } });
+          await evictUserCache(target.id);
+          result = out(`OK · ${target.email} role: ${target.role} → ${next}`);
+        }
+      }
+    } else if (head === "user" && sub === "resign") {
+      const target = await findUser(arg1);
+      if (!target) { result = err(`유저를 찾을 수 없음: ${arg1}`); }
+      else if (target.id === u.id) {
+        result = err("본인 계정은 콘솔에서 퇴사 처리할 수 없어요.");
+      } else {
+        const dateStr = arg2 || "";
+        const resignedAt = /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? new Date(dateStr) : new Date();
+        await prisma.user.update({
+          where: { id: target.id },
+          data: { resignedAt, active: false },
+        });
+        await evictUserCache(target.id);
+        result = out(`OK · ${target.email} resigned at ${resignedAt.toISOString().slice(0, 10)} (active=false)`);
+      }
+    } else if (head === "user" && sub === "reset-pw") {
+      const target = await findUser(arg1);
+      if (!target) { result = err(`유저를 찾을 수 없음: ${arg1}`); }
+      else {
+        const tmp = crypto.randomBytes(8).toString("base64url"); // ~11자, 영숫자+- _
+        const hash = await bcrypt.hash(tmp, 12);
+        await prisma.user.update({ where: { id: target.id }, data: { passwordHash: hash } });
+        await evictUserCache(target.id);
+        result = out([
+          `OK · ${target.email} 임시 비밀번호 발급:`,
+          `  ${tmp}`,
+          "사용자에게 안전한 채널로 전달하고, 첫 로그인 후 즉시 변경하도록 안내해 주세요.",
+        ]);
+      }
+    } else if (head === "user" && (sub === "team" || sub === "position")) {
+      const target = await findUser(arg1);
+      if (!target) { result = err(`유저를 찾을 수 없음: ${arg1}`); }
+      else {
+        const value = arg2 === "-" ? null : tokens.slice(3).join(" ").trim() || null;
+        await prisma.user.update({
+          where: { id: target.id },
+          data: sub === "team" ? { team: value } : { position: value },
+        });
+        await evictUserCache(target.id);
+        result = out(`OK · ${target.email} ${sub} → ${value ?? "(빈 값)"}`);
+      }
+    } else if (head === "rooms" && sub === "list") {
+      const limit = Math.min(200, Math.max(1, parseInt(arg1 || "20", 10) || 20));
+      const list = await prisma.chatRoom.findMany({
+        orderBy: { createdAt: "desc" },
+        take: limit,
+        select: { id: true, name: true, type: true, createdAt: true, _count: { select: { members: true, messages: true } } },
+      });
+      const rows = list.map(
+        (r) =>
+          `${r.id}  ${r.type.padEnd(7)} m=${String(r._count.members).padStart(3)} msg=${String(r._count.messages).padStart(5)}  ${r.createdAt.toISOString().slice(0, 10)}  ${r.name ?? "(이름없음)"}`,
+      );
+      result = out([`최근 ${list.length}개 방:`, ...rows]);
+    } else if (head === "room" && sub === "info") {
+      const room = await prisma.chatRoom.findUnique({
+        where: { id: arg1 },
+        include: {
+          members: { include: { user: { select: { id: true, name: true, email: true } } } },
+          _count: { select: { messages: true } },
+        },
+      });
+      if (!room) { result = err(`방을 찾을 수 없음: ${arg1}`); }
+      else {
+        result = out([
+          `id        : ${room.id}`,
+          `name      : ${room.name ?? "(이름없음)"}`,
+          `type      : ${room.type}`,
+          `createdAt : ${room.createdAt.toISOString()}`,
+          `messages  : ${room._count.messages}`,
+          `members   : ${room.members.length}`,
+          ...room.members.map((m) => `  · ${m.user.email.padEnd(28)} ${m.user.name}`),
+        ]);
+      }
+    } else if (head === "notice" && sub === "broadcast") {
+      const body = tokens.slice(2).join(" ").trim();
+      if (!body) { result = err("본문이 비었어요. 예: notice broadcast 내일 점검 있어요"); }
+      else {
+        const notice = await prisma.notice.create({
+          data: { title: "[총관리자]", content: body, pinned: true, authorId: u.id },
+        });
+        result = out(`OK · 공지 발행 (id=${notice.id}, pinned=true)`);
+      }
+    } else if (head === "system" && sub === "stats") {
+      const [users, activeUsers, rooms, messages, notices, projects, documents] = await Promise.all([
+        prisma.user.count(),
+        prisma.user.count({ where: { active: true } }),
+        prisma.chatRoom.count(),
+        prisma.chatMessage.count(),
+        prisma.notice.count(),
+        prisma.project.count(),
+        prisma.document.count(),
+      ]);
+      result = out([
+        "시스템 카운트:",
+        `  users      : ${users} (active ${activeUsers})`,
+        `  rooms      : ${rooms}`,
+        `  messages   : ${messages}`,
+        `  notices    : ${notices}`,
+        `  projects   : ${projects}`,
+        `  documents  : ${documents}`,
+      ]);
+    } else if (head === "audit" && sub === "recent") {
+      const limit = Math.min(100, Math.max(1, parseInt(arg1 || "20", 10) || 20));
+      const logs = await prisma.auditLog.findMany({
+        orderBy: { createdAt: "desc" },
+        take: limit,
+        include: { user: { select: { name: true, email: true } } },
+      });
+      const rows = logs.map(
+        (l) =>
+          `${l.createdAt.toISOString()}  ${l.action.padEnd(22)} ${(l.user?.email ?? "(system)").padEnd(28)} ${l.detail ?? ""}`,
+      );
+      result = out([`최근 ${logs.length}건:`, ...rows]);
+    } else if (head === "cache" && sub === "evict" && arg1 === "user") {
+      const target = await findUser(arg2);
+      if (!target) { result = err(`유저를 찾을 수 없음: ${arg2}`); }
+      else {
+        await evictUserCache(target.id);
+        result = out(`OK · cache evicted: ${target.email}`);
+      }
+    } else {
+      result = err(`알 수 없는 명령: "${raw}". help 로 사용법 확인.`);
+    }
+  } catch (e: any) {
+    result = err(`실행 오류: ${e?.message ?? "unknown"}`);
+  }
+
+  // 모든 명령(성공/실패 무관) 감사 로그.
+  await writeLog(u.id, "SUPER_CONSOLE", undefined, raw, req.ip).catch(() => {});
+  res.json(result);
+});
+
 router.get("/logs", requireSuperAdminStepUp, async (req, res) => {
   const limit = Math.min(Number(req.query.limit ?? 200), 500);
   const logs = await prisma.auditLog.findMany({
