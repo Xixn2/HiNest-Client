@@ -564,6 +564,11 @@ router.get("/api-spec", requireSuperAdminStepUp, async (req, res) => {
     path: string;
     auth: "PUBLIC" | "AUTH" | "ADMIN" | "SUPER";
     middlewares: string[];
+    pathParams: string[];
+    /** 메소드별 표준 헤더 — Content-Type / 인증 쿠키. */
+    headers: { name: string; value: string; required: boolean }[];
+    /** body 가 있는 메소드 여부. 실제 스키마는 라우트마다 다르므로 \"있음/없음\" 만 명시. */
+    hasBody: boolean;
   };
 
   const AUTH_NAMES = new Set(["requireAuth"]);
@@ -608,11 +613,27 @@ router.get("/api-spec", requireSuperAdminStepUp, async (req, res) => {
         const auth = authOf(allMw);
         for (const m of methods) {
           if (m === "_all") continue;
+          const method = m.toUpperCase();
+          const pathParams = (fullPath.match(/:[A-Za-z_][A-Za-z0-9_]*/g) ?? []).map((s) => s.slice(1));
+          const hasBody = ["POST", "PUT", "PATCH"].includes(method);
+          const headers: SpecRoute["headers"] = [];
+          if (hasBody) {
+            headers.push({ name: "Content-Type", value: "application/json", required: true });
+          }
+          if (auth !== "PUBLIC") {
+            headers.push({ name: "Cookie", value: "hinest_auth=<JWT>", required: true });
+          }
+          if (auth === "SUPER") {
+            headers.push({ name: "Cookie", value: "hinest_super=<JWT>", required: true });
+          }
           routes.push({
-            method: m.toUpperCase(),
+            method,
             path: fullPath,
             auth,
             middlewares: allMw.filter((n) => n !== "<anonymous>"),
+            pathParams,
+            headers,
+            hasBody,
           });
         }
       } else if (layer.name === "router" && layer.handle?.stack) {
@@ -642,7 +663,14 @@ router.get("/api-spec", requireSuperAdminStepUp, async (req, res) => {
   const sorted = [...dedup.values()].sort((a, b) =>
     a.path === b.path ? a.method.localeCompare(b.method) : a.path.localeCompare(b.path),
   );
-  res.json({ routes: sorted, total: sorted.length });
+  // 클라이언트가 컬한테 \"이 서버 어디서 응답하는지\" 보여주기 위해 동적으로 base URL 계산.
+  // origin/x-forwarded-host 가 있으면 그것을 우선(프록시 뒤에서도 정확).
+  const xfHost = (req.headers["x-forwarded-host"] || "").toString();
+  const xfProto = (req.headers["x-forwarded-proto"] || "").toString();
+  const host = xfHost || req.get("host") || "";
+  const proto = xfProto || (req.secure ? "https" : "http");
+  const baseUrl = host ? `${proto}://${host}` : "";
+  res.json({ baseUrl, routes: sorted, total: sorted.length });
 });
 
 /* ===== 총관리자 콘솔 — 명령어 기반 빠른 제어 (UI 안 만들고도 즉시 가능한 액션) =====

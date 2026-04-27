@@ -45,6 +45,9 @@ type ApiSpecRoute = {
   path: string;
   auth: "PUBLIC" | "AUTH" | "ADMIN" | "SUPER";
   middlewares: string[];
+  pathParams: string[];
+  headers: { name: string; value: string; required: boolean }[];
+  hasBody: boolean;
 };
 
 export default function SuperAdminPage() {
@@ -62,40 +65,132 @@ export default function SuperAdminPage() {
   );
 }
 
+/** 사내톡 감사 탭은 평소엔 UI 에서 가려두고, 콘솔의 \`chat log\` 명령 + 비밀번호로만 노출.
+ *  서버 측 ChatAuditPanel API 들은 요청 자체에 super-stepup 게이트가 또 걸려있어 이중 가드.
+ *  비밀번호 일치 시 30분 unlock — sessionStorage 사용으로 탭 닫으면 자동 잠금. */
+const CHAT_LOG_KEY = "hinest.chatAudit.unlock";
+const CHAT_LOG_PW = "2846070802";
+const CHAT_LOG_TTL_MS = 30 * 60 * 1000;
+
+function isChatAuditUnlocked(): boolean {
+  try {
+    const v = sessionStorage.getItem(CHAT_LOG_KEY);
+    if (!v) return false;
+    return Date.now() < Number(v);
+  } catch {
+    return false;
+  }
+}
+
 function SuperAdminContent() {
   // 새로고침 유지 — URL 쿼리로 탭 동기화.
   const [sp, setSp] = useSearchParams();
   const raw = sp.get("tab");
+  const [chatUnlocked, setChatUnlocked] = useState<boolean>(() => isChatAuditUnlocked());
+  const [chatPwOpen, setChatPwOpen] = useState(false);
+
+  // 콘솔에서 \`chat log\` 명령 시 발사되는 이벤트 — 암호 모달 노출.
+  useEffect(() => {
+    function onPrompt() { setChatPwOpen(true); }
+    window.addEventListener("hinest:chatAuditPrompt", onPrompt);
+    return () => window.removeEventListener("hinest:chatAuditPrompt", onPrompt);
+  }, []);
+
   const tab: Tab =
-    raw === "chat" ? "chat"
+    raw === "chat" && chatUnlocked ? "chat"
     : raw === "api" ? "api"
     : raw === "console" ? "console"
     : raw === "server" ? "server"
     : raw === "nav" ? "nav"
     : "logs";
+
   const setTab = (t: Tab) => {
     const next = new URLSearchParams(sp);
     if (t === "logs") next.delete("tab");
     else next.set("tab", t);
     setSp(next, { replace: true });
   };
+
+  function unlockChat(pw: string): boolean {
+    if (pw !== CHAT_LOG_PW) return false;
+    try {
+      sessionStorage.setItem(CHAT_LOG_KEY, String(Date.now() + CHAT_LOG_TTL_MS));
+    } catch {}
+    setChatUnlocked(true);
+    setChatPwOpen(false);
+    setTab("chat");
+    return true;
+  }
+
   return (
     <>
       <div className="flex items-center gap-1 mb-4 border-b border-ink-150">
         <TabBtn active={tab === "logs"} onClick={() => setTab("logs")}>활동 로그</TabBtn>
-        <TabBtn active={tab === "chat"} onClick={() => setTab("chat")}>사내톡 감사</TabBtn>
+        {chatUnlocked && (
+          <TabBtn active={tab === "chat"} onClick={() => setTab("chat")}>사내톡 감사</TabBtn>
+        )}
         <TabBtn active={tab === "api"} onClick={() => setTab("api")}>API 명세</TabBtn>
         <TabBtn active={tab === "console"} onClick={() => setTab("console")}>콘솔</TabBtn>
         <TabBtn active={tab === "server"} onClick={() => setTab("server")}>서버 로그</TabBtn>
         <TabBtn active={tab === "nav"} onClick={() => setTab("nav")}>메뉴 관리</TabBtn>
       </div>
       {tab === "logs" && <LogsPanel />}
-      {tab === "chat" && <ChatAuditPanel />}
+      {tab === "chat" && chatUnlocked && <ChatAuditPanel />}
       {tab === "api" && <ApiSpecPanel />}
       {tab === "console" && <ConsolePanel />}
       {tab === "server" && <ServerLogsPanel />}
       {tab === "nav" && <NavVisibilityPanel />}
+      {chatPwOpen && (
+        <ChatAuditPwModal
+          onClose={() => setChatPwOpen(false)}
+          onSubmit={unlockChat}
+        />
+      )}
     </>
+  );
+}
+
+function ChatAuditPwModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (pw: string) => boolean }) {
+  const [pw, setPw] = useState("");
+  const [err, setErr] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { inputRef.current?.focus(); }, []);
+  function submit() {
+    const ok = onSubmit(pw);
+    if (!ok) {
+      setErr("암호가 일치하지 않아요.");
+      setPw("");
+      inputRef.current?.focus();
+    }
+  }
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center p-4"
+      style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}
+      onClick={onClose}
+    >
+      <div className="panel p-5 w-full max-w-[400px]" onClick={(e) => e.stopPropagation()}>
+        <div className="text-[15px] font-bold text-ink-900 mb-1">사내톡 감사 접근</div>
+        <div className="text-[12px] text-ink-500 mb-4 leading-relaxed">
+          이 영역은 평소엔 가려져 있어요. 접근 암호를 입력하면 30분 동안 활성화됩니다.
+        </div>
+        <input
+          ref={inputRef}
+          className="input"
+          type="password"
+          value={pw}
+          onChange={(e) => setPw(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+          placeholder="암호"
+          autoComplete="off"
+        />
+        {err && <div className="text-[12px] font-semibold text-red-600 mt-2">{err}</div>}
+        <div className="flex justify-end gap-2 mt-4">
+          <button className="btn-ghost" onClick={onClose}>취소</button>
+          <button className="btn-primary" onClick={submit}>확인</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -441,11 +536,13 @@ function humanSize(n: number) {
 /* =============== API 명세 =============== */
 function ApiSpecPanel() {
   const [routes, setRoutes] = useState<ApiSpecRoute[]>([]);
+  const [baseUrl, setBaseUrl] = useState("");
   const [q, setQ] = useState("");
   const [authFilter, setAuthFilter] = useState<"" | ApiSpecRoute["auth"]>("");
   const [methodFilter, setMethodFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [openKey, setOpenKey] = useState<string | null>(null);
   const aliveRef = useRef(true);
 
   useEffect(() => {
@@ -454,17 +551,16 @@ function ApiSpecPanel() {
   }, []);
 
   useEffect(() => {
-    api<{ routes: ApiSpecRoute[]; total: number }>("/api/admin/api-spec")
+    api<{ baseUrl: string; routes: ApiSpecRoute[]; total: number }>("/api/admin/api-spec")
       .then((r) => {
         if (!aliveRef.current) return;
         setRoutes(r.routes);
+        setBaseUrl(r.baseUrl ?? "");
       })
       .catch((e) => { if (aliveRef.current) setErr(e?.message ?? "불러오기 실패"); })
       .finally(() => { if (aliveRef.current) setLoading(false); });
   }, []);
 
-  // path 의 첫 segment 로 그룹핑(예: /api/snippet → \"api/snippet\").
-  // 두 번째 segment까지 묶으면 그룹이 너무 잘게 쪼개져서 /api/<리소스> 단위로 통일.
   const grouped = useMemo(() => {
     const filtered = routes.filter((r) => {
       if (authFilter && r.auth !== authFilter) return false;
@@ -492,6 +588,21 @@ function ApiSpecPanel() {
 
   return (
     <div>
+      {/* Base URL — 모든 호출 앞에 붙는 절대 호스트. 프록시 환경 X-Forwarded-Host 도 반영. */}
+      {baseUrl && (
+        <div className="panel p-3 mb-3 flex items-center gap-3 flex-wrap">
+          <span className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-ink-500">Base URL</span>
+          <code className="text-[13px] font-mono text-ink-900 flex-1 min-w-0 break-all">{baseUrl}</code>
+          <button
+            type="button"
+            className="btn-ghost btn-xs"
+            onClick={() => navigator.clipboard?.writeText(baseUrl).catch(() => {})}
+          >
+            복사
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <input
           className="input flex-1 min-w-[220px]"
@@ -526,13 +637,38 @@ function ApiSpecPanel() {
                 <div className="text-[11px] text-ink-500">{list.length}개</div>
               </div>
               <ul className="divide-y divide-ink-100">
-                {list.map((r) => (
-                  <li key={`${r.method} ${r.path}`} className="px-3 py-2 flex items-center gap-3">
-                    <MethodChip method={r.method} />
-                    <code className="flex-1 min-w-0 text-[12.5px] font-mono text-ink-900 truncate">{r.path}</code>
-                    <AuthChip auth={r.auth} />
-                  </li>
-                ))}
+                {list.map((r) => {
+                  const k = `${r.method} ${r.path}`;
+                  const open = openKey === k;
+                  return (
+                    <li key={k}>
+                      <button
+                        type="button"
+                        onClick={() => setOpenKey(open ? null : k)}
+                        className="w-full px-3 py-2 flex items-center gap-3 text-left hover:bg-ink-25"
+                      >
+                        <MethodChip method={r.method} />
+                        <code className="flex-1 min-w-0 text-[12.5px] font-mono text-ink-900 truncate">{r.path}</code>
+                        <AuthChip auth={r.auth} />
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          style={{ color: "var(--c-text-3)", transform: open ? "rotate(180deg)" : "none", transition: "transform .15s ease" }}
+                          aria-hidden
+                        >
+                          <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                      </button>
+                      {open && <ApiSpecRouteDetail r={r} baseUrl={baseUrl} />}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ))}
@@ -540,6 +676,115 @@ function ApiSpecPanel() {
       )}
     </div>
   );
+}
+
+function ApiSpecRouteDetail({ r, baseUrl }: { r: ApiSpecRoute; baseUrl: string }) {
+  // 경로 파라미터 자리에 placeholder 가 들어간 예시 URL.
+  const samplePath = r.pathParams.reduce(
+    (acc, p) => acc.replace(`:${p}`, `<${p}>`),
+    r.path,
+  );
+  const fullUrl = baseUrl + samplePath;
+  const curl = buildCurl(r, fullUrl);
+
+  return (
+    <div className="px-4 py-3 bg-ink-25 border-t border-ink-100 space-y-3">
+      {/* URL */}
+      <Field label="Full URL">
+        <code className="text-[12.5px] font-mono text-ink-900 break-all">{fullUrl}</code>
+      </Field>
+
+      {/* Path params */}
+      {r.pathParams.length > 0 && (
+        <Field label="Path Params">
+          <ul className="text-[12.5px] font-mono text-ink-900 space-y-1">
+            {r.pathParams.map((p) => (
+              <li key={p} className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[11.5px] font-bold">
+                  :{p}
+                </span>
+                <span className="text-ink-500 text-[11.5px]">— 라우트 핸들러 코드 참고 (cuid / 숫자 / 문자 등)</span>
+              </li>
+            ))}
+          </ul>
+        </Field>
+      )}
+
+      {/* Headers */}
+      <Field label="Required Headers">
+        {r.headers.length === 0 ? (
+          <div className="text-[12px] text-ink-500">없음 (인증 불필요, body 없음)</div>
+        ) : (
+          <ul className="text-[12px] space-y-1">
+            {r.headers.map((h, i) => (
+              <li key={i} className="flex items-center gap-2 font-mono">
+                <span className="text-ink-700 font-bold">{h.name}:</span>
+                <span className="text-ink-600">{h.value}</span>
+                {h.required && <span className="text-[10px] text-amber-700 font-bold ml-1">required</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Field>
+
+      {/* Body */}
+      <Field label="Body">
+        {r.hasBody ? (
+          <div className="text-[12px] text-ink-600">
+            JSON. 정확한 스키마는 라우트 핸들러의 <code className="font-mono text-ink-800">zod</code> 검증 참고.
+            <br />
+            전형적 예: <code className="font-mono text-ink-800">{`{ "field": "value" }`}</code>
+          </div>
+        ) : (
+          <div className="text-[12px] text-ink-500">없음</div>
+        )}
+      </Field>
+
+      {/* Middlewares */}
+      {r.middlewares.length > 0 && (
+        <Field label="Middleware Chain">
+          <div className="text-[11.5px] font-mono text-ink-700">
+            {r.middlewares.join(" → ")}
+          </div>
+        </Field>
+      )}
+
+      {/* cURL */}
+      <Field label="cURL 예시">
+        <pre className="text-[11.5px] font-mono text-ink-900 bg-white border border-ink-150 rounded-md p-2.5 overflow-x-auto whitespace-pre">
+{curl}
+        </pre>
+        <button
+          type="button"
+          className="btn-ghost btn-xs mt-1"
+          onClick={() => navigator.clipboard?.writeText(curl).catch(() => {})}
+        >
+          복사
+        </button>
+      </Field>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-ink-500 mb-1">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function buildCurl(r: ApiSpecRoute, fullUrl: string): string {
+  const lines: string[] = [];
+  lines.push(`curl -X ${r.method} '${fullUrl}'`);
+  for (const h of r.headers) {
+    lines.push(`  -H '${h.name}: ${h.value}'`);
+  }
+  if (r.hasBody) {
+    lines.push(`  -d '{"key":"value"}'`);
+  }
+  return lines.join(" \\\n");
 }
 
 function MethodChip({ method }: { method: string }) {
@@ -770,6 +1015,16 @@ function ConsolePanel() {
     setHistory((h) => [...h, { kind: "input", text: cmd, ts: Date.now() }]);
     if (cmd === "clear" || cmd === "cls") {
       setHistory([]);
+      return;
+    }
+    // 비공개 명령 — 콘솔에서만 알 수 있는 escape hatch. 부모 컴포넌트가 이 이벤트를
+    // 받아 암호 모달을 띄움. 서버로 안 보냄.
+    if (/^chat\s+log\s*$/i.test(cmd)) {
+      window.dispatchEvent(new Event("hinest:chatAuditPrompt"));
+      setHistory((h) => [
+        ...h,
+        { kind: "output", ok: true, text: "사내톡 감사 접근 — 암호 입력창을 띄웠어요.", ts: Date.now() },
+      ]);
       return;
     }
     setBusy(true);
