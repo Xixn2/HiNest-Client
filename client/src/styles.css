@@ -323,6 +323,73 @@ html.dark .chip-orange{ background: rgba(251,146,60,.18); color: #FDBA74; }
 html.dark .chip-violet{ background: rgba(167,139,250,.2); color: #C4B5FD; }
 
 /* ============================================================ */
+/*                       SYNTAX HIGHLIGHT                         */
+/* highlight.js 클래스에 라이트/다크 둘 다 자연스러운 색을 입힘.
+   atom-one 계열의 요약본. 사내 도구라 한 가지 톤만 유지.            */
+/* ============================================================ */
+.hljs              { color: #383a42; background: transparent; }
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-built_in,
+.hljs-name,
+.hljs-tag          { color: #a626a4; }
+.hljs-string,
+.hljs-title,
+.hljs-section,
+.hljs-attribute,
+.hljs-literal,
+.hljs-template-tag,
+.hljs-template-variable,
+.hljs-type,
+.hljs-addition     { color: #50a14f; }
+.hljs-comment,
+.hljs-quote,
+.hljs-deletion,
+.hljs-meta         { color: #a0a1a7; font-style: italic; }
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link         { color: #986801; }
+.hljs-function .hljs-title,
+.hljs-class .hljs-title,
+.hljs-title.function_,
+.hljs-title.class_  { color: #4078f2; }
+.hljs-variable,
+.hljs-params,
+.hljs-attr         { color: #e45649; }
+
+html.dark .hljs              { color: #abb2bf; }
+html.dark .hljs-keyword,
+html.dark .hljs-selector-tag,
+html.dark .hljs-built_in,
+html.dark .hljs-name,
+html.dark .hljs-tag          { color: #c678dd; }
+html.dark .hljs-string,
+html.dark .hljs-title,
+html.dark .hljs-section,
+html.dark .hljs-attribute,
+html.dark .hljs-literal,
+html.dark .hljs-template-tag,
+html.dark .hljs-template-variable,
+html.dark .hljs-type,
+html.dark .hljs-addition     { color: #98c379; }
+html.dark .hljs-comment,
+html.dark .hljs-quote,
+html.dark .hljs-deletion,
+html.dark .hljs-meta         { color: #7f848e; font-style: italic; }
+html.dark .hljs-number,
+html.dark .hljs-symbol,
+html.dark .hljs-bullet,
+html.dark .hljs-link         { color: #d19a66; }
+html.dark .hljs-function .hljs-title,
+html.dark .hljs-class .hljs-title,
+html.dark .hljs-title.function_,
+html.dark .hljs-title.class_  { color: #61afef; }
+html.dark .hljs-variable,
+html.dark .hljs-params,
+html.dark .hljs-attr         { color: #e06c75; }
+
+/* ============================================================ */
 /*                           AVATARS                             */
 /* ============================================================ */
 .avatar {
