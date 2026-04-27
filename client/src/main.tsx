@@ -61,6 +61,13 @@ if (typeof window !== "undefined") {
           });
           // 30분마다 업데이트 체크 (앱을 켜놓고 방치하는 경우 대비)
           setInterval(() => { reg.update().catch(() => {}); }, 30 * 60 * 1000);
+          // 탭이 포그라운드로 돌아올 때 즉시 한번 확인 — 다른 일 보고 돌아왔을 때
+          // 30분을 기다리지 않고 바로 새 버전을 끌어오게.
+          document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") {
+              reg.update().catch(() => {});
+            }
+          });
         })
         .catch(() => { /* 서비스 워커 등록 실패는 무시 */ });
 
