@@ -1272,10 +1272,11 @@ function CodeViewerModal({ code, lang, onClose }: { code: string; lang?: string;
         position: "fixed",
         inset: 0,
         zIndex: 9999,
-        // 종전 0.65 는 배경 캘린더가 비쳐 어수선했음. 0.85 로 올려 거의 가림 + backdropFilter 로 블러.
-        background: "rgba(0,0,0,0.85)",
-        backdropFilter: "blur(4px)",
-        WebkitBackdropFilter: "blur(4px)",
+        // dim 은 약하게(0.45) 두고 backdrop-filter 로 강하게 흐림(blur 12px) — 배경이 보이긴 하되
+        // 어떤 콘텐츠인지 식별 안 될 정도로 부드럽게. 모달은 100% 불투명 패널이라 가독성 영향 없음.
+        background: "rgba(0,0,0,0.45)",
+        backdropFilter: "blur(12px) saturate(1.2)",
+        WebkitBackdropFilter: "blur(12px) saturate(1.2)",
         display: "grid",
         placeItems: "center",
         padding: "max(env(safe-area-inset-top), 16px) 16px max(env(safe-area-inset-bottom), 16px)",

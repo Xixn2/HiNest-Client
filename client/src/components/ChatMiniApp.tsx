@@ -734,6 +734,10 @@ function ListView({
               presenceTitle = p?.presenceMessage ? `${info.label} · ${p.presenceMessage}` : info.label;
             }
           }
+          // 그룹/팀방: 아바타에 people 뱃지 + 제목 옆에 인원수 칩.
+          // 1:1 은 종전과 동일 (presence 점만).
+          const isGroup = r.type !== "DIRECT";
+          const memberCount = isGroup ? r.members.length : undefined;
           return (
             <ListRow
               key={r.id}
@@ -748,6 +752,8 @@ function ListView({
               muted={muted}
               presenceColor={presenceColor}
               presenceTitle={presenceTitle}
+              isGroup={isGroup}
+              memberCount={memberCount}
             />
           );
         })}
@@ -808,7 +814,7 @@ function EmptyRow({ children }: { children: React.ReactNode }) {
 
 /* ===== 범용 리스트 행 ===== */
 function ListRow({
-  onClick, avatar, title, titleHighlight, subtitle, subtitleHighlight, subtitlePrefix, rightTop, unread, muted, presenceColor, presenceTitle,
+  onClick, avatar, title, titleHighlight, subtitle, subtitleHighlight, subtitlePrefix, rightTop, unread, muted, presenceColor, presenceTitle, isGroup, memberCount,
 }: {
   onClick: () => void;
   avatar: { name: string; color: string; imageUrl?: string | null };
@@ -822,6 +828,8 @@ function ListRow({
   muted?: boolean;
   presenceColor?: string;
   presenceTitle?: string;
+  isGroup?: boolean;
+  memberCount?: number;
 }) {
   return (
     <button
@@ -839,7 +847,35 @@ function ListRow({
       onMouseEnter={(e) => (e.currentTarget.style.background = C.gray100)}
       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
     >
-      <Avatar name={avatar.name} color={avatar.color} imageUrl={avatar.imageUrl ?? null} size={46} presenceColor={presenceColor} presenceTitle={presenceTitle} />
+      <div style={{ position: "relative", flexShrink: 0 }}>
+        <Avatar name={avatar.name} color={avatar.color} imageUrl={avatar.imageUrl ?? null} size={46} presenceColor={isGroup ? undefined : presenceColor} presenceTitle={isGroup ? undefined : presenceTitle} />
+        {isGroup && (
+          // 그룹/팀방 표시 — 아바타 우하단에 사람 두 명 아이콘. presence 점 자리.
+          <div
+            title={memberCount ? `그룹 · ${memberCount}명` : "그룹"}
+            style={{
+              position: "absolute",
+              bottom: -2,
+              right: -2,
+              width: 18,
+              height: 18,
+              borderRadius: 999,
+              background: C.blue,
+              color: "#fff",
+              border: `2px solid var(--c-surface)`,
+              display: "grid",
+              placeItems: "center",
+            }}
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+          </div>
+        )}
+      </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div
@@ -853,6 +889,23 @@ function ListRow({
             <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {highlight(title, titleHighlight)}
             </span>
+            {isGroup && memberCount !== undefined && (
+              // 인원수 칩 — 글자 톤 낮춰서 제목보다 부차적으로.
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  padding: "1px 6px",
+                  borderRadius: 999,
+                  background: C.gray100,
+                  color: C.gray600,
+                  flexShrink: 0,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {memberCount}
+              </span>
+            )}
             {muted && (
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.gray500} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-label="알림 꺼짐" style={{ flexShrink: 0 }}>
                 <path d="M15 9v3M3 21l18-18" />
