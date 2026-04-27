@@ -4,6 +4,7 @@ import { useAuth } from "../auth";
 import { useNotifications } from "../notifications";
 import { resolvePresence } from "../lib/presence";
 import { alertAsync, confirmAsync } from "./ConfirmHost";
+import { SnippetSlashMenu, type SnippetSlashHandle } from "./chat/SnippetSlashMenu";
 import {
   C,
   FONT,
@@ -1460,6 +1461,7 @@ function RoomView({
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const slashRef = useRef<SnippetSlashHandle | null>(null);
   const [reactingId, setReactingId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const prevCountRef = useRef(0);
@@ -1896,8 +1898,28 @@ function RoomView({
               padding: "10px 14px 14px",
               background: C.surface,
               display: "flex", alignItems: "flex-end", gap: 8,
+              position: "relative",
             }}
           >
+            <SnippetSlashMenu
+              textareaRef={textareaRef}
+              value={input}
+              onReplace={(start, end, replacement) => {
+                const next = input.slice(0, start) + replacement + input.slice(end);
+                setInput(next);
+                // 치환 후 커서를 삽입 끝으로 이동 + 높이 자동 조정.
+                requestAnimationFrame(() => {
+                  const ta = textareaRef.current;
+                  if (!ta) return;
+                  const pos = start + replacement.length;
+                  ta.focus();
+                  ta.setSelectionRange(pos, pos);
+                  ta.style.height = "auto";
+                  ta.style.height = Math.min(ta.scrollHeight, 92) + "px";
+                });
+              }}
+              innerRef={slashRef}
+            />
             <div
               style={{
                 flex: 1, minWidth: 0,
@@ -1919,6 +1941,8 @@ function RoomView({
                   el.style.height = Math.min(el.scrollHeight, 92) + "px";
                 }}
                 onKeyDown={(e) => {
+                  // 슬래시 자동완성 메뉴가 열려있으면 ↑↓/Enter/Esc/Tab 을 그쪽이 먼저 소비.
+                  if (slashRef.current?.handleKey(e)) return;
                   if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                     e.preventDefault();
                     onSend();
