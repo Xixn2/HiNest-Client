@@ -10,6 +10,7 @@ import { useModalDismiss } from "../../lib/useModalDismiss";
 import { highlightCode } from "../../lib/syntaxHighlight";
 import { LangIcon } from "../../lib/langIcon";
 import { splitBlocks, renderInlineMarkdown } from "../../lib/markdown";
+import { LinkPreview, extractFirstUrl } from "./LinkPreview";
 
 /**
  * 파일/이미지/동영상 메시지를 문서함으로 복사 저장.
@@ -1167,6 +1168,16 @@ export function TextBubble({
         if (seg.kind === "inline-code") return <InlineCode key={i} code={seg.code} mine={mine} />;
         return <MarkdownText key={i} text={seg.text} mine={mine} />;
       })}
+      {/* 첫 번째 URL 의 링크 프리뷰 — 코드 segment 의 URL 은 parseCodeSegments 가 떼어낸 뒤라
+          텍스트 segment 안에서만 검색됨. 메시지당 1개만 노출해 UI 부풀림 방지. */}
+      {(() => {
+        for (const s of segments) {
+          if (s.kind !== "text") continue;
+          const u = extractFirstUrl(s.text);
+          if (u) return <LinkPreview key="lp" url={u} mine={mine} />;
+        }
+        return null;
+      })()}
     </div>
   );
 }
