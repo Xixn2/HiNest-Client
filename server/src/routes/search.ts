@@ -94,7 +94,7 @@ router.get("/", async (req, res) => {
         ],
       },
       take: 8,
-      select: { id: true, name: true, email: true, team: true, position: true, avatarColor: true, avatarUrl: true },
+      select: { id: true, name: true, email: true, team: true, position: true, avatarColor: true, isDeveloper: true, avatarUrl: true },
     }),
     prisma.notice.findMany({
       where: {
@@ -136,7 +136,7 @@ router.get("/", async (req, res) => {
       take: 8,
       orderBy: { createdAt: "desc" },
       include: {
-        sender: { select: { name: true, avatarColor: true, avatarUrl: true } },
+        sender: { select: { name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } },
         room: { select: { id: true, name: true, type: true } },
       },
     }),

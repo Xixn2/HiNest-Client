@@ -40,10 +40,10 @@ router.get("/", async (req, res) => {
     orderBy: { createdAt: "desc" },
     take: 200,
     include: {
-      requester: { select: { id: true, name: true, avatarColor: true, avatarUrl: true, position: true, team: true } },
+      requester: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true, position: true, team: true } },
       steps: {
         orderBy: { order: "asc" },
-        include: { reviewer: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } } },
+        include: { reviewer: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } } },
       },
     },
   });
@@ -61,17 +61,17 @@ router.get("/:id", async (req, res) => {
   const a = await prisma.approval.findUnique({
     where: { id: req.params.id },
     include: {
-      requester: { select: { id: true, name: true, avatarColor: true, avatarUrl: true, position: true, team: true, email: true } },
+      requester: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true, position: true, team: true, email: true } },
       steps: {
         orderBy: { order: "asc" },
-        include: { reviewer: { select: { id: true, name: true, avatarColor: true, avatarUrl: true, position: true } } },
+        include: { reviewer: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true, position: true } } },
       },
       // 반려 → 재상신 체인을 양방향으로 포함. 원본을 타고 올라가고 개정본을 타고 내려감.
       revisedFrom: { select: { id: true, title: true, status: true, createdAt: true } },
       revisions: { select: { id: true, title: true, status: true, createdAt: true }, orderBy: { createdAt: "asc" } },
       comments: {
         orderBy: { createdAt: "asc" },
-        include: { author: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } } },
+        include: { author: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } } },
       },
     },
   });
@@ -98,7 +98,7 @@ router.post("/:id/comments", async (req, res) => {
   if (!canPost) return res.status(403).json({ error: "forbidden" });
   const c = await prisma.approvalComment.create({
     data: { approvalId: a.id, authorId: u.id, content },
-    include: { author: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } } },
+    include: { author: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } } },
   });
   // 관련 당사자에게 멘션 알림 — 본인 제외. 순차 notify() → 병렬 notifyMany() 로 교체.
   const targets = new Set<string>([a.requesterId, ...a.steps.map((s) => s.reviewerId)]);

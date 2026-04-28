@@ -409,7 +409,7 @@ router.get("/", async (req, res) => {
       orderBy: { updatedAt: "desc" },
       take: 500,
       include: {
-        author: { select: { name: true, avatarColor: true, avatarUrl: true } },
+        author: { select: { name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } },
         folder: { select: { name: true } },
       },
     });
@@ -435,7 +435,7 @@ router.get("/", async (req, res) => {
     where: { AND: ands },
     orderBy: { updatedAt: "desc" },
     include: {
-      author: { select: { name: true, avatarColor: true, avatarUrl: true } },
+      author: { select: { name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } },
       folder: { select: { name: true } },
     },
   });
@@ -608,7 +608,7 @@ router.get("/:id/revisions", async (req, res) => {
     where: { documentId: exist.id },
     orderBy: { createdAt: "desc" },
     take: 100,
-    include: { editor: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } } },
+    include: { editor: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } } },
   });
   res.json({ revisions: rows });
 });

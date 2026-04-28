@@ -152,6 +152,8 @@ router.get("/mentionable", async (req, res) => {
       team: true,
       position: true,
       avatarColor: true,
+
+      isDeveloper: true,
       avatarUrl: true,
     },
     take: 500,
@@ -211,7 +213,7 @@ router.get("/", async (req, res) => {
       authorId: true,
       createdAt: true,
       updatedAt: true,
-      author: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } },
+      author: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } },
       project: { select: { id: true, name: true, color: true } },
     },
   });
@@ -283,10 +285,10 @@ router.get("/:id", async (req, res) => {
   const meeting = await prisma.meeting.findUnique({
     where: { id: req.params.id },
     include: {
-      author: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } },
+      author: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } },
       project: { select: { id: true, name: true, color: true } },
       viewers: {
-        include: { user: { select: { id: true, name: true, team: true, position: true, avatarColor: true, avatarUrl: true } } },
+        include: { user: { select: { id: true, name: true, team: true, position: true, avatarColor: true, isDeveloper: true, avatarUrl: true } } },
       },
     },
   });
@@ -475,7 +477,7 @@ router.get("/:id/revisions", async (req, res) => {
     where: { meetingId: existing.id },
     orderBy: { createdAt: "desc" },
     take: 100,
-    include: { editor: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } } },
+    include: { editor: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } } },
   });
   res.json({ revisions: rows });
 });

@@ -100,7 +100,7 @@ router.get("/", async (req, res) => {
     where,
     orderBy: { startAt: "asc" },
     include: {
-      author: { select: { name: true, avatarColor: true, avatarUrl: true } },
+      author: { select: { name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } },
       project: { select: { id: true, name: true, color: true } },
     },
   });
