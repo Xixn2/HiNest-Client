@@ -1,18 +1,15 @@
 /**
- * \"HiNest 개발자\" 딱지 — 개발자가 사용자에게 부여하는 권한 플래그.
+ * \"HiNest 개발자\" 딱지 — 서버의 isDeveloper 플래그로만 판정.
  *
- * 우선순위:
- *  1) 명시적 isDeveloper 필드 (서버 응답에 포함된 경우)
- *  2) 이름이 \"서지완\" 인 경우 (서버 필드가 빠진 응답을 받았을 때의 fallback —
- *     마이그레이션 직전 캐시된 페이로드 등)
+ * 종전엔 서버 필드가 누락된 캐시 응답 케이스를 위해 name === \"서지완\" fallback 이 있었으나,
+ * 사용자가 이름을 \"서지완\" 으로 바꾸면 누구나 딱지가 떠 스푸핑 가능 — 보안 관점에서 fallback 제거.
+ * 캐시가 낡아 isDeveloper 가 누락되어도 잠시 칩이 안 보일 뿐 다음 새로고침/refresh 에 정상화.
  */
 
 export function isDevAccount(
-  u: { isDeveloper?: boolean | null; name?: string | null } | null | undefined,
+  u: { isDeveloper?: boolean | null; [k: string]: any } | null | undefined,
 ): boolean {
-  if (!u) return false;
-  if (typeof u.isDeveloper === "boolean") return u.isDeveloper;
-  return u.name === "서지완";
+  return !!u?.isDeveloper;
 }
 
 export function DevBadge({

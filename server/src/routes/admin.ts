@@ -1083,6 +1083,32 @@ router.post("/console", requireSuperAdminStepUp, async (req, res) => {
   res.json(result);
 });
 
+/** 채팅 감사 잠금 해제 — 클라에 비번 박지 않도록 서버에서 비교 후 OK 만 반환.
+ *  비번은 환경변수 CHAT_AUDIT_PW (없으면 비활성). super-stepup 게이트로 1차 보호 + 비번 2차 보호.
+ *  일치 시 클라가 sessionStorage 에 만료시각 박는 정도 — 진짜 권한 가드는 ChatAudit API 자체의 super-stepup. */
+router.post("/chat-audit/unlock", requireSuperAdminStepUp, async (req, res) => {
+  const u = (req as any).user;
+  const expected = process.env.CHAT_AUDIT_PW || "";
+  const got = String(req.body?.password ?? "");
+  if (!expected) {
+    return res.status(503).json({ error: "CHAT_AUDIT_PW 환경변수가 설정되지 않았어요." });
+  }
+  // 길이가 다르면 즉시 false — timingSafeEqual 은 같은 길이만 받음.
+  if (got.length !== expected.length) {
+    await writeLog(u.id, "CHAT_AUDIT_UNLOCK_FAIL", undefined, undefined, req.ip).catch(() => {});
+    return res.status(401).json({ error: "암호 불일치" });
+  }
+  const a = Buffer.from(got);
+  const b = Buffer.from(expected);
+  const ok = crypto.timingSafeEqual(a, b);
+  if (!ok) {
+    await writeLog(u.id, "CHAT_AUDIT_UNLOCK_FAIL", undefined, undefined, req.ip).catch(() => {});
+    return res.status(401).json({ error: "암호 불일치" });
+  }
+  await writeLog(u.id, "CHAT_AUDIT_UNLOCK_OK", undefined, undefined, req.ip).catch(() => {});
+  res.json({ ok: true, ttlMs: 30 * 60 * 1000 });
+});
+
 /** 사이드바 메뉴 가시성 관리 (총관리자 전용).
  *  GET  /api/admin/nav-visibility           전체 NavConfig 행 (disabled 만 의미 있음)
  *  POST /api/admin/nav-visibility           { path, enabled } upsert.

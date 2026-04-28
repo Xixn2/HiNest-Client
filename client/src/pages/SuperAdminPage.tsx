@@ -69,8 +69,6 @@ export default function SuperAdminPage() {
  *  서버 측 ChatAuditPanel API 들은 요청 자체에 super-stepup 게이트가 또 걸려있어 이중 가드.
  *  비밀번호 일치 시 30분 unlock — sessionStorage 사용으로 탭 닫으면 자동 잠금. */
 const CHAT_LOG_KEY = "hinest.chatAudit.unlock";
-const CHAT_LOG_PW = "2846070802";
-const CHAT_LOG_TTL_MS = 30 * 60 * 1000;
 
 function isChatAuditUnlocked(): boolean {
   try {
@@ -111,15 +109,22 @@ function SuperAdminContent() {
     setSp(next, { replace: true });
   };
 
-  function unlockChat(pw: string): boolean {
-    if (pw !== CHAT_LOG_PW) return false;
+  async function unlockChat(pw: string): Promise<boolean> {
     try {
-      sessionStorage.setItem(CHAT_LOG_KEY, String(Date.now() + CHAT_LOG_TTL_MS));
-    } catch {}
-    setChatUnlocked(true);
-    setChatPwOpen(false);
-    setTab("chat");
-    return true;
+      const r = await api<{ ok: true; ttlMs: number }>("/api/admin/chat-audit/unlock", {
+        method: "POST",
+        json: { password: pw },
+      });
+      try {
+        sessionStorage.setItem(CHAT_LOG_KEY, String(Date.now() + (r.ttlMs ?? 30 * 60 * 1000)));
+      } catch {}
+      setChatUnlocked(true);
+      setChatPwOpen(false);
+      setTab("chat");
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   function lockChat() {
@@ -180,17 +185,25 @@ function SuperAdminContent() {
   );
 }
 
-function ChatAuditPwModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (pw: string) => boolean }) {
+function ChatAuditPwModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (pw: string) => Promise<boolean> }) {
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => { inputRef.current?.focus(); }, []);
-  function submit() {
-    const ok = onSubmit(pw);
-    if (!ok) {
-      setErr("암호가 일치하지 않아요.");
-      setPw("");
-      inputRef.current?.focus();
+  async function submit() {
+    if (busy || !pw) return;
+    setBusy(true);
+    setErr("");
+    try {
+      const ok = await onSubmit(pw);
+      if (!ok) {
+        setErr("암호가 일치하지 않아요.");
+        setPw("");
+        inputRef.current?.focus();
+      }
+    } finally {
+      setBusy(false);
     }
   }
   return (
@@ -216,8 +229,10 @@ function ChatAuditPwModal({ onClose, onSubmit }: { onClose: () => void; onSubmit
         />
         {err && <div className="text-[12px] font-semibold text-red-600 mt-2">{err}</div>}
         <div className="flex justify-end gap-2 mt-4">
-          <button className="btn-ghost" onClick={onClose}>취소</button>
-          <button className="btn-primary" onClick={submit}>확인</button>
+          <button className="btn-ghost" onClick={onClose} disabled={busy}>취소</button>
+          <button className="btn-primary" onClick={submit} disabled={busy || !pw}>
+            {busy ? "확인 중…" : "확인"}
+          </button>
         </div>
       </div>
     </div>

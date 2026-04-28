@@ -96,11 +96,31 @@ app.use(express.json({ limit: "2mb" }));
 app.use(cookieParser());
 
 // HTTP 액세스 라인을 인메모리 버퍼에 적재 — \"GET /api/x 200 12ms\" 형식.
+// query string 안의 token/password/secret/key 같은 값은 마스킹해 개발자 콘솔의 \"서버 로그\" 탭에서
+// 우연히 노출되지 않도록 차단.
+const SENSITIVE_QS_KEYS = /^(token|password|pw|secret|key|auth|code|otp|signature)$/i;
+function scrubUrl(raw: string): string {
+  const qIdx = raw.indexOf("?");
+  if (qIdx < 0) return raw;
+  const path = raw.slice(0, qIdx);
+  const params = new URLSearchParams(raw.slice(qIdx + 1));
+  let dirty = false;
+  for (const [k, v] of params) {
+    if (SENSITIVE_QS_KEYS.test(k) && v) {
+      params.set(k, "***");
+      dirty = true;
+    }
+  }
+  if (!dirty) return raw;
+  const qs = params.toString();
+  return qs ? `${path}?${qs}` : path;
+}
 app.use((req, res, next) => {
   const start = Date.now();
   res.on("finish", () => {
     const dur = Date.now() - start;
-    pushHttpLog(`${req.method} ${req.originalUrl || req.url} ${res.statusCode} ${dur}ms`);
+    const url = req.originalUrl || req.url;
+    pushHttpLog(`${req.method} ${scrubUrl(url)} ${res.statusCode} ${dur}ms`);
   });
   next();
 });
