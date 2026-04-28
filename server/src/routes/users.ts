@@ -27,6 +27,7 @@ router.get("/", async (req, res) => {
       position: true,
       avatarColor: true,
       avatarUrl: true,
+      isDeveloper: true,
       presenceStatus: true,
       presenceMessage: true,
       presenceUpdatedAt: true,

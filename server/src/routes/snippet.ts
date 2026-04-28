@@ -44,7 +44,7 @@ router.get("/", async (req, res) => {
     where,
     orderBy: [{ updatedAt: "desc" }],
     take: 200,
-    include: { owner: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } } },
+    include: { owner: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } } },
   });
   res.json({ snippets });
 });

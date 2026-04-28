@@ -74,6 +74,8 @@ const HR_SELECT = {
   active: true,
   resignedAt: true,
   avatarColor: true,
+
+  isDeveloper: true,
   avatarUrl: true,
   createdAt: true,
   hrCode: true,

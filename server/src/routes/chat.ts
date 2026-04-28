@@ -81,7 +81,7 @@ router.get("/rooms", async (req, res) => {
     where,
     orderBy: { createdAt: "desc" },
     include: {
-      members: { include: { user: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } } } },
+      members: { include: { user: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } } } },
       messages: {
         where: { deletedAt: null, scheduledAt: null },
         orderBy: { createdAt: "desc" },
@@ -131,7 +131,7 @@ router.post("/rooms", async (req, res) => {
         ],
       },
       include: {
-        members: { include: { user: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } } } },
+        members: { include: { user: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } } } },
         messages: {
           where: { deletedAt: null, scheduledAt: null },
           orderBy: { createdAt: "desc" },
@@ -151,7 +151,7 @@ router.post("/rooms", async (req, res) => {
         members: { create: [{ userId: u.id }, { userId: other }] },
       },
       include: {
-        members: { include: { user: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } } } },
+        members: { include: { user: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } } } },
         messages: { where: { deletedAt: null, scheduledAt: null }, orderBy: { createdAt: "desc" }, take: 1 },
       },
     });
@@ -170,7 +170,7 @@ router.post("/rooms", async (req, res) => {
       members: { create: memberIds.map((userId) => ({ userId })) },
     },
     include: {
-      members: { include: { user: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } } } },
+      members: { include: { user: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } } } },
       messages: { where: { deletedAt: null, scheduledAt: null }, orderBy: { createdAt: "desc" }, take: 1 },
     },
   });
@@ -208,10 +208,10 @@ router.get("/search", async (req, res) => {
     orderBy: { createdAt: "desc" },
     take: 80,
     include: {
-      sender: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } },
+      sender: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } },
       room: {
         include: {
-          members: { include: { user: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } } } },
+          members: { include: { user: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } } } },
         },
       },
     },
@@ -297,7 +297,7 @@ router.get("/rooms/:id/messages", async (req, res) => {
     orderBy: { createdAt: "asc" },
     take: 300,
     include: {
-      sender: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } },
+      sender: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } },
       reactions: { select: { userId: true, emoji: true, user: { select: { name: true } } } },
     },
   });
@@ -422,7 +422,7 @@ router.post("/rooms/:id/messages", async (req, res) => {
       scheduledAt,
     },
     include: {
-      sender: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } },
+      sender: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } },
       room: { select: { id: true, name: true, type: true } },
       reactions: { select: { userId: true, emoji: true, user: { select: { name: true } } } },
     },
@@ -554,7 +554,7 @@ router.patch("/messages/:id", async (req, res) => {
   const updated = await prisma.chatMessage.update({
     where: { id: msg.id },
     data,
-    include: { sender: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } } },
+    include: { sender: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } } },
   });
   broadcastToRoom(msg.roomId, "chat:update", { kind: "edit", message: updated });
   res.json({ message: updated });
@@ -579,7 +579,7 @@ router.post("/messages/:id/pin", async (req, res) => {
       pinnedAt: pin ? new Date() : null,
       pinnedById: pin ? u.id : null,
     },
-    include: { sender: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } } },
+    include: { sender: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } } },
   });
   broadcastToRoom(msg.roomId, "chat:update", { kind: "pin", message: updated });
   res.json({ message: updated });

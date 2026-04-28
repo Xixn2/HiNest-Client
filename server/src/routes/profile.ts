@@ -30,7 +30,7 @@ router.patch("/", async (req, res) => {
   const user = await prisma.user.update({
     where: { id: u.id },
     data: d,
-    select: { id: true, name: true, email: true, avatarColor: true, avatarUrl: true, team: true, position: true, role: true },
+    select: { id: true, name: true, email: true, avatarColor: true, isDeveloper: true, avatarUrl: true, team: true, position: true, role: true },
   });
   await writeLog(u.id, "PROFILE_UPDATE", u.id, JSON.stringify(d));
   res.json({ user });

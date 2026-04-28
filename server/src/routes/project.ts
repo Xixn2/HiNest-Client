@@ -32,7 +32,7 @@ router.get("/:id", async (req, res) => {
     where: { id: req.params.id },
     include: {
       members: {
-        include: { user: { select: { id: true, name: true, email: true, team: true, position: true, avatarColor: true, avatarUrl: true } } },
+        include: { user: { select: { id: true, name: true, email: true, team: true, position: true, avatarColor: true, isDeveloper: true, avatarUrl: true } } },
       },
       createdBy: { select: { id: true, name: true } },
     },
@@ -371,7 +371,7 @@ router.get("/:id/qa", async (req, res) => {
   const users = userIds.length
     ? await prisma.user.findMany({
         where: { id: { in: userIds } },
-        select: { id: true, name: true, avatarColor: true, avatarUrl: true },
+        select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true },
       })
     : [];
   const userMap = new Map(users.map((x) => [x.id, x]));

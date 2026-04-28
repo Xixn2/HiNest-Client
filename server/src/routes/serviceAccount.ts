@@ -150,7 +150,7 @@ router.get("/", async (req, res) => {
     where,
     orderBy: [{ category: "asc" }, { serviceName: "asc" }],
     include: {
-      ownerUser: { select: { id: true, name: true, avatarColor: true, avatarUrl: true, email: true, team: true, position: true } },
+      ownerUser: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true, email: true, team: true, position: true } },
       createdBy: { select: { id: true, name: true } },
       project: { select: { id: true, name: true, color: true } },
     },
@@ -306,7 +306,7 @@ router.post("/", async (req, res) => {
       createdById: user.id,
     },
     include: {
-      ownerUser: { select: { id: true, name: true, avatarColor: true, avatarUrl: true, email: true, team: true, position: true } },
+      ownerUser: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true, email: true, team: true, position: true } },
       createdBy: { select: { id: true, name: true } },
       project: { select: { id: true, name: true, color: true } },
     },
@@ -409,7 +409,7 @@ router.patch("/:id", async (req, res) => {
     where: { id },
     data,
     include: {
-      ownerUser: { select: { id: true, name: true, avatarColor: true, avatarUrl: true, email: true, team: true, position: true } },
+      ownerUser: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true, email: true, team: true, position: true } },
       createdBy: { select: { id: true, name: true } },
       project: { select: { id: true, name: true, color: true } },
     },
