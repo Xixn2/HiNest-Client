@@ -14,6 +14,8 @@ import {
   verifySuperToken,
   SUPER_TTL_SEC,
   requireSuperAdminStepUp,
+  createSession,
+  evictSessionCache,
 } from "../lib/auth.js";
 
 const router = Router();
@@ -54,9 +56,10 @@ router.post("/login", async (req, res) => {
   const ok = await bcrypt.compare(password, user.passwordHash);
   if (!ok) return res.status(401).json({ error: "잘못된 이메일 또는 비밀번호" });
 
-  const token = signToken({ id: user.id, role: user.role, name: user.name, email: user.email });
+  const sid = await createSession(user.id, req);
+  const token = signToken({ id: user.id, role: user.role, name: user.name, email: user.email }, sid);
   setAuthCookie(res, token);
-  await writeLog(user.id, "LOGIN", user.email, undefined, req.ip);
+  await writeLog(user.id, "LOGIN", user.email, `sid=${sid}`, req.ip);
 
   res.json({
     user: {
@@ -118,9 +121,10 @@ router.post("/signup", async (req, res) => {
     data: { used: true, usedAt: new Date(), usedById: user.id },
   });
 
-  const token = signToken({ id: user.id, role: user.role, name: user.name, email: user.email });
+  const sid = await createSession(user.id, req);
+  const token = signToken({ id: user.id, role: user.role, name: user.name, email: user.email }, sid);
   setAuthCookie(res, token);
-  await writeLog(user.id, "SIGNUP", user.email, `invite:${inviteKey}`, req.ip);
+  await writeLog(user.id, "SIGNUP", user.email, `invite:${inviteKey} sid=${sid}`, req.ip);
 
   res.json({
     user: {
@@ -137,7 +141,18 @@ router.post("/signup", async (req, res) => {
   });
 });
 
-router.post("/logout", async (req, res) => {
+router.post("/logout", requireAuth, async (req, res) => {
+  // 현재 세션 row 도 revoke — 다른 디바이스 세션은 유지.
+  const sid = (req as any).sessionId as string | null;
+  if (sid) {
+    try {
+      await prisma.session.update({
+        where: { id: sid },
+        data: { revokedAt: new Date(), revokedById: (req as any).user?.id },
+      });
+      evictSessionCache(sid);
+    } catch { /* ignore */ }
+  }
   clearAuthCookie(res);
   clearSuperCookie(res);
   res.json({ ok: true });

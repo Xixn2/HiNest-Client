@@ -93,6 +93,25 @@ model User {
   serviceAccountsOwned    ServiceAccount[]       @relation("ServiceAccountOwner")
   serviceAccountsCreated  ServiceAccount[]       @relation("ServiceAccountCreator")
   snippets                Snippet[]              @relation("SnippetOwner")
+  sessions                Session[]
+}
+
+/// 활성 로그인 세션 — JWT 만 쓸 땐 서버측 강제 로그아웃이 불가했음.
+/// 토큰에 sessionId 클레임을 박아 두고 row 의 revokedAt 로 무효화.
+/// 클레임 없는 레거시 토큰은 그대로 통과시켜 호환성 유지 (만료=7일이라 자동 사라짐).
+model Session {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ua          String? // user-agent 첫 200자
+  ip          String?
+  createdAt   DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  revokedAt   DateTime?
+  revokedById String? // 누가 revoke 했는지 (강제 로그아웃 추적)
+
+  @@index([userId, revokedAt])
+  @@index([lastSeenAt(sort: Desc)])
 }
 
 /// 팀/프로젝트 — 사이드바 "팀" 카테고리 아래에 자신이 참여중인 프로젝트가 표시됨.
