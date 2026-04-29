@@ -50,6 +50,27 @@ export function evictUserCache(id: string) {
   _userCache.delete(id);
 }
 
+/** 세션 유효성 캐시 — revoke 이후 최대 30초 지연 반영. 강제 로그아웃에 충분히 빠른 반응성. */
+const _sessionCache = new Map<string, { revoked: boolean; exp: number }>();
+const SESSION_CACHE_TTL = 30_000;
+
+async function isSessionRevoked(sid: string): Promise<boolean> {
+  const hit = _sessionCache.get(sid);
+  if (hit && hit.exp > Date.now()) return hit.revoked;
+  const row = await prisma.session.findUnique({
+    where: { id: sid },
+    select: { revokedAt: true },
+  });
+  // row 없는 케이스 = 레거시 클라이언트가 보낸 가짜 sid 거나, DB 정리됨. 안전하게 revoked 처리.
+  const revoked = !row || row.revokedAt !== null;
+  _sessionCache.set(sid, { revoked, exp: Date.now() + SESSION_CACHE_TTL });
+  return revoked;
+}
+
+export function evictSessionCache(sid: string) {
+  _sessionCache.delete(sid);
+}
+
 const COOKIE = "hinest_token";
 const SUPER_COOKIE = "hinest_super";
 const IMP_COOKIE = "hinest_imp";
@@ -70,8 +91,20 @@ export interface AuthUser {
   superAdmin: boolean;
 }
 
-export function signToken(user: { id: string; role: string; name: string; email: string }) {
-  return jwt.sign(user, SECRET, { expiresIn: "7d" });
+export function signToken(user: { id: string; role: string; name: string; email: string }, sessionId?: string) {
+  return jwt.sign({ ...user, sid: sessionId }, SECRET, { expiresIn: "7d" });
+}
+
+/** 로그인 성공 시 호출 — 새 Session row 생성 후 sessionId 반환. JWT 에 박아두면
+ *  서버에서 revokedAt 로 즉시 무효화 가능. */
+export async function createSession(userId: string, req: Request): Promise<string> {
+  const ua = (req.headers["user-agent"] || "").slice(0, 200) || null;
+  const ip = req.ip ?? null;
+  const s = await prisma.session.create({
+    data: { userId, ua, ip },
+    select: { id: true },
+  });
+  return s.id;
 }
 
 export function setAuthCookie(res: Response, token: string) {
@@ -90,6 +123,10 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   if (!token) return res.status(401).json({ error: "unauthorized" });
   try {
     const payload = jwt.verify(token, SECRET) as any;
+    // sessionId(sid) 클레임이 있는 토큰은 서버측 무효화 검사. 없는 레거시 토큰은 그대로 통과 (7일이면 만료).
+    if (payload.sid && (await isSessionRevoked(payload.sid))) {
+      return res.status(401).json({ error: "session revoked", code: "SESSION_REVOKED" });
+    }
     const realUser = await getCachedUser(payload.id);
     if (!realUser || !realUser.active) return res.status(401).json({ error: "unauthorized" });
 
@@ -126,6 +163,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     (req as any).userRecord = activeUser;
     (req as any).realUser = realUser;
     (req as any).impersonatedById = impersonatedById;
+    (req as any).sessionId = payload.sid ?? null;
     next();
   } catch {
     return res.status(401).json({ error: "unauthorized" });

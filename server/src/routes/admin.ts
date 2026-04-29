@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../lib/db.js";
 import {
   requireAdmin, requireAuth, requireSuperAdminStepUp, verifySuperToken,
-  writeLog, evictUserCache,
+  writeLog, evictUserCache, evictSessionCache,
   signImpersonate, setImpCookie, clearImpCookie,
 } from "../lib/auth.js";
 import { todayStr } from "../lib/dates.js";
@@ -1243,6 +1243,60 @@ router.patch("/users/:id/attendance", async (req, res) => {
  * 보안: super-stepup 필수, 1시간 자동 만료, 시작/종료 모두 audit 기록.
  * 모든 액션은 임퍼소네이팅 중에도 (req as any).realUser 로 진짜 사용자가 추적된다.
  */
+/* ===== Session Manager ===== */
+
+/** 활성 세션 목록. ?userId 로 특정 유저만, 기본은 전체 (최근 활동 순). */
+router.get("/sessions", requireSuperAdminStepUp, async (req, res) => {
+  const userId = typeof req.query.userId === "string" ? req.query.userId : undefined;
+  const onlyActive = req.query.active !== "false";
+  const limit = Math.min(500, parseInt(String(req.query.limit ?? "100"), 10) || 100);
+  const sessions = await prisma.session.findMany({
+    where: {
+      ...(userId ? { userId } : {}),
+      ...(onlyActive ? { revokedAt: null } : {}),
+    },
+    orderBy: { lastSeenAt: "desc" },
+    take: limit,
+    include: { user: { select: { id: true, name: true, email: true } } },
+  });
+  res.json({ sessions });
+});
+
+/** 특정 세션 강제 로그아웃. */
+router.delete("/sessions/:id", requireSuperAdminStepUp, async (req, res) => {
+  const me = (req as any).user;
+  const s = await prisma.session.findUnique({ where: { id: req.params.id }, select: { id: true, userId: true, revokedAt: true } });
+  if (!s) return res.status(404).json({ error: "not found" });
+  if (s.revokedAt) return res.json({ ok: true, alreadyRevoked: true });
+  await prisma.session.update({ where: { id: s.id }, data: { revokedAt: new Date(), revokedById: me.id } });
+  evictSessionCache(s.id);
+  await writeLog(me.id, "SESSION_REVOKE", s.id, `user=${s.userId}`, req.ip);
+  res.json({ ok: true });
+});
+
+/** 특정 유저의 모든 세션 강제 로그아웃. 비밀번호 변경 / 계정 탈취 의심 시 사용. */
+router.post("/sessions/revoke-user/:userId", requireSuperAdminStepUp, async (req, res) => {
+  const me = (req as any).user;
+  const r = await prisma.session.updateMany({
+    where: { userId: req.params.userId, revokedAt: null },
+    data: { revokedAt: new Date(), revokedById: me.id },
+  });
+  // 캐시는 다음 30초 내 자연 갱신 (개별 evict 는 ID 모름).
+  await writeLog(me.id, "SESSION_REVOKE_USER", req.params.userId, `count=${r.count}`, req.ip);
+  res.json({ ok: true, count: r.count });
+});
+
+/** 전사 강제 로그아웃 — 매우 위험. 시크릿 로테이트 / 데이터 유출 의심 시 사용. */
+router.post("/sessions/revoke-all", requireSuperAdminStepUp, async (req, res) => {
+  const me = (req as any).user;
+  const r = await prisma.session.updateMany({
+    where: { revokedAt: null },
+    data: { revokedAt: new Date(), revokedById: me.id },
+  });
+  await writeLog(me.id, "SESSION_REVOKE_ALL", undefined, `count=${r.count}`, req.ip);
+  res.json({ ok: true, count: r.count });
+});
+
 router.post("/impersonate/:id", requireSuperAdminStepUp, async (req, res) => {
   const me = (req as any).user;
   // 임퍼소네이션 중에 또 다른 임퍼소네이션 시작은 금지 — 책임 추적이 흐려짐.
