@@ -37,10 +37,10 @@ async function hydratePins(pins: { id: string; targetType: string; targetId: str
   }
   const [docs, meetings, rooms, projects, notices] = await Promise.all([
     groups.DOCUMENT.length
-      ? prisma.document.findMany({ where: { id: { in: groups.DOCUMENT } }, select: { id: true, title: true } })
+      ? prisma.document.findMany({ where: { id: { in: groups.DOCUMENT }, deletedAt: null }, select: { id: true, title: true } })
       : Promise.resolve([]),
     groups.MEETING.length
-      ? prisma.meeting.findMany({ where: { id: { in: groups.MEETING } }, select: { id: true, title: true } })
+      ? prisma.meeting.findMany({ where: { id: { in: groups.MEETING }, deletedAt: null }, select: { id: true, title: true } })
       : Promise.resolve([]),
     groups.CHAT_ROOM.length
       ? prisma.chatRoom.findMany({ where: { id: { in: groups.CHAT_ROOM } }, select: { id: true, name: true, type: true } })
@@ -49,7 +49,7 @@ async function hydratePins(pins: { id: string; targetType: string; targetId: str
       ? prisma.project.findMany({ where: { id: { in: groups.PROJECT } }, select: { id: true, name: true, color: true } })
       : Promise.resolve([]),
     groups.NOTICE.length
-      ? prisma.notice.findMany({ where: { id: { in: groups.NOTICE } }, select: { id: true, title: true } })
+      ? prisma.notice.findMany({ where: { id: { in: groups.NOTICE }, deletedAt: null }, select: { id: true, title: true } })
       : Promise.resolve([]),
   ]);
   const nameBy = new Map<string, { name: string; meta?: any }>();

@@ -102,8 +102,8 @@ router.get("/mentionable", async (req, res) => {
   let authorId: string | undefined;
 
   if (meetingId) {
-    const m = await prisma.meeting.findUnique({
-      where: { id: meetingId },
+    const m = await prisma.meeting.findFirst({
+      where: { id: meetingId, deletedAt: null },
       include: { viewers: { select: { userId: true } } },
     });
     if (!m) return res.status(404).json({ error: "not found" });
@@ -200,6 +200,8 @@ router.get("/", async (req, res) => {
   if (projectId) {
     where.projectId = projectId;
   }
+  // 휴지통 항목은 일반 목록에서 제외.
+  where.deletedAt = null;
 
   const meetings = await prisma.meeting.findMany({
     where,
@@ -282,8 +284,8 @@ async function canRead(meeting: any, userId: string, userRole: string) {
 
 router.get("/:id", async (req, res) => {
   const u = (req as any).user;
-  const meeting = await prisma.meeting.findUnique({
-    where: { id: req.params.id },
+  const meeting = await prisma.meeting.findFirst({
+    where: { id: req.params.id, deletedAt: null },
     include: {
       author: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } },
       project: { select: { id: true, name: true, color: true } },
@@ -363,7 +365,7 @@ router.patch("/:id", async (req, res) => {
   const u = (req as any).user;
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid input" });
-  const existing = await prisma.meeting.findUnique({ where: { id: req.params.id } });
+  const existing = await prisma.meeting.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!existing) return res.status(404).json({ error: "not found" });
 
   // 권한 모델:
@@ -470,7 +472,7 @@ router.patch("/:id", async (req, res) => {
  */
 router.get("/:id/revisions", async (req, res) => {
   const u = (req as any).user;
-  const existing = await prisma.meeting.findUnique({ where: { id: req.params.id } });
+  const existing = await prisma.meeting.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!existing) return res.status(404).json({ error: "not found" });
   if (!(await canRead(existing, u.id, u.role))) return res.status(403).json({ error: "forbidden" });
   const rows = await prisma.meetingRevision.findMany({
@@ -484,7 +486,7 @@ router.get("/:id/revisions", async (req, res) => {
 
 router.post("/:id/revisions/:revId/restore", async (req, res) => {
   const u = (req as any).user;
-  const existing = await prisma.meeting.findUnique({ where: { id: req.params.id } });
+  const existing = await prisma.meeting.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!existing) return res.status(404).json({ error: "not found" });
   if (!(await canRead(existing, u.id, u.role))) return res.status(403).json({ error: "forbidden" });
   const rev = await prisma.meetingRevision.findUnique({ where: { id: req.params.revId } });
@@ -502,12 +504,16 @@ router.post("/:id/revisions/:revId/restore", async (req, res) => {
 
 router.delete("/:id", async (req, res) => {
   const u = (req as any).user;
-  const existing = await prisma.meeting.findUnique({ where: { id: req.params.id } });
+  const existing = await prisma.meeting.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!existing) return res.status(404).json({ error: "not found" });
   if (existing.authorId !== u.id && u.role !== "ADMIN") {
     return res.status(403).json({ error: "forbidden" });
   }
-  await prisma.meeting.delete({ where: { id: existing.id } });
+  // 소프트 삭제 — 휴지통에서 30일 이내 복구 가능. 영구 삭제는 admin trash 페이지.
+  await prisma.meeting.update({
+    where: { id: existing.id },
+    data: { deletedAt: new Date(), deletedById: u.id },
+  });
   await writeLog(u.id, "MEETING_DELETE", existing.id);
   res.json({ ok: true });
 });

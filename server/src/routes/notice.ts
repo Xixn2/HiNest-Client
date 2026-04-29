@@ -18,6 +18,7 @@ function canWriteNotice(role: unknown): boolean {
 router.get("/", async (req, res) => {
   const u = (req as any).user;
   const list = await prisma.notice.findMany({
+    where: { deletedAt: null },
     orderBy: [{ pinned: "desc" }, { createdAt: "desc" }],
     take: 300,
     include: {
@@ -45,7 +46,7 @@ router.post("/:id/reactions", async (req, res) => {
   const u = (req as any).user;
   const emoji = typeof req.body?.emoji === "string" ? req.body.emoji.slice(0, 16) : "";
   if (!emoji) return res.status(400).json({ error: "emoji required" });
-  const notice = await prisma.notice.findUnique({ where: { id: req.params.id }, select: { id: true } });
+  const notice = await prisma.notice.findFirst({ where: { id: req.params.id, deletedAt: null }, select: { id: true } });
   if (!notice) return res.status(404).json({ error: "not found" });
   try {
     await prisma.noticeReaction.create({ data: { noticeId: notice.id, userId: u.id, emoji } });
@@ -107,7 +108,7 @@ router.patch("/:id", async (req, res) => {
   if (!canWriteNotice(u?.role)) return res.status(403).json({ error: "forbidden" });
   const parsed = patchSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid input" });
-  const notice = await prisma.notice.findUnique({ where: { id: req.params.id } });
+  const notice = await prisma.notice.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!notice) return res.status(404).json({ error: "not found" });
   // 작성자 본인이거나 ADMIN 역할이면 수정 가능. MANAGER 는 자신이 쓴 공지만 수정.
   if (u.role !== "ADMIN" && notice.authorId !== u.id) {
@@ -124,12 +125,12 @@ router.patch("/:id", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   const u = (req as any).user;
   if (!canWriteNotice(u?.role)) return res.status(403).json({ error: "forbidden" });
-  const notice = await prisma.notice.findUnique({ where: { id: req.params.id } });
+  const notice = await prisma.notice.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!notice) return res.status(404).json({ error: "not found" });
   if (u.role !== "ADMIN" && notice.authorId !== u.id) {
     return res.status(403).json({ error: "본인이 작성한 공지만 삭제할 수 있습니다" });
   }
-  await prisma.notice.delete({ where: { id: notice.id } });
+  await prisma.notice.update({ where: { id: notice.id }, data: { deletedAt: new Date(), deletedById: (req as any).user?.id } });
   await writeLog(u.id, "NOTICE_DELETE", notice.id);
   res.json({ ok: true });
 });

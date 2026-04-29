@@ -6,6 +6,7 @@ import SuperStepUpGate from "../components/SuperStepUpGate";
 import SessionsPanel from "../components/superadmin/SessionsPanel";
 import ErrorsPanel from "../components/superadmin/ErrorsPanel";
 import HealthPanel from "../components/superadmin/HealthPanel";
+import TrashPanel from "../components/superadmin/TrashPanel";
 
 type Log = {
   id: string;
@@ -41,7 +42,7 @@ type Message = {
   sender: { id: string; name: string; avatarColor: string; avatarUrl?: string | null };
 };
 
-type Tab = "logs" | "chat" | "api" | "console" | "server" | "nav" | "sessions" | "errors" | "health";
+type Tab = "logs" | "chat" | "api" | "console" | "server" | "nav" | "sessions" | "errors" | "health" | "trash";
 
 type ApiSpecRoute = {
   method: string;
@@ -106,6 +107,7 @@ function SuperAdminContent() {
     : raw === "sessions" ? "sessions"
     : raw === "errors" ? "errors"
     : raw === "health" ? "health"
+    : raw === "trash" ? "trash"
     : "logs";
 
   const setTab = (t: Tab) => {
@@ -177,6 +179,7 @@ function SuperAdminContent() {
         <TabBtn active={tab === "sessions"} onClick={() => setTab("sessions")}>세션</TabBtn>
         <TabBtn active={tab === "errors"} onClick={() => setTab("errors")}>에러</TabBtn>
         <TabBtn active={tab === "health"} onClick={() => setTab("health")}>헬스</TabBtn>
+        <TabBtn active={tab === "trash"} onClick={() => setTab("trash")}>휴지통</TabBtn>
       </div>
       {tab === "logs" && <LogsPanel />}
       {tab === "chat" && chatUnlocked && <ChatAuditPanel />}
@@ -187,6 +190,7 @@ function SuperAdminContent() {
       {tab === "sessions" && <SessionsPanel />}
       {tab === "errors" && <ErrorsPanel />}
       {tab === "health" && <HealthPanel />}
+      {tab === "trash" && <TrashPanel />}
       {chatPwOpen && (
         <ChatAuditPwModal
           onClose={() => setChatPwOpen(false)}
