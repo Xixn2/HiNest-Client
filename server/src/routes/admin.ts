@@ -1291,6 +1291,52 @@ router.delete("/feature-flags/:key", requireSuperAdminStepUp, async (req, res) =
   res.json({ ok: true });
 });
 
+/* ===== 2FA(패스키) 정책 ===== */
+
+router.get("/2fa-policy", requireSuperAdminStepUp, async (_req, res) => {
+  const policies = await prisma.twoFactorPolicy.findMany();
+  // 누락된 role 은 기본값으로 채워서 반환 — 클라가 3개 row 모두 존재한다고 가정 가능.
+  const ROLES = ["ADMIN", "MANAGER", "MEMBER"];
+  const map = new Map(policies.map((p) => [p.role, p]));
+  const merged = ROLES.map((r) => map.get(r) ?? { role: r, requirePasskey: false, gracePeriodDays: 14, updatedAt: new Date(), updatedById: null });
+  res.json({ policies: merged });
+});
+
+router.post("/2fa-policy", requireSuperAdminStepUp, async (req, res) => {
+  const me = (req as any).user;
+  const { role, requirePasskey, gracePeriodDays } = req.body ?? {};
+  if (!["ADMIN", "MANAGER", "MEMBER"].includes(role)) return res.status(400).json({ error: "invalid role" });
+  const row = await prisma.twoFactorPolicy.upsert({
+    where: { role },
+    update: { requirePasskey: !!requirePasskey, gracePeriodDays: Number(gracePeriodDays) || 14, updatedById: me.id },
+    create: { role, requirePasskey: !!requirePasskey, gracePeriodDays: Number(gracePeriodDays) || 14, updatedById: me.id },
+  });
+  await writeLog(me.id, "2FA_POLICY_UPSERT", role, `req=${row.requirePasskey} grace=${row.gracePeriodDays}`, req.ip);
+  res.json({ policy: row });
+});
+
+/** 정책에 미충족인 사용자 명단 — 패스키 없음 + 유예기간 초과. */
+router.get("/2fa-policy/non-compliant", requireSuperAdminStepUp, async (_req, res) => {
+  const policies = await prisma.twoFactorPolicy.findMany({ where: { requirePasskey: true } });
+  if (policies.length === 0) return res.json({ users: [] });
+  const now = Date.now();
+  const out: any[] = [];
+  for (const p of policies) {
+    const cutoff = new Date(now - p.gracePeriodDays * 24 * 60 * 60 * 1000);
+    const users = await prisma.user.findMany({
+      where: {
+        role: p.role,
+        active: true,
+        createdAt: { lt: cutoff },
+        passkeys: { none: {} },
+      },
+      select: { id: true, name: true, email: true, role: true, team: true, createdAt: true },
+    });
+    for (const u of users) out.push({ ...u, daysOverdue: Math.floor((now - new Date(u.createdAt).getTime()) / 86_400_000) - p.gracePeriodDays });
+  }
+  res.json({ users: out });
+});
+
 /* ===== Rate-limit Rules + IP Blocks ===== */
 import { evictSecurityCache } from "../lib/securityRules.js";
 
