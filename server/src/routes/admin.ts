@@ -1243,6 +1243,49 @@ router.patch("/users/:id/attendance", async (req, res) => {
  * 보안: super-stepup 필수, 1시간 자동 만료, 시작/종료 모두 audit 기록.
  * 모든 액션은 임퍼소네이팅 중에도 (req as any).realUser 로 진짜 사용자가 추적된다.
  */
+/* ===== Audit Trail Viewer ===== */
+
+router.get("/audit", requireSuperAdminStepUp, async (req, res) => {
+  const action = typeof req.query.action === "string" ? req.query.action : undefined;
+  const userId = typeof req.query.userId === "string" ? req.query.userId : undefined;
+  const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  const fromMs = req.query.from ? Number(req.query.from) : undefined;
+  const toMs = req.query.to ? Number(req.query.to) : undefined;
+  const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit ?? "200"), 10) || 200));
+
+  const where: any = {};
+  if (action) where.action = action;
+  if (userId) where.userId = userId;
+  if (fromMs || toMs) {
+    where.createdAt = {};
+    if (fromMs) where.createdAt.gte = new Date(fromMs);
+    if (toMs) where.createdAt.lte = new Date(toMs);
+  }
+  if (q) {
+    where.OR = [
+      { target: { contains: q, mode: "insensitive" } },
+      { detail: { contains: q, mode: "insensitive" } },
+      { ip: { contains: q } },
+    ];
+  }
+
+  const logs = await prisma.auditLog.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    include: { user: { select: { id: true, name: true, email: true } } },
+  });
+  res.json({ logs });
+});
+
+/** 액션 종류 빠른 목록 — 필터 드롭다운 채우기. */
+router.get("/audit/actions", requireSuperAdminStepUp, async (_req, res) => {
+  const rows = await prisma.$queryRawUnsafe<{ action: string; n: bigint }[]>(
+    `SELECT "action", COUNT(*)::bigint AS n FROM "AuditLog" GROUP BY "action" ORDER BY n DESC LIMIT 100`
+  );
+  res.json({ actions: rows.map((r) => ({ action: r.action, count: Number(r.n) })) });
+});
+
 /* ===== Soft Trash (휴지통) =====
  * Meeting / Document / Journal / Notice 의 deletedAt != null 항목을 30일 보관 후 영구 삭제.
  * 영구 삭제는 별도 cron 이 아니라 관리자가 명시적으로 비우게 — 사고 방지.
