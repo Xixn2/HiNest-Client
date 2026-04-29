@@ -129,6 +129,60 @@ router.get("/presence", async (_req, res) => {
   res.json({ users: result });
 });
 
+/** 단일 유저 상세 — 다른 사람 프로필 페이지에서 사용. 본인이 아니어도 조회 가능하지만
+ *  민감 정보(이메일/사번 등 HR 필드)는 ADMIN+ 가 아니면 가림. */
+router.get("/:id", async (req, res) => {
+  const me = (req as any).user;
+  const target = await prisma.user.findUnique({
+    where: { id: req.params.id },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      team: true,
+      position: true,
+      role: true,
+      avatarColor: true,
+      avatarUrl: true,
+      isDeveloper: true,
+      active: true,
+      employeeNo: true,
+      hireDate: true,
+      phone: true,
+      presenceStatus: true,
+      presenceMessage: true,
+      presenceUpdatedAt: true,
+      superAdmin: true,
+      createdAt: true,
+    },
+  });
+  if (!target) return res.status(404).json({ error: "not found" });
+  // 일반 유저에겐 superAdmin 존재 자체를 숨김 — 404 위장.
+  if (target.superAdmin && !me.superAdmin && me.id !== target.id) {
+    return res.status(404).json({ error: "not found" });
+  }
+  const isAdminOrSelf = me.role === "ADMIN" || me.role === "MANAGER" || me.id === target.id;
+  // 민감 HR 필드는 ADMIN/MANAGER 또는 본인에게만.
+  const masked = {
+    ...target,
+    employeeNo: isAdminOrSelf ? target.employeeNo : null,
+    hireDate: isAdminOrSelf ? target.hireDate : null,
+    phone: isAdminOrSelf ? target.phone : null,
+    email: isAdminOrSelf ? target.email : maskEmail(target.email),
+  };
+  // superAdmin 필드는 응답에서 제거 — 클라가 알 필요 없음.
+  delete (masked as any).superAdmin;
+  res.json({ user: masked });
+});
+
+function maskEmail(email: string): string {
+  // a***@domain.com — 디렉토리·검색 결과처럼 정체성은 살리되 정확한 ID 는 가림.
+  const [local, domain] = email.split("@");
+  if (!local || !domain) return email;
+  const head = local[0] ?? "";
+  return `${head}***@${domain}`;
+}
+
 // 팀 목록 — 60초 in-process 캐시. 팀 목록은 관리자가 유저를 편집할 때만 바뀜.
 let _teamsCache: { teams: string[]; exp: number } | null = null;
 

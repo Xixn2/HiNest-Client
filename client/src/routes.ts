@@ -23,6 +23,7 @@ export const loadMeetings = () => import("./pages/MeetingsPage");
 export const loadMeetingDetail = () => import("./pages/MeetingDetailPage");
 export const loadAccounts = () => import("./pages/ServiceAccountsPage");
 export const loadSnippets = () => import("./pages/SnippetsPage");
+export const loadUserProfile = () => import("./pages/UserProfilePage");
 export const loadAdmin = () => import("./pages/AdminPage");
 export const loadSuperAdmin = () => import("./pages/SuperAdminPage");
 
@@ -41,6 +42,7 @@ export const MeetingsPage = lazy(loadMeetings);
 export const MeetingDetailPage = lazy(loadMeetingDetail);
 export const ServiceAccountsPage = lazy(loadAccounts);
 export const SnippetsPage = lazy(loadSnippets);
+export const UserProfilePage = lazy(loadUserProfile);
 export const AdminPage = lazy(loadAdmin);
 export const SuperAdminPage = lazy(loadSuperAdmin);
 

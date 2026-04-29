@@ -5,6 +5,7 @@ import PageHeader from "../components/PageHeader";
 import { resolvePresence, type PresenceStatus, type WorkStatus } from "../lib/presence";
 import { alertAsync } from "../components/ConfirmHost";
 import { isDevAccount, DevBadge } from "../lib/devBadge";
+import { Link } from "react-router-dom";
 
 type DirectoryUser = {
   id: string;
@@ -318,7 +319,7 @@ function GridCard({
             </div>
             <PresenceDot u={u} size={12} ring={2} />
           </div>
-          <div className="min-w-0 flex-1">
+          <Link to={`/users/${u.id}`} className="min-w-0 flex-1 hover:opacity-80 transition">
             <div className="text-[15px] font-extrabold text-ink-900 tracking-tight truncate inline-flex items-center gap-1.5">
               {u.name}
               {isDevAccount(u) && <DevBadge />}
@@ -326,7 +327,7 @@ function GridCard({
             <div className="text-[12px] text-ink-600 truncate mt-0.5">
               {u.position ?? "—"}
             </div>
-          </div>
+          </Link>
           {u.team && <span className="chip-blue flex-shrink-0">{u.team}</span>}
         </div>
         <div className="text-[11px] text-ink-500 tabular truncate">{u.email}</div>
@@ -398,7 +399,7 @@ function ListRow({ u, onDM, divider, dmBusy }: { u: DirectoryUser; onDM: () => v
         </div>
         <PresenceDot u={u} size={12} ring={2} />
       </div>
-      <div className="min-w-0 flex-1 md:w-[28%] md:flex-initial">
+      <Link to={`/users/${u.id}`} className="min-w-0 flex-1 md:w-[28%] md:flex-initial hover:opacity-80 transition">
         <div className="flex items-center gap-1.5">
           <div className="text-[14px] font-extrabold text-ink-900 truncate tracking-tight inline-flex items-center gap-1.5">
             {u.name}
@@ -407,7 +408,7 @@ function ListRow({ u, onDM, divider, dmBusy }: { u: DirectoryUser; onDM: () => v
           <PresenceBadge u={u} />
         </div>
         <div className="text-[11px] text-ink-500 tabular truncate">{u.email}</div>
-      </div>
+      </Link>
       <div className="hidden md:block md:w-[14%]">
         <div className="text-[12px] font-semibold text-ink-800">{u.position ?? "—"}</div>
       </div>

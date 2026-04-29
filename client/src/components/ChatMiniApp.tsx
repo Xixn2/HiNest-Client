@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { useNotifications } from "../notifications";
@@ -1899,6 +1900,13 @@ function RoomView({
   const slashRef = useRef<SnippetSlashHandle | null>(null);
   const [reactingId, setReactingId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const nav = useNavigate();
+  // 채팅 메시지의 발신자 이름·아바타 클릭 → 사용자 프로필 페이지로. 채팅 팝업은 닫고 이동.
+  function openProfile(userId: string) {
+    if (!userId) return;
+    window.dispatchEvent(new CustomEvent("chat:close"));
+    nav(`/users/${userId}`);
+  }
   const prevCountRef = useRef(0);
   const stuckToBottomRef = useRef(true);
 
@@ -2117,14 +2125,22 @@ function RoomView({
                         (p?.workStatus ?? null) as any,
                       );
                       return (
-                        <Avatar
-                          name={m.sender.name}
-                          color={m.sender.avatarColor ?? C.blue}
-                          imageUrl={m.sender.avatarUrl ?? null}
-                          size={26}
-                          presenceColor={info.color}
-                          presenceTitle={info.label + (p?.presenceMessage ? ` · ${p.presenceMessage}` : "")}
-                        />
+                        <button
+                          type="button"
+                          onClick={() => openProfile(m.sender.id)}
+                          style={{ background: "transparent", border: 0, padding: 0, cursor: "pointer", flexShrink: 0 }}
+                          title="프로필 보기"
+                          aria-label={`${m.sender.name} 프로필 보기`}
+                        >
+                          <Avatar
+                            name={m.sender.name}
+                            color={m.sender.avatarColor ?? C.blue}
+                            imageUrl={m.sender.avatarUrl ?? null}
+                            size={26}
+                            presenceColor={info.color}
+                            presenceTitle={info.label + (p?.presenceMessage ? ` · ${p.presenceMessage}` : "")}
+                          />
+                        </button>
                       );
                     })()
                   ) : !mine ? (
@@ -2132,10 +2148,21 @@ function RoomView({
                   ) : null}
                   <div style={{ minWidth: 0, flex: "0 1 auto", position: "relative" }}>
                     {!mine && m.showMeta && (
-                      <div style={{ fontSize: 11.5, fontWeight: 600, color: C.gray600, marginLeft: 4, marginBottom: 3, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                        {m.sender.name}
+                      <button
+                        type="button"
+                        onClick={() => openProfile(m.sender.id)}
+                        style={{
+                          fontSize: 11.5, fontWeight: 600, color: C.gray600,
+                          marginLeft: 4, marginBottom: 3,
+                          display: "inline-flex", alignItems: "center", gap: 4,
+                          background: "transparent", border: 0, padding: 0, cursor: "pointer",
+                          fontFamily: "inherit",
+                        }}
+                        title="프로필 보기"
+                      >
+                        <span style={{ textDecoration: "none" }}>{m.sender.name}</span>
                         {isDevAccount(m.sender) && <DevBadge />}
-                      </div>
+                      </button>
                     )}
                     <div
                       style={{
