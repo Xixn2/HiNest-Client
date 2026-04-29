@@ -38,7 +38,7 @@ import { folderShareLinkAuthedRouter } from "./routes/folderShareLink.js";
 import serviceAccountRouter from "./routes/serviceAccount.js";
 import path from "node:path";
 import mime from "mime-types";
-import { installConsoleHook, pushHttpLog } from "./lib/logBuffer.js";
+import { installConsoleHook, pushHttpLog, pushErrorEvent } from "./lib/logBuffer.js";
 
 // 콘솔 로그를 인메모리 버퍼에도 적재 — 총관리자 \"서버 로그\" 탭에서 조회.
 // 반드시 다른 import 가 끝난 뒤(이 시점), 첫 console.log 이전에 호출.
@@ -301,12 +301,28 @@ function sanitizeDownloadName(s: string): string {
   return s.replace(/[\r\n"]/g, "").slice(0, 255);
 }
 
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);
   const status = typeof err.status === "number" ? err.status : 500;
   // 500 계열 예상치 못한 에러는 내부 메시지 유출 방지 — DB/Prisma 오류가 그대로 나가지 않도록.
   // 4xx 는 우리가 직접 throw 한 의도된 에러라 message 노출 허용.
   const msg = status < 500 ? (err.message ?? "bad request") : "서버 오류가 발생했습니다";
+  // 에러 대시보드용 이벤트 적재 — 5xx 만. 4xx 는 사용자 입력 오류라 분리.
+  if (status >= 500) {
+    try {
+      pushErrorEvent({
+        ts: Date.now(),
+        status,
+        method: req.method,
+        path: req.path,
+        message: String(err?.message ?? err ?? "Unknown"),
+        stack: String(err?.stack ?? ""),
+        userId: (req as any).user?.id ?? null,
+        ua: (req.headers["user-agent"] || "").slice(0, 200) || null,
+        ip: req.ip ?? null,
+      });
+    } catch { /* 로깅 실패가 응답을 막지 않게 */ }
+  }
   res.status(status).json({ error: msg });
 });
 

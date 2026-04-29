@@ -4,6 +4,7 @@ import { api } from "../api";
 import PageHeader from "../components/PageHeader";
 import SuperStepUpGate from "../components/SuperStepUpGate";
 import SessionsPanel from "../components/superadmin/SessionsPanel";
+import ErrorsPanel from "../components/superadmin/ErrorsPanel";
 
 type Log = {
   id: string;
@@ -39,7 +40,7 @@ type Message = {
   sender: { id: string; name: string; avatarColor: string; avatarUrl?: string | null };
 };
 
-type Tab = "logs" | "chat" | "api" | "console" | "server" | "nav" | "sessions";
+type Tab = "logs" | "chat" | "api" | "console" | "server" | "nav" | "sessions" | "errors";
 
 type ApiSpecRoute = {
   method: string;
@@ -102,6 +103,7 @@ function SuperAdminContent() {
     : raw === "server" ? "server"
     : raw === "nav" ? "nav"
     : raw === "sessions" ? "sessions"
+    : raw === "errors" ? "errors"
     : "logs";
 
   const setTab = (t: Tab) => {
@@ -171,6 +173,7 @@ function SuperAdminContent() {
         <TabBtn active={tab === "server"} onClick={() => setTab("server")}>서버 로그</TabBtn>
         <TabBtn active={tab === "nav"} onClick={() => setTab("nav")}>메뉴 관리</TabBtn>
         <TabBtn active={tab === "sessions"} onClick={() => setTab("sessions")}>세션</TabBtn>
+        <TabBtn active={tab === "errors"} onClick={() => setTab("errors")}>에러</TabBtn>
       </div>
       {tab === "logs" && <LogsPanel />}
       {tab === "chat" && chatUnlocked && <ChatAuditPanel />}
@@ -179,6 +182,7 @@ function SuperAdminContent() {
       {tab === "server" && <ServerLogsPanel />}
       {tab === "nav" && <NavVisibilityPanel />}
       {tab === "sessions" && <SessionsPanel />}
+      {tab === "errors" && <ErrorsPanel />}
       {chatPwOpen && (
         <ChatAuditPwModal
           onClose={() => setChatPwOpen(false)}

@@ -41,6 +41,93 @@ export function pushHttpLog(line: string) {
   pushEntry("http", line);
 }
 
+/* ===== 에러 이벤트 (Sentry-lite) =====
+ * 5xx 응답을 잡아 stack hash 기준으로 그루핑. 중복 스택은 카운터·last_seen 만 갱신.
+ * 인메모리 — 프로세스 재시작 시 초기화. 외부 Sentry 가 진짜 답이지만, 사내툴 규모엔 이걸로 충분.
+ */
+export type ErrorEvent = {
+  ts: number;
+  status: number;
+  method: string;
+  path: string;
+  message: string;
+  stack: string;
+  userId: string | null;
+  ua: string | null;
+  ip: string | null;
+};
+
+export type ErrorGroup = {
+  hash: string;
+  message: string;
+  topFrame: string;
+  count: number;
+  firstSeen: number;
+  lastSeen: number;
+  paths: string[];
+  userIds: string[];
+  recent: ErrorEvent[];
+};
+
+const MAX_EVENTS = 4000;
+const events: ErrorEvent[] = [];
+const groups = new Map<string, ErrorGroup>();
+
+/** 에러 메시지 + 첫 스택 프레임으로 8자 hash. 동일 에러는 같은 그룹. */
+function hashKey(message: string, stack: string): { hash: string; topFrame: string } {
+  const top = (stack.split("\n").find((l) => l.trim().startsWith("at ")) ?? "").trim();
+  const seed = `${message}|${top}`;
+  // 단순 djb2 — 충돌은 무시할 수준이고 의존성 없음.
+  let h = 5381;
+  for (let i = 0; i < seed.length; i++) h = ((h << 5) + h) ^ seed.charCodeAt(i);
+  return { hash: (h >>> 0).toString(16).slice(0, 8), topFrame: top };
+}
+
+export function pushErrorEvent(ev: ErrorEvent) {
+  events.push(ev);
+  if (events.length > MAX_EVENTS) events.splice(0, events.length - MAX_EVENTS);
+
+  const { hash, topFrame } = hashKey(ev.message, ev.stack);
+  const g = groups.get(hash);
+  if (g) {
+    g.count++;
+    g.lastSeen = ev.ts;
+    if (!g.paths.includes(ev.path) && g.paths.length < 20) g.paths.push(ev.path);
+    if (ev.userId && !g.userIds.includes(ev.userId) && g.userIds.length < 50) g.userIds.push(ev.userId);
+    g.recent.unshift(ev);
+    if (g.recent.length > 10) g.recent.pop();
+  } else {
+    groups.set(hash, {
+      hash,
+      message: ev.message.slice(0, 300),
+      topFrame: topFrame.slice(0, 240),
+      count: 1,
+      firstSeen: ev.ts,
+      lastSeen: ev.ts,
+      paths: [ev.path],
+      userIds: ev.userId ? [ev.userId] : [],
+      recent: [ev],
+    });
+  }
+}
+
+export function getErrorGroups(opts: { userId?: string; sinceMs?: number } = {}): ErrorGroup[] {
+  const since = opts.sinceMs ? Date.now() - opts.sinceMs : 0;
+  let arr = Array.from(groups.values());
+  if (since) arr = arr.filter((g) => g.lastSeen >= since);
+  if (opts.userId) arr = arr.filter((g) => g.userIds.includes(opts.userId!));
+  return arr.sort((a, b) => b.lastSeen - a.lastSeen);
+}
+
+export function getErrorGroup(hash: string): ErrorGroup | null {
+  return groups.get(hash) ?? null;
+}
+
+export function clearErrorGroups() {
+  groups.clear();
+  events.length = 0;
+}
+
 let installed = false;
 
 /** 한 번만 호출 — console 메서드를 가로채 버퍼에 동기화 적재.
