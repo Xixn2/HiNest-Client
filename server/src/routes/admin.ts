@@ -1291,6 +1291,51 @@ router.delete("/feature-flags/:key", requireSuperAdminStepUp, async (req, res) =
   res.json({ ok: true });
 });
 
+/* ===== API Tokens =====
+ * 평문은 발급 시 1번만 노출. 검증은 sha256(input) === stored hash.
+ * Bearer 토큰 미들웨어는 별도 (lib/apiTokenAuth.ts).
+ */
+router.get("/api-tokens", requireSuperAdminStepUp, async (_req, res) => {
+  const rows = await prisma.apiToken.findMany({ orderBy: { createdAt: "desc" } });
+  res.json({ tokens: rows.map((t) => ({ ...t, hash: undefined })) });
+});
+
+router.post("/api-tokens", requireSuperAdminStepUp, async (req, res) => {
+  const me = (req as any).user;
+  const { name, scopes, expiresAt } = req.body ?? {};
+  if (typeof name !== "string" || name.length < 1 || name.length > 80) {
+    return res.status(400).json({ error: "이름은 1~80자" });
+  }
+  // 평문: hin_<32 hex>. base64 보다 hex 가 일부 시스템에서 깨지지 않음.
+  const raw = "hin_" + crypto.randomBytes(24).toString("hex"); // 4 + 48 = 52자
+  const hash = crypto.createHash("sha256").update(raw).digest("hex");
+  const prefix = raw.slice(0, 12);
+  const exp = expiresAt ? new Date(expiresAt) : null;
+  const row = await prisma.apiToken.create({
+    data: {
+      name,
+      hash,
+      prefix,
+      scopes: typeof scopes === "string" ? scopes : null,
+      createdById: me.id,
+      expiresAt: exp && !isNaN(exp.getTime()) ? exp : null,
+    },
+  });
+  await writeLog(me.id, "API_TOKEN_CREATE", row.id, `name=${name}`, req.ip);
+  // 평문은 응답에만 1번 노출 — 클라가 사용자에게 보여주고 닫히면 끝.
+  res.json({ token: { ...row, hash: undefined }, plaintext: raw });
+});
+
+router.delete("/api-tokens/:id", requireSuperAdminStepUp, async (req, res) => {
+  const me = (req as any).user;
+  await prisma.apiToken.update({
+    where: { id: req.params.id },
+    data: { revokedAt: new Date() },
+  });
+  await writeLog(me.id, "API_TOKEN_REVOKE", req.params.id, undefined, req.ip);
+  res.json({ ok: true });
+});
+
 /* ===== Audit Trail Viewer ===== */
 
 router.get("/audit", requireSuperAdminStepUp, async (req, res) => {

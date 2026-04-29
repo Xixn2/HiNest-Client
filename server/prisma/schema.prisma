@@ -907,6 +907,22 @@ model Snippet {
   @@index([trigger])
 }
 
+/// 외부 통합용 API 토큰 — Slack 봇 / n8n / 자동화 스크립트가 사용. 평문은 발급 시 1번만 표시.
+model ApiToken {
+  id          String    @id @default(cuid())
+  name        String
+  hash        String    @unique // sha256(plaintext)
+  prefix      String // "hin_xxxxxxxx" — 식별용 앞부분 (평문 X)
+  scopes      String? // 콤마 구분 ("read:users,read:meetings")
+  createdById String?
+  createdAt   DateTime  @default(now())
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+
+  @@index([revokedAt])
+}
+
 /// 기능 플래그 — 단일 키로 신기능을 on/off. 범위로 점진 배포 (전사 → 특정 role → 특정 유저).
 model FeatureFlag {
   key         String   @id // 예: "expense.export-csv", "chat.threads"
