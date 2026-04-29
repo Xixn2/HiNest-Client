@@ -1243,6 +1243,81 @@ router.patch("/users/:id/attendance", async (req, res) => {
  * 보안: super-stepup 필수, 1시간 자동 만료, 시작/종료 모두 audit 기록.
  * 모든 액션은 임퍼소네이팅 중에도 (req as any).realUser 로 진짜 사용자가 추적된다.
  */
+/* ===== Health-check Board ===== */
+
+router.get("/health", requireSuperAdminStepUp, async (_req, res) => {
+  const checks: Record<string, { ok: boolean; latencyMs?: number; detail?: string; meta?: any }> = {};
+
+  // DB ping
+  {
+    const t0 = Date.now();
+    try {
+      const r = await prisma.$queryRawUnsafe<any[]>("SELECT version() AS v, NOW() AS now");
+      checks.db = { ok: true, latencyMs: Date.now() - t0, meta: { version: r?.[0]?.v?.split(" ")[1] ?? "unknown", now: r?.[0]?.now } };
+    } catch (e: any) {
+      checks.db = { ok: false, latencyMs: Date.now() - t0, detail: String(e?.message ?? e) };
+    }
+  }
+
+  // 마이그레이션 상태
+  try {
+    const rows = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT migration_name, finished_at FROM "_prisma_migrations" ORDER BY finished_at DESC LIMIT 1`
+    );
+    const latest = rows?.[0];
+    checks.migrations = { ok: true, meta: { last: latest?.migration_name, at: latest?.finished_at } };
+  } catch (e: any) {
+    checks.migrations = { ok: false, detail: String(e?.message ?? e) };
+  }
+
+  // S3
+  {
+    const region = process.env.AWS_REGION?.trim();
+    const bucket = process.env.S3_BUCKET?.trim();
+    if (!region || !bucket) {
+      checks.s3 = { ok: false, detail: "S3_BUCKET / AWS_REGION 미설정" };
+    } else {
+      const t0 = Date.now();
+      try {
+        const { S3Client, HeadBucketCommand } = await import("@aws-sdk/client-s3");
+        const c = new S3Client({ region });
+        await c.send(new HeadBucketCommand({ Bucket: bucket }));
+        checks.s3 = { ok: true, latencyMs: Date.now() - t0, meta: { region, bucket } };
+      } catch (e: any) {
+        checks.s3 = { ok: false, latencyMs: Date.now() - t0, detail: String(e?.message ?? e) };
+      }
+    }
+  }
+
+  // 프로세스 정보
+  const mem = process.memoryUsage();
+  checks.process = {
+    ok: true,
+    meta: {
+      pid: process.pid,
+      uptimeSec: Math.round(process.uptime()),
+      nodeVersion: process.version,
+      rssMB: Math.round(mem.rss / 1024 / 1024),
+      heapUsedMB: Math.round(mem.heapUsed / 1024 / 1024),
+      heapTotalMB: Math.round(mem.heapTotal / 1024 / 1024),
+      env: process.env.NODE_ENV ?? "unknown",
+    },
+  };
+
+  // 환경변수 존재 여부 (값은 노출 X) — 누락된 키 빠르게 발견.
+  const KEYS = [
+    "JWT_SECRET", "DATABASE_URL", "AWS_REGION", "S3_BUCKET",
+    "CHAT_AUDIT_PW", "OPENAI_API_KEY", "SES_FROM",
+  ];
+  checks.env = {
+    ok: true,
+    meta: Object.fromEntries(KEYS.map((k) => [k, !!process.env[k]?.trim()])),
+  };
+
+  const allOk = Object.values(checks).every((c) => c.ok);
+  res.json({ ok: allOk, ts: Date.now(), checks });
+});
+
 /* ===== Error Dashboard (5xx grouping) ===== */
 
 router.get("/errors", requireSuperAdminStepUp, async (req, res) => {
