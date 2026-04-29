@@ -192,6 +192,11 @@ app.use((req, res, next) => {
 // 내부 인프라 정보(스토리지 백엔드/버킷명)는 외부에 노출하지 않음
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
+// IP 차단 / 동적 rate-limit 룰 — 정적 limiter 보다 먼저 적용. (DB 룰 60s 캐시)
+import { ipBlockMiddleware, rateLimitMiddleware } from "./lib/securityRules.js";
+app.use("/api", ipBlockMiddleware);
+app.use("/api", rateLimitMiddleware);
+
 // 전역 API 레이트 리밋 — 라우트별 특수 limiter 는 그 뒤에 추가로 씌운다.
 // (login/upload 는 더 엄격한 limiter 가 먼저 적용됨)
 app.use("/api", apiLimiter);

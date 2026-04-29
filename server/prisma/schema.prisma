@@ -907,6 +907,32 @@ model Snippet {
   @@index([trigger])
 }
 
+/// 라우트별 Rate-limit 룰 — 60s 캐시로 평가.
+model RateLimitRule {
+  id        String   @id @default(cuid())
+  routeGlob String // "/api/auth/*" 등 (간단 wildcard 만 지원)
+  perMin    Int      @default(60)
+  perHour   Int      @default(600)
+  scope     String   @default("ip") // ip | user | global
+  enabled   Boolean  @default(true)
+  note      String?
+  createdAt DateTime @default(now())
+}
+
+/// IP / 국가 차단 — 조기 미들웨어에서 즉시 403.
+model IpBlock {
+  id          String    @id @default(cuid())
+  cidr        String // "1.2.3.4/32" 또는 "10.0.0.0/8"
+  country     String? // ISO-2. set 시 Cloudflare cf-ipcountry 헤더 매칭
+  reason      String?
+  enabled     Boolean   @default(true)
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  createdById String?
+
+  @@index([enabled])
+}
+
 /// 외부 통합용 API 토큰 — Slack 봇 / n8n / 자동화 스크립트가 사용. 평문은 발급 시 1번만 표시.
 model ApiToken {
   id          String    @id @default(cuid())

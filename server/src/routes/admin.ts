@@ -1291,6 +1291,69 @@ router.delete("/feature-flags/:key", requireSuperAdminStepUp, async (req, res) =
   res.json({ ok: true });
 });
 
+/* ===== Rate-limit Rules + IP Blocks ===== */
+import { evictSecurityCache } from "../lib/securityRules.js";
+
+router.get("/rate-rules", requireSuperAdminStepUp, async (_req, res) => {
+  res.json({ rules: await prisma.rateLimitRule.findMany({ orderBy: { createdAt: "desc" } }) });
+});
+router.post("/rate-rules", requireSuperAdminStepUp, async (req, res) => {
+  const me = (req as any).user;
+  const { id, routeGlob, perMin, perHour, scope, enabled, note } = req.body ?? {};
+  if (typeof routeGlob !== "string" || routeGlob.length < 2) return res.status(400).json({ error: "routeGlob 필수" });
+  const data = {
+    routeGlob,
+    perMin: Number(perMin) || 60,
+    perHour: Number(perHour) || 600,
+    scope: ["ip", "user", "global"].includes(scope) ? scope : "ip",
+    enabled: !!enabled,
+    note: note ?? null,
+  };
+  const row = id
+    ? await prisma.rateLimitRule.update({ where: { id }, data })
+    : await prisma.rateLimitRule.create({ data });
+  evictSecurityCache();
+  await writeLog(me.id, "RATE_RULE_UPSERT", row.id, routeGlob, req.ip);
+  res.json({ rule: row });
+});
+router.delete("/rate-rules/:id", requireSuperAdminStepUp, async (req, res) => {
+  await prisma.rateLimitRule.delete({ where: { id: req.params.id } });
+  evictSecurityCache();
+  await writeLog((req as any).user.id, "RATE_RULE_DELETE", req.params.id, undefined, req.ip);
+  res.json({ ok: true });
+});
+
+router.get("/ip-blocks", requireSuperAdminStepUp, async (_req, res) => {
+  res.json({ blocks: await prisma.ipBlock.findMany({ orderBy: { createdAt: "desc" } }) });
+});
+router.post("/ip-blocks", requireSuperAdminStepUp, async (req, res) => {
+  const me = (req as any).user;
+  const { id, cidr, country, reason, enabled, expiresAt } = req.body ?? {};
+  if ((!cidr && !country) || (cidr && country)) {
+    return res.status(400).json({ error: "cidr 또는 country 중 하나만 지정" });
+  }
+  const data = {
+    cidr: cidr ?? "",
+    country: country?.toUpperCase() ?? null,
+    reason: reason ?? null,
+    enabled: !!enabled,
+    expiresAt: expiresAt ? new Date(expiresAt) : null,
+    createdById: me.id,
+  };
+  const row = id
+    ? await prisma.ipBlock.update({ where: { id }, data })
+    : await prisma.ipBlock.create({ data });
+  evictSecurityCache();
+  await writeLog(me.id, "IP_BLOCK_UPSERT", row.id, cidr || `country:${country}`, req.ip);
+  res.json({ block: row });
+});
+router.delete("/ip-blocks/:id", requireSuperAdminStepUp, async (req, res) => {
+  await prisma.ipBlock.delete({ where: { id: req.params.id } });
+  evictSecurityCache();
+  await writeLog((req as any).user.id, "IP_BLOCK_DELETE", req.params.id, undefined, req.ip);
+  res.json({ ok: true });
+});
+
 /* ===== API Tokens =====
  * 평문은 발급 시 1번만 노출. 검증은 sha256(input) === stored hash.
  * Bearer 토큰 미들웨어는 별도 (lib/apiTokenAuth.ts).
