@@ -377,29 +377,35 @@ model Attendance {
 }
 
 model Journal {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  date      String // YYYY-MM-DD
-  title     String
-  content   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date        String // YYYY-MM-DD
+  title       String
+  content     String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  deletedById String?
 
   @@index([userId, date(sort: Desc)])
+  @@index([deletedAt])
 }
 
 model Notice {
-  id        String           @id @default(cuid())
-  title     String
-  content   String
-  pinned    Boolean          @default(false)
-  authorId  String
-  author    User             @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  createdAt DateTime         @default(now())
-  reactions NoticeReaction[]
+  id          String           @id @default(cuid())
+  title       String
+  content     String
+  pinned      Boolean          @default(false)
+  authorId    String
+  author      User             @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt   DateTime         @default(now())
+  deletedAt   DateTime?
+  deletedById String?
+  reactions   NoticeReaction[]
 
   @@index([pinned(sort: Desc), createdAt(sort: Desc)])
+  @@index([deletedAt])
 }
 
 /// 공지에 남긴 이모지 반응. (noticeId, userId, emoji) 유니크 — 같은 이모지 중복 반응 방지.
@@ -733,8 +739,11 @@ model Document {
   revisions    DocumentRevision[]
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
+  deletedAt    DateTime?
+  deletedById  String?
 
   @@index([projectId, updatedAt])
+  @@index([deletedAt])
 }
 
 model Approval {
@@ -796,20 +805,23 @@ model AuditLog {
 ///   SPECIFIC  선택된 개별 유저만 (viewers 릴레이션)
 /// 작성자는 무조건 조회·수정 가능. ADMIN 은 전역 열람.
 model Meeting {
-  id         String            @id @default(cuid())
-  title      String
+  id          String            @id @default(cuid())
+  title       String
   /// TipTap JSON document. HTML 이 아닌 구조화된 노드 트리.
-  content    Json
-  visibility String            @default("ALL") // ALL | PROJECT | SPECIFIC
-  projectId  String?
-  project    Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  authorId   String
-  author     User              @relation("MeetingAuthor", fields: [authorId], references: [id], onDelete: Cascade)
-  viewers    MeetingViewer[]
-  revisions  MeetingRevision[]
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
+  content     Json
+  visibility  String            @default("ALL") // ALL | PROJECT | SPECIFIC
+  projectId   String?
+  project     Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  authorId    String
+  author      User              @relation("MeetingAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  viewers     MeetingViewer[]
+  revisions   MeetingRevision[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  deletedAt   DateTime?
+  deletedById String?
 
+  @@index([deletedAt])
   @@index([authorId, createdAt])
   @@index([projectId, createdAt])
 }

@@ -25,7 +25,7 @@ router.get("/", async (req, res) => {
   if (userId !== u.id && u.role === "MEMBER")
     return res.status(403).json({ error: "forbidden" });
   const list = await prisma.journal.findMany({
-    where: { userId },
+    where: { userId, deletedAt: null },
     orderBy: { date: "desc" },
     take: 500,
     include: { user: { select: { name: true } } },
@@ -49,7 +49,7 @@ router.patch("/:id", async (req, res) => {
   const parsed = patchSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid input" });
   const u = (req as any).user;
-  const j = await prisma.journal.findUnique({ where: { id: req.params.id } });
+  const j = await prisma.journal.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!j) return res.status(404).json({ error: "not found" });
   if (j.userId !== u.id) return res.status(403).json({ error: "forbidden" });
   const updated = await prisma.journal.update({
@@ -62,11 +62,11 @@ router.patch("/:id", async (req, res) => {
 
 router.delete("/:id", async (req, res) => {
   const u = (req as any).user;
-  const j = await prisma.journal.findUnique({ where: { id: req.params.id } });
+  const j = await prisma.journal.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!j) return res.status(404).json({ error: "not found" });
   if (j.userId !== u.id && u.role !== "ADMIN")
     return res.status(403).json({ error: "forbidden" });
-  await prisma.journal.delete({ where: { id: j.id } });
+  await prisma.journal.update({ where: { id: j.id }, data: { deletedAt: new Date(), deletedById: (req as any).user?.id } });
   await writeLog(u.id, "JOURNAL_DELETE", j.id);
   res.json({ ok: true });
 });

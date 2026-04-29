@@ -31,8 +31,8 @@ const createSchema = z.object({
 });
 
 async function canShareDocument(u: { id: string; role: string }, documentId: string) {
-  const doc = await prisma.document.findUnique({
-    where: { id: documentId },
+  const doc = await prisma.document.findFirst({
+    where: { id: documentId, deletedAt: null },
     select: { id: true, authorId: true, projectId: true, fileUrl: true, fileName: true, title: true },
   });
   if (!doc) return null;

@@ -1243,6 +1243,88 @@ router.patch("/users/:id/attendance", async (req, res) => {
  * 보안: super-stepup 필수, 1시간 자동 만료, 시작/종료 모두 audit 기록.
  * 모든 액션은 임퍼소네이팅 중에도 (req as any).realUser 로 진짜 사용자가 추적된다.
  */
+/* ===== Soft Trash (휴지통) =====
+ * Meeting / Document / Journal / Notice 의 deletedAt != null 항목을 30일 보관 후 영구 삭제.
+ * 영구 삭제는 별도 cron 이 아니라 관리자가 명시적으로 비우게 — 사고 방지.
+ */
+const TRASH_TYPES = ["meeting", "document", "journal", "notice"] as const;
+type TrashType = typeof TRASH_TYPES[number];
+function trashModel(t: TrashType) {
+  return ({ meeting: prisma.meeting, document: prisma.document, journal: prisma.journal, notice: prisma.notice } as const)[t];
+}
+
+router.get("/trash", requireSuperAdminStepUp, async (_req, res) => {
+  const include = { deletedBy: false }; // we resolve names below
+  void include;
+  const [meetings, documents, journals, notices] = await Promise.all([
+    prisma.meeting.findMany({
+      where: { deletedAt: { not: null } },
+      orderBy: { deletedAt: "desc" },
+      take: 200,
+      select: { id: true, title: true, deletedAt: true, deletedById: true, authorId: true, author: { select: { name: true } } },
+    }),
+    prisma.document.findMany({
+      where: { deletedAt: { not: null } },
+      orderBy: { deletedAt: "desc" },
+      take: 200,
+      select: { id: true, title: true, deletedAt: true, deletedById: true, authorId: true, author: { select: { name: true } } },
+    }),
+    prisma.journal.findMany({
+      where: { deletedAt: { not: null } },
+      orderBy: { deletedAt: "desc" },
+      take: 200,
+      select: { id: true, title: true, deletedAt: true, deletedById: true, userId: true, user: { select: { name: true } } },
+    }),
+    prisma.notice.findMany({
+      where: { deletedAt: { not: null } },
+      orderBy: { deletedAt: "desc" },
+      take: 200,
+      select: { id: true, title: true, deletedAt: true, deletedById: true, authorId: true, author: { select: { name: true } } },
+    }),
+  ]);
+  res.json({
+    meeting: meetings,
+    document: documents,
+    journal: journals.map((j) => ({ ...j, authorId: j.userId, author: j.user })),
+    notice: notices,
+  });
+});
+
+router.post("/trash/:type/:id/restore", requireSuperAdminStepUp, async (req, res) => {
+  const t = req.params.type as TrashType;
+  if (!TRASH_TYPES.includes(t)) return res.status(400).json({ error: "invalid type" });
+  const me = (req as any).user;
+  await (trashModel(t) as any).update({
+    where: { id: req.params.id },
+    data: { deletedAt: null, deletedById: null },
+  });
+  await writeLog(me.id, "TRASH_RESTORE", `${t}:${req.params.id}`, undefined, req.ip);
+  res.json({ ok: true });
+});
+
+router.delete("/trash/:type/:id", requireSuperAdminStepUp, async (req, res) => {
+  const t = req.params.type as TrashType;
+  if (!TRASH_TYPES.includes(t)) return res.status(400).json({ error: "invalid type" });
+  const me = (req as any).user;
+  await (trashModel(t) as any).delete({ where: { id: req.params.id } });
+  await writeLog(me.id, "TRASH_PURGE", `${t}:${req.params.id}`, undefined, req.ip);
+  res.json({ ok: true });
+});
+
+/** 30일 초과 휴지통 항목 일괄 영구 삭제. */
+router.post("/trash/purge-old", requireSuperAdminStepUp, async (req, res) => {
+  const me = (req as any).user;
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const [m, d, j, n] = await Promise.all([
+    prisma.meeting.deleteMany({ where: { deletedAt: { lt: cutoff } } }),
+    prisma.document.deleteMany({ where: { deletedAt: { lt: cutoff } } }),
+    prisma.journal.deleteMany({ where: { deletedAt: { lt: cutoff } } }),
+    prisma.notice.deleteMany({ where: { deletedAt: { lt: cutoff } } }),
+  ]);
+  await writeLog(me.id, "TRASH_PURGE_OLD", undefined, `m=${m.count} d=${d.count} j=${j.count} n=${n.count}`, req.ip);
+  res.json({ ok: true, counts: { meeting: m.count, document: d.count, journal: j.count, notice: n.count } });
+});
+
 /* ===== Health-check Board ===== */
 
 router.get("/health", requireSuperAdminStepUp, async (_req, res) => {

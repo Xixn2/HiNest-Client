@@ -98,6 +98,7 @@ router.get("/", async (req, res) => {
     }),
     prisma.notice.findMany({
       where: {
+        deletedAt: null,
         OR: [{ title: ic }, { content: ic }],
       },
       take: 8,
@@ -117,6 +118,7 @@ router.get("/", async (req, res) => {
     prisma.document.findMany({
       where: {
         AND: [
+          { deletedAt: null },
           { OR: [{ title: ic }, { description: ic }, { tags: ic }] },
           { OR: docScopeOr },
         ],
@@ -143,7 +145,7 @@ router.get("/", async (req, res) => {
     // 회의록 — 제목으로만 매칭 (content 는 JSONB 라 단순 LIKE 가 안 되고 비용도 큼).
     prisma.meeting.findMany({
       where: {
-        AND: [{ title: ic }, meetingWhere],
+        AND: [{ deletedAt: null }, { title: ic }, meetingWhere],
       },
       take: 8,
       orderBy: { updatedAt: "desc" },

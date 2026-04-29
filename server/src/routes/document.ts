@@ -392,7 +392,7 @@ router.get("/", async (req, res) => {
     if (!(await assertProjectMember(u, projectId))) {
       return res.status(403).json({ error: "해당 프로젝트에 접근 권한이 없습니다" });
     }
-    const ands: any[] = [{ projectId }];
+    const ands: any[] = [{ projectId }, { deletedAt: null }];
     if (folderId === "root") ands.push({ folderId: null });
     else if (folderId) ands.push({ folderId });
     if (q) ands.push({
@@ -417,7 +417,7 @@ router.get("/", async (req, res) => {
   }
 
   // 전역 문서 — 프로젝트 문서는 숨김.
-  const ands: any[] = [visibilityWhere(u), { projectId: null }];
+  const ands: any[] = [visibilityWhere(u), { projectId: null }, { deletedAt: null }];
   if (folderId === "root") ands.push({ folderId: null });
   else if (folderId) ands.push({ folderId });
   if (q) ands.push({
@@ -503,7 +503,7 @@ router.patch("/:id", async (req, res) => {
   const parsed = docSchema.partial().safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid input" });
   const u = (req as any).user;
-  const exist = await prisma.document.findUnique({ where: { id: req.params.id } });
+  const exist = await prisma.document.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!exist) return res.status(404).json({ error: "not found" });
   // 작성자 본인 or ADMIN or (프로젝트 문서라면 프로젝트 멤버) 만 수정.
   // 다만 scope/scopeTeam/scopeUserIds/projectId 처럼 **가시성에 영향을 주는 필드는**
@@ -598,7 +598,7 @@ router.patch("/:id", async (req, res) => {
  */
 router.get("/:id/revisions", async (req, res) => {
   const u = (req as any).user;
-  const exist = await prisma.document.findUnique({ where: { id: req.params.id } });
+  const exist = await prisma.document.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!exist) return res.status(404).json({ error: "not found" });
   const isAuthor = exist.authorId === u.id;
   const isAdmin = u.role === "ADMIN";
@@ -616,7 +616,7 @@ router.get("/:id/revisions", async (req, res) => {
 /** 특정 리비전으로 문서를 되돌림. 되돌리기 직전 값도 한 번 더 스냅샷 → 되돌리기 취소 가능. */
 router.post("/:id/revisions/:revId/restore", async (req, res) => {
   const u = (req as any).user;
-  const exist = await prisma.document.findUnique({ where: { id: req.params.id } });
+  const exist = await prisma.document.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!exist) return res.status(404).json({ error: "not found" });
   const isAuthor = exist.authorId === u.id;
   const isAdmin = u.role === "ADMIN";
@@ -654,7 +654,7 @@ router.post("/:id/revisions/:revId/restore", async (req, res) => {
 
 router.delete("/:id", async (req, res) => {
   const u = (req as any).user;
-  const exist = await prisma.document.findUnique({ where: { id: req.params.id } });
+  const exist = await prisma.document.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!exist) return res.status(404).json({ error: "not found" });
   const isAuthor = exist.authorId === u.id;
   const isAdmin = u.role === "ADMIN";
@@ -663,7 +663,7 @@ router.delete("/:id", async (req, res) => {
     : false;
   if (!isAuthor && !isAdmin && !isProjectMember)
     return res.status(403).json({ error: "forbidden" });
-  await prisma.document.delete({ where: { id: exist.id } });
+  await prisma.document.update({ where: { id: exist.id }, data: { deletedAt: new Date(), deletedById: (req as any).user?.id } });
   await writeLog(u.id, "DOC_DELETE", req.params.id);
   res.json({ ok: true });
 });
@@ -715,7 +715,7 @@ router.get("/folders/:id/download", async (req, res) => {
   const collected: Collected[] = [];
   async function walk(folderId: string, prefix: string) {
     const docs = await prisma.document.findMany({
-      where: { folderId, fileUrl: { not: null } },
+      where: { folderId, fileUrl: { not: null }, deletedAt: null },
       select: { fileUrl: true, fileName: true, title: true },
     });
     for (const d of docs) {
