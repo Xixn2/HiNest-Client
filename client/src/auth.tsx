@@ -18,8 +18,11 @@ export type User = {
   presenceUpdatedAt?: string | null;
 };
 
+export type Impersonator = { id: string; name: string };
+
 type Ctx = {
   user: User | null;
+  impersonator: Impersonator | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (data: { inviteKey: string; email: string; name: string; password: string }) => Promise<void>;
@@ -31,14 +34,17 @@ const AuthCtx = createContext<Ctx>({} as Ctx);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [impersonator, setImpersonator] = useState<Impersonator | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     try {
-      const res = await api<{ user: User }>("/api/me");
+      const res = await api<{ user: User; impersonator: Impersonator | null }>("/api/me");
       setUser(res.user);
+      setImpersonator(res.impersonator ?? null);
     } catch {
       setUser(null);
+      setImpersonator(null);
     } finally {
       setLoading(false);
     }
@@ -76,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthCtx.Provider value={{ user, loading, login, signup, logout, refresh }}>
+    <AuthCtx.Provider value={{ user, impersonator, loading, login, signup, logout, refresh }}>
       {children}
     </AuthCtx.Provider>
   );

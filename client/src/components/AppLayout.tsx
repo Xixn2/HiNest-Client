@@ -7,6 +7,7 @@ import Logo from "./Logo";
 import NotificationBell from "./NotificationBell";
 import SearchModal from "./SearchModal";
 import ChatFab from "./ChatFab";
+import ImpersonationBanner from "./ImpersonationBanner";
 import CreateProjectModal from "./CreateProjectModal";
 import { NotificationProvider, useNotifications } from "../notifications";
 import { PinsProvider, usePins, pinLinkUrl } from "../pins";
@@ -469,7 +470,9 @@ function AppLayoutInner() {
   const showTitlebarSpace = isMacDesktop && !isFullscreen;
 
   return (
-    <div className="h-screen flex bg-ink-50 overflow-hidden">
+    <div className="h-screen flex flex-col bg-ink-50 overflow-hidden">
+      <ImpersonationBanner />
+      <div className="flex flex-1 min-h-0">
       {/* 모바일 드로어 백드롭 — md 미만에서 열렸을 때만 보임 */}
       {mobileNavOpen && (
         <div
@@ -622,6 +625,7 @@ function AppLayoutInner() {
         </main>
       </div>
       <ChatFab />
+      </div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { requireAuth } from "../lib/auth.js";
+import { requireAuth, clearImpCookie, writeLog } from "../lib/auth.js";
 import { prisma } from "../lib/db.js";
 
 const router = Router();
@@ -10,7 +10,14 @@ router.get("/", requireAuth, async (req, res) => {
   // 매 화면 로드마다 호출되는 엔드포인트라 DB 왕복 1번 절약이 체감된다.
   const user = (req as any).userRecord;
   if (!user) return res.status(404).json({ error: "not found" });
+  // 임퍼소네이션 중이면 진짜 사용자 정보도 같이 — 클라이언트가 빨간 배너를 띄움.
+  const real = (req as any).realUser;
+  const impedById: string | null = (req as any).impersonatedById ?? null;
+  const impersonator = impedById && real
+    ? { id: real.id, name: real.name }
+    : null;
   res.json({
+    impersonator,
     user: {
       id: user.id,
       email: user.email,
@@ -53,6 +60,18 @@ router.patch("/presence", requireAuth, async (req, res) => {
     select: { presenceStatus: true, presenceMessage: true, presenceUpdatedAt: true },
   });
   res.json(updated);
+});
+
+/** 임퍼소네이션 종료 — 모든 인증 사용자에게 열어둠.
+ *  (관리자 권한 체크가 있으면 임퍼소네이션 중인 일반 유저가 빠져나올 수 없음.) */
+router.delete("/impersonate", requireAuth, async (req, res) => {
+  const real = (req as any).realUser;
+  const impedId = (req as any).impersonatedById;
+  clearImpCookie(res);
+  if (impedId && real?.id) {
+    await writeLog(real.id, "IMPERSONATE_END", (req as any).user?.id, undefined, req.ip);
+  }
+  res.json({ ok: true });
 });
 
 export default router;
