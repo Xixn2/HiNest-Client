@@ -9,7 +9,7 @@ import {
   signImpersonate, setImpCookie, clearImpCookie,
 } from "../lib/auth.js";
 import { todayStr } from "../lib/dates.js";
-import { getLogs, type LogLevel } from "../lib/logBuffer.js";
+import { getLogs, type LogLevel, getErrorGroups, getErrorGroup, clearErrorGroups } from "../lib/logBuffer.js";
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -1243,6 +1243,42 @@ router.patch("/users/:id/attendance", async (req, res) => {
  * 보안: super-stepup 필수, 1시간 자동 만료, 시작/종료 모두 audit 기록.
  * 모든 액션은 임퍼소네이팅 중에도 (req as any).realUser 로 진짜 사용자가 추적된다.
  */
+/* ===== Error Dashboard (5xx grouping) ===== */
+
+router.get("/errors", requireSuperAdminStepUp, async (req, res) => {
+  const userId = typeof req.query.userId === "string" ? req.query.userId : undefined;
+  const sinceMs = req.query.since === "1h" ? 60 * 60 * 1000
+    : req.query.since === "24h" ? 24 * 60 * 60 * 1000
+    : req.query.since === "7d" ? 7 * 24 * 60 * 60 * 1000
+    : undefined;
+  const groups = getErrorGroups({ userId, sinceMs });
+  // 사용자 이름 매핑은 클라가 따로 처리 — 여기선 ID 만.
+  res.json({
+    groups: groups.map((g) => ({
+      hash: g.hash,
+      message: g.message,
+      topFrame: g.topFrame,
+      count: g.count,
+      firstSeen: g.firstSeen,
+      lastSeen: g.lastSeen,
+      paths: g.paths,
+      userIds: g.userIds,
+    })),
+  });
+});
+
+router.get("/errors/:hash", requireSuperAdminStepUp, async (req, res) => {
+  const g = getErrorGroup(req.params.hash);
+  if (!g) return res.status(404).json({ error: "not found" });
+  res.json({ group: g });
+});
+
+router.delete("/errors", requireSuperAdminStepUp, async (req, res) => {
+  clearErrorGroups();
+  await writeLog((req as any).user?.id, "ERROR_DASHBOARD_CLEAR", undefined, undefined, req.ip);
+  res.json({ ok: true });
+});
+
 /* ===== Session Manager ===== */
 
 /** 활성 세션 목록. ?userId 로 특정 유저만, 기본은 전체 (최근 활동 순). */
