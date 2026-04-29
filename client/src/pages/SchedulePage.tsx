@@ -682,11 +682,11 @@ function EventModal({
   return (
     <div className="fixed inset-0 bg-ink-900/40 grid place-items-center p-4 z-50" onClick={onClose}>
       <div
-        className="panel w-full max-w-[640px] shadow-pop overflow-hidden"
+        className="panel w-full max-w-[640px] shadow-pop overflow-hidden max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 헤더 */}
-        <div className="flex items-center justify-between px-6 pt-6 pb-4">
+        <div className="flex items-center justify-between px-6 pt-6 pb-4 flex-shrink-0">
           <div className="flex items-center gap-2.5">
             <div
               className="w-9 h-9 rounded-lg grid place-items-center"
@@ -709,8 +709,8 @@ function EventModal({
           </button>
         </div>
 
-        <form onSubmit={onSubmit}>
-          <div className="px-6 pb-5 space-y-5">
+        <form onSubmit={onSubmit} className="flex-1 min-h-0 flex flex-col">
+          <div className="px-6 pb-5 space-y-5 flex-1 min-h-0 overflow-y-auto">
             {/* 제목 */}
             <div>
               <label className="field-label">제목</label>
@@ -996,7 +996,7 @@ function EventModal({
           </div>
 
           {/* 푸터 */}
-          <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-ink-150 bg-ink-25">
+          <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-ink-150 bg-ink-25 flex-shrink-0">
             <button type="button" className="btn-ghost" onClick={onClose} disabled={saving}>취소</button>
             <button className="btn-primary" disabled={saving}>{saving ? "추가 중…" : "일정 추가"}</button>
           </div>
