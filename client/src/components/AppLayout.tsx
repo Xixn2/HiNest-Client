@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
+import { useTheme } from "../theme";
 import { api } from "../api";
 import Logo from "./Logo";
 import NotificationBell from "./NotificationBell";
@@ -80,14 +81,21 @@ function RouteVisibilityGate({
 
 /** 비활성된 메뉴 진입 시 안내 — 풀 화면 그라데이션 + 자물쇠 일러스트. */
 function BlockedPage() {
+  // 라이트 — 차분한 슬레이트 그레이 (텍스트 흰색 유지하면서 너무 어둡지 않게)
+  // 다크 — 잉크 톤에 맞춘 더 깊은 검정 그라데이션 (서라운딩 surface 와 자연스럽게 이어짐)
+  const { resolved } = useTheme();
+  const isDark = resolved === "dark";
+  const bg = isDark
+    ? "radial-gradient(ellipse at top right, rgba(99,102,241,0.10) 0%, transparent 55%), radial-gradient(ellipse at bottom left, rgba(0,0,0,0.5) 0%, transparent 60%), linear-gradient(135deg, #14161B 0%, #0A0C10 100%)"
+    : "radial-gradient(ellipse at top right, rgba(99,102,241,0.16) 0%, transparent 55%), radial-gradient(ellipse at bottom left, rgba(15,23,42,0.5) 0%, transparent 60%), linear-gradient(135deg, #2C3340 0%, #1A1F2A 100%)";
   return (
     <div
       className="relative w-full overflow-hidden rounded-3xl"
       style={{
         minHeight: "min(78vh, 720px)",
-        background:
-          "radial-gradient(ellipse at top right, rgba(99,102,241,0.18) 0%, transparent 55%), radial-gradient(ellipse at bottom left, rgba(15,23,42,0.65) 0%, transparent 60%), linear-gradient(135deg, #1E293B 0%, #0F172A 100%)",
+        background: bg,
         color: "#fff",
+        border: isDark ? "1px solid rgba(255,255,255,0.06)" : "none",
       }}
     >
       {/* 큰 배경 자물쇠 — 시각적 hero */}
@@ -167,14 +175,21 @@ function BlockedPage() {
 
 /** \"개발 중\" 페이지 — 풀 화면 그라데이션 + 회전 톱니바퀴 + 펄스 도형. */
 function UnderConstructionPage({ isDeveloper }: { isDeveloper: boolean }) {
+  const { resolved } = useTheme();
+  const isDark = resolved === "dark";
+  // 라이트 — 비비드 브랜드 → 바이올렛 (현재 톤과 비슷하지만 약간 부드럽게)
+  // 다크 — 어두운 잉크 위에 브랜드 글로우만 살짝 — 다크 surrounding 과 자연스럽게 융합
+  const bg = isDark
+    ? "radial-gradient(ellipse at top, rgba(120,150,255,0.18) 0%, transparent 50%), radial-gradient(ellipse at bottom right, rgba(56,189,248,0.10) 0%, transparent 55%), linear-gradient(135deg, #1A1F2A 0%, #2A1F40 60%, #1F1530 100%)"
+    : "radial-gradient(ellipse at top, rgba(167,139,250,0.32) 0%, transparent 55%), radial-gradient(ellipse at bottom right, rgba(56,189,248,0.20) 0%, transparent 55%), linear-gradient(135deg, #3B5CF0 0%, #7C3AED 60%, #581C87 100%)";
   return (
     <div
       className="relative w-full overflow-hidden rounded-3xl"
       style={{
         minHeight: "min(78vh, 720px)",
-        background:
-          "radial-gradient(ellipse at top, rgba(167,139,250,0.28) 0%, transparent 55%), radial-gradient(ellipse at bottom right, rgba(56,189,248,0.18) 0%, transparent 55%), linear-gradient(135deg, #3B5CF0 0%, #7C3AED 60%, #581C87 100%)",
+        background: bg,
         color: "#fff",
+        border: isDark ? "1px solid rgba(255,255,255,0.06)" : "none",
       }}
     >
       <style>{`
