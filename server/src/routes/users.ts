@@ -11,11 +11,11 @@ router.use(requireAuth);
 
 router.get("/", async (req, res) => {
   const u = (req as any).user;
+  // 종전엔 superAdmin 계정을 다른 사람에게 숨겼지만, \"HiNest 개발자\" 딱지가 별도 정체성으로 자리잡아
+  // 더 이상 숨길 이유가 없음. 모든 활성 사용자를 노출하고 권한 표시는 칩으로.
+  void u;
   const users = await prisma.user.findMany({
-    where: {
-      active: true,
-      OR: [{ superAdmin: false }, { id: u.id }],
-    },
+    where: { active: true },
     orderBy: { name: "asc" },
     take: 5000,
     select: {
@@ -157,10 +157,8 @@ router.get("/:id", async (req, res) => {
     },
   });
   if (!target) return res.status(404).json({ error: "not found" });
-  // 일반 유저에겐 superAdmin 존재 자체를 숨김 — 404 위장.
-  if (target.superAdmin && !me.superAdmin && me.id !== target.id) {
-    return res.status(404).json({ error: "not found" });
-  }
+  // 종전엔 superAdmin 계정을 일반 유저에게 404 위장했으나 \"HiNest 개발자\" 가 별도 정체성으로
+  // 자리잡아 더 이상 숨길 이유가 없음. 누구든 프로필 페이지로 진입 가능.
   const isAdminOrSelf = me.role === "ADMIN" || me.role === "MANAGER" || me.id === target.id;
   // 민감 HR 필드는 ADMIN/MANAGER 또는 본인에게만.
   const masked = {
