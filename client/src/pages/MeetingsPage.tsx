@@ -296,21 +296,30 @@ function MeetingCard({ m, sortKey }: { m: MeetingRow; sortKey: SortKey }) {
             </div>
             <VisibilityBadge v={m.visibility} />
           </div>
-          <div className="flex items-center gap-2 mt-3 text-[11.5px] text-ink-500 flex-wrap">
-            <AuthorChip author={m.author} />
-            <span className="text-ink-300">·</span>
-            <span title={`${timeLabel}: ${new Date(timeIso).toLocaleString("ko-KR")}`}>
-              {formatRelative(timeIso)}
+          <div className="flex items-end justify-between gap-2 mt-3">
+            <div className="flex items-center gap-2 text-[11.5px] text-ink-500 flex-wrap min-w-0">
+              <AuthorChip author={m.author} />
+              <span className="text-ink-300">·</span>
+              <span title={`${timeLabel}: ${new Date(timeIso).toLocaleString("ko-KR")}`}>
+                {formatRelative(timeIso)}
+              </span>
+              {m.project && (
+                <>
+                  <span className="text-ink-300">·</span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: m.project.color }} />
+                    {m.project.name}
+                  </span>
+                </>
+              )}
+            </div>
+            {/* 우측 하단 — 마지막 수정 시간. 본문 내 시간 라벨이 \"작성\"일 땐 보완 정보, \"수정\"일 땐 같은 값이라 굳이 강조하지 않도록 톤다운. */}
+            <span
+              className="text-[10.5px] text-ink-400 flex-shrink-0 tabular-nums"
+              title={`마지막 수정: ${new Date(m.updatedAt).toLocaleString("ko-KR")}`}
+            >
+              수정 {formatRelative(m.updatedAt)}
             </span>
-            {m.project && (
-              <>
-                <span className="text-ink-300">·</span>
-                <span className="inline-flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: m.project.color }} />
-                  {m.project.name}
-                </span>
-              </>
-            )}
           </div>
         </div>
       </div>
