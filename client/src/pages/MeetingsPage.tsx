@@ -318,7 +318,7 @@ function MeetingCard({ m, sortKey }: { m: MeetingRow; sortKey: SortKey }) {
               className="text-[10.5px] text-ink-400 flex-shrink-0 tabular-nums"
               title={`마지막 수정: ${new Date(m.updatedAt).toLocaleString("ko-KR")}`}
             >
-              수정 {formatRelative(m.updatedAt)}
+              수정 {formatExactDateTime(m.updatedAt)}
             </span>
           </div>
         </div>
@@ -458,6 +458,17 @@ function dateGroupKey(iso: string): string {
   if (diffDays < 7) return `${diffDays}일 전`;
   if (diffDays < 30) return `${Math.floor(diffDays / 7)}주 전`;
   return d.toLocaleDateString("ko-KR", { year: "numeric", month: "long" });
+}
+
+/** 정확한 날짜+시간 — 우측 하단 \"수정\" 라벨용. 같은 해면 연도 생략. */
+function formatExactDateTime(iso: string): string {
+  const d = new Date(iso);
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  const datePart = d.toLocaleDateString("ko-KR", sameYear
+    ? { month: "numeric", day: "numeric" }
+    : { year: "numeric", month: "numeric", day: "numeric" });
+  const timePart = d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return `${datePart} ${timePart}`;
 }
 
 function formatRelative(iso: string): string {
