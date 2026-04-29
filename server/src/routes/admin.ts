@@ -1243,6 +1243,54 @@ router.patch("/users/:id/attendance", async (req, res) => {
  * 보안: super-stepup 필수, 1시간 자동 만료, 시작/종료 모두 audit 기록.
  * 모든 액션은 임퍼소네이팅 중에도 (req as any).realUser 로 진짜 사용자가 추적된다.
  */
+/* ===== Feature Flags CRUD ===== */
+import { evictFlagCache } from "../lib/featureFlags.js";
+
+router.get("/feature-flags", requireSuperAdminStepUp, async (_req, res) => {
+  const rows = await prisma.featureFlag.findMany({ orderBy: { key: "asc" } });
+  res.json({ flags: rows });
+});
+
+router.post("/feature-flags", requireSuperAdminStepUp, async (req, res) => {
+  const me = (req as any).user;
+  const { key, enabled, scope, targets, description } = req.body ?? {};
+  if (typeof key !== "string" || !key.match(/^[a-z][a-z0-9._-]{1,60}$/)) {
+    return res.status(400).json({ error: "key 는 소문자/숫자/._- 로만 (2~60자)" });
+  }
+  if (scope && !["GLOBAL", "ROLE", "USER", "TEAM"].includes(scope)) {
+    return res.status(400).json({ error: "invalid scope" });
+  }
+  const row = await prisma.featureFlag.upsert({
+    where: { key },
+    update: {
+      enabled: !!enabled,
+      scope: scope ?? "GLOBAL",
+      targets: targets ?? null,
+      description: description ?? null,
+      updatedById: me.id,
+    },
+    create: {
+      key,
+      enabled: !!enabled,
+      scope: scope ?? "GLOBAL",
+      targets: targets ?? null,
+      description: description ?? null,
+      updatedById: me.id,
+    },
+  });
+  evictFlagCache();
+  await writeLog(me.id, "FEATURE_FLAG_UPSERT", key, `enabled=${row.enabled} scope=${row.scope}`, req.ip);
+  res.json({ flag: row });
+});
+
+router.delete("/feature-flags/:key", requireSuperAdminStepUp, async (req, res) => {
+  const me = (req as any).user;
+  await prisma.featureFlag.delete({ where: { key: req.params.key } });
+  evictFlagCache();
+  await writeLog(me.id, "FEATURE_FLAG_DELETE", req.params.key, undefined, req.ip);
+  res.json({ ok: true });
+});
+
 /* ===== Audit Trail Viewer ===== */
 
 router.get("/audit", requireSuperAdminStepUp, async (req, res) => {

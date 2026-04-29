@@ -8,6 +8,7 @@ import ErrorsPanel from "../components/superadmin/ErrorsPanel";
 import HealthPanel from "../components/superadmin/HealthPanel";
 import TrashPanel from "../components/superadmin/TrashPanel";
 import AuditPanel from "../components/superadmin/AuditPanel";
+import FlagsPanel from "../components/superadmin/FlagsPanel";
 
 type Log = {
   id: string;
@@ -43,7 +44,7 @@ type Message = {
   sender: { id: string; name: string; avatarColor: string; avatarUrl?: string | null };
 };
 
-type Tab = "logs" | "chat" | "api" | "console" | "server" | "nav" | "sessions" | "errors" | "health" | "trash" | "audit";
+type Tab = "logs" | "chat" | "api" | "console" | "server" | "nav" | "sessions" | "errors" | "health" | "trash" | "audit" | "flags";
 
 type ApiSpecRoute = {
   method: string;
@@ -110,6 +111,7 @@ function SuperAdminContent() {
     : raw === "health" ? "health"
     : raw === "trash" ? "trash"
     : raw === "audit" ? "audit"
+    : raw === "flags" ? "flags"
     : "logs";
 
   const setTab = (t: Tab) => {
@@ -183,6 +185,7 @@ function SuperAdminContent() {
         <TabBtn active={tab === "health"} onClick={() => setTab("health")}>헬스</TabBtn>
         <TabBtn active={tab === "trash"} onClick={() => setTab("trash")}>휴지통</TabBtn>
         <TabBtn active={tab === "audit"} onClick={() => setTab("audit")}>감사 로그</TabBtn>
+        <TabBtn active={tab === "flags"} onClick={() => setTab("flags")}>기능 플래그</TabBtn>
       </div>
       {tab === "logs" && <LogsPanel />}
       {tab === "chat" && chatUnlocked && <ChatAuditPanel />}
@@ -195,6 +198,7 @@ function SuperAdminContent() {
       {tab === "health" && <HealthPanel />}
       {tab === "trash" && <TrashPanel />}
       {tab === "audit" && <AuditPanel />}
+      {tab === "flags" && <FlagsPanel />}
       {chatPwOpen && (
         <ChatAuditPwModal
           onClose={() => setChatPwOpen(false)}
