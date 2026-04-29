@@ -26,6 +26,7 @@ import passkeyRouter from "./routes/passkey.js";
 import profileRouter from "./routes/profile.js";
 import versionRouter from "./routes/version.js";
 import meRouter from "./routes/me.js";
+import featureFlagsRouter from "./routes/featureFlags.js";
 import navRouter from "./routes/nav.js";
 import projectRouter from "./routes/project.js";
 import webhookRouter from "./routes/webhook.js";
@@ -197,6 +198,7 @@ app.use("/api", apiLimiter);
 
 app.use("/api/auth", loginLimiter, authRouter);
 app.use("/api/me", meRouter);
+app.use("/api/feature-flags", featureFlagsRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/schedule", scheduleRouter);

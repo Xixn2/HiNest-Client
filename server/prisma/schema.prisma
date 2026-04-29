@@ -907,6 +907,20 @@ model Snippet {
   @@index([trigger])
 }
 
+/// 기능 플래그 — 단일 키로 신기능을 on/off. 범위로 점진 배포 (전사 → 특정 role → 특정 유저).
+model FeatureFlag {
+  key         String   @id // 예: "expense.export-csv", "chat.threads"
+  enabled     Boolean  @default(false)
+  /// GLOBAL | ROLE | USER | TEAM
+  scope       String   @default("GLOBAL")
+  /// 콤마 구분 — scope 에 따라 의미가 다름.
+  ///   ROLE: "ADMIN,MANAGER" / USER: "userId1,userId2" / TEAM: "디자인팀,개발팀"
+  targets     String?
+  description String?
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+}
+
 /// 사이드바 메뉴 항목 표시 여부 (전사 단위) — 총관리자 토글로 즉시 숨김/노출.
 /// path 가 키. 행이 없으면 기본 enabled=true 로 간주(누락된 항목까지 굳이 row 안 남김).
 model NavConfig {
