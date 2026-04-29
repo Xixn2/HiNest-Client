@@ -20,6 +20,7 @@ type MeetingRow = {
 
 type Vis = MeetingRow["visibility"];
 type FilterKey = "all" | "mine" | Vis;
+type SortKey = "date" | "updated";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "전체" },
@@ -27,6 +28,11 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "ALL", label: "전사 공개" },
   { key: "PROJECT", label: "프로젝트" },
   { key: "SPECIFIC", label: "특정 인원" },
+];
+
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: "date", label: "회의 날짜" },
+  { key: "updated", label: "최근 수정" },
 ];
 
 /** 회의록 목록 + 새로 만들기. */
@@ -51,6 +57,15 @@ export default function MeetingsPage() {
     setSp(next, { replace: true });
   };
 
+  // 정렬 — 기본은 회의 날짜(=생성일) 기준. 최근 수정으로도 볼 수 있게 토글.
+  const sortKey: SortKey = (sp.get("sort") === "updated" ? "updated" : "date");
+  const setSortKey = (s: SortKey) => {
+    const next = new URLSearchParams(sp);
+    if (s === "date") next.delete("sort");
+    else next.set("sort", s);
+    setSp(next, { replace: true });
+  };
+
   useEffect(() => {
     let alive = true;
     apiSWR<{ meetings: MeetingRow[] }>("/api/meeting", {
@@ -67,8 +82,11 @@ export default function MeetingsPage() {
     else if (visibilityFilter !== "all") arr = arr.filter((m) => m.visibility === visibilityFilter);
     const k = q.trim().toLowerCase();
     if (k) arr = arr.filter((m) => m.title.toLowerCase().includes(k) || m.author.name.toLowerCase().includes(k));
+    // 서버는 updatedAt desc 로 주지만 화면 기준에 맞춰 다시 정렬.
+    const field = sortKey === "updated" ? "updatedAt" : "createdAt";
+    arr = [...arr].sort((a, b) => new Date(b[field]).getTime() - new Date(a[field]).getTime());
     return arr;
-  }, [rows, q, visibilityFilter, user?.id]);
+  }, [rows, q, visibilityFilter, user?.id, sortKey]);
 
   // 통계 — 상단 카드용. 무거운 계산 아님.
   const stats = useMemo(() => {
@@ -102,16 +120,17 @@ export default function MeetingsPage() {
     }
   }
 
-  // 같은 날짜끼리 시각적으로 묶으면 시간 흐름이 잘 잡힘.
+  // 같은 날짜끼리 시각적으로 묶으면 시간 흐름이 잘 잡힘. 그룹 기준도 정렬 기준에 맞춤.
   const grouped = useMemo(() => {
     const map = new Map<string, MeetingRow[]>();
     for (const m of filtered) {
-      const k = dateGroupKey(m.updatedAt);
+      const iso = sortKey === "updated" ? m.updatedAt : m.createdAt;
+      const k = dateGroupKey(iso);
       if (!map.has(k)) map.set(k, []);
       map.get(k)!.push(m);
     }
     return Array.from(map.entries());
-  }, [filtered]);
+  }, [filtered, sortKey]);
 
   return (
     <div>
@@ -200,9 +219,34 @@ export default function MeetingsPage() {
               </button>
             );
           })}
-          <span className="text-[11px] text-ink-500 ml-auto">
-            {loading ? "불러오는 중…" : `${filtered.length}개`}
-          </span>
+          <div className="ml-auto flex items-center gap-1.5">
+            <span className="text-[11px] text-ink-500 mr-1">
+              {loading ? "불러오는 중…" : `${filtered.length}개`}
+            </span>
+            <div
+              className="inline-flex items-center rounded-full p-0.5"
+              style={{ background: "var(--c-surface-3)" }}
+            >
+              {SORTS.map((s) => {
+                const active = sortKey === s.key;
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() => setSortKey(s.key)}
+                    className="text-[11.5px] font-bold px-2.5 py-1 rounded-full transition"
+                    style={{
+                      background: active ? "var(--c-surface-1)" : "transparent",
+                      color: active ? "var(--c-text-1)" : "var(--c-text-3)",
+                      boxShadow: active ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+                    }}
+                  >
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -222,7 +266,7 @@ export default function MeetingsPage() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {items.map((m) => (
-                  <MeetingCard key={m.id} m={m} />
+                  <MeetingCard key={m.id} m={m} sortKey={sortKey} />
                 ))}
               </div>
             </div>
@@ -233,8 +277,10 @@ export default function MeetingsPage() {
   );
 }
 
-function MeetingCard({ m }: { m: MeetingRow }) {
+function MeetingCard({ m, sortKey }: { m: MeetingRow; sortKey: SortKey }) {
   const projectColor = m.project?.color ?? "#94A3B8";
+  const timeIso = sortKey === "updated" ? m.updatedAt : m.createdAt;
+  const timeLabel = sortKey === "updated" ? "수정" : "작성";
   return (
     <Link
       to={`/meetings/${m.id}`}
@@ -253,8 +299,8 @@ function MeetingCard({ m }: { m: MeetingRow }) {
           <div className="flex items-center gap-2 mt-3 text-[11.5px] text-ink-500 flex-wrap">
             <AuthorChip author={m.author} />
             <span className="text-ink-300">·</span>
-            <span title={new Date(m.updatedAt).toLocaleString("ko-KR")}>
-              {formatRelative(m.updatedAt)}
+            <span title={`${timeLabel}: ${new Date(timeIso).toLocaleString("ko-KR")}`}>
+              {formatRelative(timeIso)}
             </span>
             {m.project && (
               <>
