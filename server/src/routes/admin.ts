@@ -3,7 +3,11 @@ import { z } from "zod";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/db.js";
-import { requireAdmin, requireAuth, requireSuperAdminStepUp, verifySuperToken, writeLog, evictUserCache } from "../lib/auth.js";
+import {
+  requireAdmin, requireAuth, requireSuperAdminStepUp, verifySuperToken,
+  writeLog, evictUserCache,
+  signImpersonate, setImpCookie, clearImpCookie,
+} from "../lib/auth.js";
 import { todayStr } from "../lib/dates.js";
 import { getLogs, type LogLevel } from "../lib/logBuffer.js";
 
@@ -993,6 +997,31 @@ router.post("/console", requireSuperAdminStepUp, async (req, res) => {
         await evictUserCache(target.id);
         result = out(`OK · ${target.email} ${sub} → ${value ?? "(빈 값)"}`);
       }
+    } else if ((head === "user" && sub === "impersonate") || head === "imp") {
+      // imp <user> 또는 user impersonate <user>
+      const userArg = head === "imp" ? sub : arg1;
+      const target = await findUser(userArg);
+      if (!target) { result = err(`유저를 찾을 수 없음: ${userArg}`); }
+      else if (target.id === u.id) { result = err("본인은 임퍼소네이션할 수 없습니다"); }
+      else if (target.superAdmin) { result = err("다른 개발자 계정으로는 볼 수 없습니다"); }
+      else {
+        const tok = signImpersonate(u.id, target.id);
+        setImpCookie(res, tok);
+        await writeLog(u.id, "IMPERSONATE_START", target.id, target.name, req.ip);
+        result = out([
+          `OK · 이제 ${target.name} (${target.email}) 으로 로그인됩니다`,
+          `유효 시간: 1시간 · 종료: 화면 상단 빨간 배너의 "종료" 버튼 또는 \`unimp\``,
+          `페이지를 새로고침해야 적용됩니다.`,
+        ]);
+      }
+    } else if (head === "unimp") {
+      const real = (req as any).realUser;
+      const impedId = (req as any).impersonatedById;
+      clearImpCookie(res);
+      if (impedId && real?.id) {
+        await writeLog(real.id, "IMPERSONATE_END", (req as any).user?.id, undefined, req.ip);
+      }
+      result = out("임퍼소네이션 종료. 페이지를 새로고침하세요.");
     } else if (head === "rooms" && sub === "list") {
       const limit = Math.min(200, Math.max(1, parseInt(arg1 || "20", 10) || 20));
       const list = await prisma.chatRoom.findMany({
@@ -1208,5 +1237,34 @@ router.patch("/users/:id/attendance", async (req, res) => {
   });
   res.json({ attendance: rec });
 });
+
+/* ===== Impersonation (사용자 대신 보기) =====
+ * 목적: 버그 리포트가 들어왔을 때, 그 유저의 시점에서 직접 화면을 본다.
+ * 보안: super-stepup 필수, 1시간 자동 만료, 시작/종료 모두 audit 기록.
+ * 모든 액션은 임퍼소네이팅 중에도 (req as any).realUser 로 진짜 사용자가 추적된다.
+ */
+router.post("/impersonate/:id", requireSuperAdminStepUp, async (req, res) => {
+  const me = (req as any).user;
+  // 임퍼소네이션 중에 또 다른 임퍼소네이션 시작은 금지 — 책임 추적이 흐려짐.
+  if ((req as any).impersonatedById) {
+    return res.status(409).json({ error: "이미 다른 사용자로 보는 중입니다. 먼저 종료하세요." });
+  }
+  const target = await prisma.user.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, name: true, active: true, superAdmin: true },
+  });
+  if (!target || !target.active) return res.status(404).json({ error: "not found" });
+  // 자기 자신은 의미 없음.
+  if (target.id === me.id) return res.status(400).json({ error: "본인은 임퍼소네이션할 수 없습니다" });
+  // 다른 super-admin 으로 보는 건 막는다 — 권한 상승 우회 위험.
+  if (target.superAdmin) return res.status(403).json({ error: "다른 개발자 계정으로는 볼 수 없습니다" });
+
+  const tok = signImpersonate(me.id, target.id);
+  setImpCookie(res, tok);
+  await writeLog(me.id, "IMPERSONATE_START", target.id, target.name, req.ip);
+  res.json({ ok: true, target: { id: target.id, name: target.name } });
+});
+
+// DELETE 는 me.ts 로 이동 — 임퍼소네이션 중엔 admin 체크가 막혀서 종료 불가.
 
 export default router;

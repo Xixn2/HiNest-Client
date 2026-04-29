@@ -52,7 +52,9 @@ export function evictUserCache(id: string) {
 
 const COOKIE = "hinest_token";
 const SUPER_COOKIE = "hinest_super";
+const IMP_COOKIE = "hinest_imp";
 const SUPER_TTL_SEC = 15 * 60; // 15분
+const IMP_TTL_SEC = 60 * 60; // 1시간 — 디버깅 세션은 길게 가지 않도록
 const COOKIE_BASE = {
   httpOnly: true,
   sameSite: "lax" as const,
@@ -88,18 +90,42 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   if (!token) return res.status(401).json({ error: "unauthorized" });
   try {
     const payload = jwt.verify(token, SECRET) as any;
-    const user = await getCachedUser(payload.id);
-    if (!user || !user.active) return res.status(401).json({ error: "unauthorized" });
+    const realUser = await getCachedUser(payload.id);
+    if (!realUser || !realUser.active) return res.status(401).json({ error: "unauthorized" });
+
+    // 임퍼소네이션 — 총관리자가 다른 유저로 보기.
+    // 원본 인증은 그대로 두고, req.user 만 타깃 유저로 바꾼다. 모든 audit 액션은 진짜 사용자(=원본)
+    // 와 함께 기록되도록 req.impersonator 에 보관.
+    let activeUser = realUser;
+    let impersonatedById: string | null = null;
+    const impTok = req.cookies?.[IMP_COOKIE];
+    if (impTok && realUser.superAdmin) {
+      try {
+        const ip = jwt.verify(impTok, SECRET) as any;
+        if (ip.kind === "imp" && ip.actor === realUser.id && typeof ip.sub === "string") {
+          const target = await getCachedUser(ip.sub);
+          if (target && target.active) {
+            activeUser = target;
+            impersonatedById = realUser.id;
+          }
+        }
+      } catch {
+        // 만료/위변조 — 무시하고 일반 인증으로 진행
+      }
+    }
+
     (req as any).user = {
-      id: user.id,
-      role: user.role,
-      name: user.name,
-      email: user.email,
-      superAdmin: user.superAdmin,
+      id: activeUser.id,
+      role: activeUser.role,
+      name: activeUser.name,
+      email: activeUser.email,
+      superAdmin: activeUser.superAdmin,
     } as AuthUser;
     // 핸들러에서 user row 가 또 필요하면 재조회하지 말고 이거 쓰기 — /api/me 처럼
     // 인증만 거치고 바로 user 필드를 되돌려주는 엔드포인트에서 DB 왕복 1번 절약.
-    (req as any).userRecord = user;
+    (req as any).userRecord = activeUser;
+    (req as any).realUser = realUser;
+    (req as any).impersonatedById = impersonatedById;
     next();
   } catch {
     return res.status(401).json({ error: "unauthorized" });
@@ -163,7 +189,32 @@ export function requireSuperAdminStepUp(req: Request, res: Response, next: NextF
   next();
 }
 
-export { SUPER_TTL_SEC };
+export { SUPER_TTL_SEC, IMP_TTL_SEC };
+
+/* ---- Impersonation (사용자 대신 보기) ---- */
+export function signImpersonate(actorId: string, targetId: string) {
+  return jwt.sign({ actor: actorId, sub: targetId, kind: "imp" }, SECRET, {
+    expiresIn: `${IMP_TTL_SEC}s`,
+  });
+}
+
+export function setImpCookie(res: Response, token: string) {
+  res.cookie(IMP_COOKIE, token, {
+    ...COOKIE_BASE,
+    maxAge: IMP_TTL_SEC * 1000,
+  });
+}
+
+export function clearImpCookie(res: Response) {
+  res.clearCookie(IMP_COOKIE, COOKIE_BASE);
+}
+
+/** 진짜 super-admin 권한 체크 — 임퍼소네이션 중에도 원본 사용자가 super 면 통과시키는 변종.
+ *  imp 시작/종료 자체엔 쓰지 말 것 (이미 stepup 으로 보호됨). */
+export function isRealSuperAdmin(req: Request): boolean {
+  const real = (req as any).realUser;
+  return !!real?.superAdmin;
+}
 
 export async function writeLog(userId: string | null, action: string, target?: string, detail?: string, ip?: string) {
   try {
