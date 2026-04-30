@@ -11,8 +11,12 @@ type Event = { id: string; title: string; startAt: string; endAt: string; scope:
 type Attendance = { checkIn?: string; checkOut?: string } | null;
 
 /**
- * 개요 — Linear/Stripe 풍 정보 밀도 우선.
- * 큰 시각 강조 X. 라벨/숫자 위계만으로 구분.
+ * 개요 — Toss 디자인 톤.
+ * 핵심 원칙:
+ *  - 그라데이션 X. 단색 surface 위에 큰 숫자 + 작은 라벨로 위계.
+ *  - 강조색은 한 가지(브랜드 블루) — 진행률·primary 버튼·아이콘 배경에만.
+ *  - 카드는 둥근 모서리 + 부드러운 그림자, 행간/여백 넉넉히.
+ *  - 액션은 항상 카드 우측 또는 하단에 정렬, 시각적 무게 가벼운 ghost 또는 단색.
  */
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -28,10 +32,7 @@ export default function DashboardPage() {
 
   const aliveRef = useRef(true);
   const loadTokenRef = useRef(0);
-  useEffect(() => {
-    aliveRef.current = true;
-    return () => { aliveRef.current = false; };
-  }, []);
+  useEffect(() => { aliveRef.current = true; return () => { aliveRef.current = false; }; }, []);
 
   async function load() {
     const myToken = ++loadTokenRef.current;
@@ -44,8 +45,8 @@ export default function DashboardPage() {
       api<{ attendance: Attendance }>("/api/attendance/today"),
     ]);
     if (!aliveRef.current || myToken !== loadTokenRef.current) return;
-    setNotices(n.notices.slice(0, 6));
-    setEvents(s.events.slice(0, 8));
+    setNotices(n.notices.slice(0, 5));
+    setEvents(s.events.slice(0, 6));
     setAtt(a.attendance);
   }
   useEffect(() => { load(); }, []);
@@ -84,249 +85,358 @@ export default function DashboardPage() {
     load();
   }
 
-  const dateLabel = now.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "long" });
+  const dateLabel = now.toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "long" });
   const status: WorkStatus = att?.checkOut ? "OFF" : att?.checkIn ? "IN" : "NONE";
   const workedMin = att?.checkIn
     ? Math.max(0, Math.floor(((att.checkOut ? new Date(att.checkOut).getTime() : now.getTime()) - new Date(att.checkIn).getTime()) / 60000))
     : 0;
-
-  // 일정/공지를 일자별로 그룹.
-  const eventsByDay = useMemo(() => groupByDay(events), [events]);
+  const dayProgress = useMemo(() => {
+    const h = now.getHours() + now.getMinutes() / 60;
+    return Math.max(0, Math.min(1, (h - 9) / 9));
+  }, [now]);
 
   return (
-    <div className="max-w-[1100px]">
-      {/* 헤더 — PageHeader 안 쓰고 페이지마다 톤 다르게. */}
-      <header className="mb-6">
-        <div className="text-[11.5px] font-bold text-ink-500 tabular-nums">{dateLabel}</div>
-        <h1 className="text-[22px] font-extrabold text-ink-900 mt-0.5 flex items-center gap-2 flex-wrap">
-          <span>{user?.name ?? ""}</span>
-          {isDevAccount(user) && <DevBadge size="sm" />}
-        </h1>
-      </header>
-
+    <div className="space-y-4">
       <InstallAppBanner />
 
-      {/* 오늘 한 줄 요약 — 표 같은 행. */}
-      <section
-        className="rounded-xl mb-6 px-5 py-4 flex items-center gap-6 flex-wrap"
-        style={{ background: "var(--c-surface-2)", border: "1px solid var(--c-border)" }}
-      >
-        <div className="flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background: dotColor(status) }} />
-          <span className="text-[12.5px] font-bold text-ink-900">{labelOf(status)}</span>
+      {/* 인사 카드 — 흰 패널, 큰 인사 + 작은 부제 */}
+      <TossCard className="px-6 py-7 sm:px-8 sm:py-8">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <div className="text-[12.5px] font-bold text-ink-500 mb-1.5">{dateLabel}</div>
+            <h1 className="text-[26px] sm:text-[28px] font-extrabold text-ink-900 tracking-tight flex items-center gap-2 flex-wrap">
+              <span>{user?.name ?? ""}님,</span>
+              <span className="text-ink-500 font-bold">{greetingFor(now)}</span>
+              {isDevAccount(user) && <DevBadge size="sm" />}
+            </h1>
+          </div>
+          <StatusPill status={status} />
         </div>
-        <KV label="출근" value={timeOf(att?.checkIn ?? null)} />
-        <KV label="퇴근" value={timeOf(att?.checkOut ?? null)} />
-        <KV label="누적" value={att?.checkIn ? formatDuration(workedMin) : "—"} />
-        <div className="ml-auto flex gap-1.5">
-          <button
-            type="button"
-            onClick={checkIn}
-            disabled={!!att?.checkIn && !att?.checkOut}
-            className="btn-primary btn-xs"
-          >
-            {att?.checkOut ? "다시 출근" : att?.checkIn ? "출근됨" : "출근"}
-          </button>
-          <button
-            type="button"
-            onClick={checkOut}
-            disabled={!att?.checkIn || !!att?.checkOut}
-            className="btn-ghost btn-xs"
-          >
-            퇴근
-          </button>
-        </div>
-      </section>
+      </TossCard>
 
-      {/* 본문 — 12열 그리드, 좌 8 / 우 4. */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-x-8 gap-y-8">
-        {/* 좌측 */}
-        <div className="lg:col-span-8 space-y-8">
-          <Section title="이번 주 일정" count={events.length} href="/schedule">
-            {events.length === 0 ? (
-              <Empty>등록된 일정 없음</Empty>
-            ) : (
-              <div className="space-y-4">
-                {eventsByDay.map(([day, items]) => (
-                  <div key={day}>
-                    <DayHeader label={day} />
-                    <ul className="divide-y divide-ink-100">
-                      {items.map((e) => (
-                        <li key={e.id} className="flex items-center gap-3 py-2.5">
-                          <span className="w-[3px] h-5 rounded-full flex-shrink-0" style={{ background: e.color }} />
-                          <span className="text-[10.5px] font-mono text-ink-500 tabular-nums w-[88px] flex-shrink-0">
-                            {timeRange(e.startAt, e.endAt)}
-                          </span>
-                          <span className="flex-1 min-w-0 text-[13px] font-bold text-ink-900 truncate">{e.title}</span>
-                          <ScopeChip scope={e.scope} />
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Section>
-
-          <Section title="공지" count={notices.length} href="/notice">
-            {notices.length === 0 ? (
-              <Empty>아직 공지가 없어요.</Empty>
-            ) : (
-              <ul className="divide-y divide-ink-100">
-                {notices.map((n) => (
-                  <li key={n.id}>
-                    <Link to={`/notice?id=${n.id}`} className="flex items-baseline gap-3 py-2.5 hover:opacity-80 transition">
-                      <span className="text-[10.5px] font-mono text-ink-500 tabular-nums w-[68px] flex-shrink-0 pt-0.5">
-                        {shortDate(n.createdAt)}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          {n.pinned && <PinChip />}
-                          <span className="text-[13px] font-bold text-ink-900 truncate">{n.title}</span>
-                        </div>
-                        <div className="text-[10.5px] text-ink-500 mt-0.5 flex items-center gap-1 flex-wrap">
-                          <span>{n.author?.name}</span>
-                          {isDevAccount(n.author) && <DevBadge size="sm" />}
-                        </div>
-                      </div>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Section>
+      {/* 오늘의 근무 — Toss 메인 카드 패턴: 큰 값 + 진행률 + 우측 액션 */}
+      <TossCard className="px-6 py-6 sm:px-8 sm:py-7">
+        <div className="flex items-start justify-between gap-4 mb-5 flex-wrap">
+          <div>
+            <div className="text-[13px] font-bold text-ink-500 mb-1">오늘 근무</div>
+            <div className="flex items-baseline gap-1">
+              <span className="text-[36px] sm:text-[40px] font-extrabold text-ink-900 tabular-nums" style={{ letterSpacing: "-0.03em" }}>
+                {att?.checkIn ? formatHours(workedMin) : "0"}
+              </span>
+              <span className="text-[16px] font-bold text-ink-500">시간 {att?.checkIn ? formatMinutesPart(workedMin) : "0"}분</span>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={checkIn}
+              disabled={!!att?.checkIn && !att?.checkOut}
+              className="px-5 py-2.5 rounded-xl text-[13.5px] font-extrabold transition disabled:opacity-40"
+              style={{ background: "var(--c-brand)", color: "#fff" }}
+            >
+              {att?.checkOut ? "다시 출근" : att?.checkIn ? "출근됨" : "출근하기"}
+            </button>
+            <button
+              type="button"
+              onClick={checkOut}
+              disabled={!att?.checkIn || !!att?.checkOut}
+              className="px-5 py-2.5 rounded-xl text-[13.5px] font-extrabold transition disabled:opacity-40"
+              style={{ background: "var(--c-surface-3)", color: "var(--c-text-1)" }}
+            >
+              퇴근하기
+            </button>
+          </div>
         </div>
 
-        {/* 우측 */}
-        <aside className="lg:col-span-4 space-y-8">
-          <Section title="바로가기">
-            <ul className="divide-y divide-ink-100">
-              <NavLink to="/schedule" label="일정" hint="이번 주 / 캘린더" />
-              <NavLink to="/journal" label="업무 일지" hint="오늘 작성 / 기록" />
-              <NavLink to="/meetings" label="회의록" hint="작성 · 공유" />
-              <NavLink to="/approvals" label="결재" hint="신청 · 검토" />
-              <NavLink to="/expense" label="지출" hint="법인카드 / 사용 내역" />
-              <NavLink to="/directory" label="팀원" hint="검색 · 1:1 대화" />
-            </ul>
-          </Section>
+        {/* 진행률 바 — 09~18 */}
+        <div>
+          <div className="relative h-2 rounded-full overflow-hidden" style={{ background: "var(--c-surface-3)" }}>
+            <div
+              className="absolute top-0 left-0 h-full rounded-full transition-[width] duration-500"
+              style={{ width: `${dayProgress * 100}%`, background: "var(--c-brand)" }}
+            />
+          </div>
+          <div className="flex items-center justify-between mt-2.5 text-[11.5px] font-bold text-ink-500 tabular-nums">
+            <span>09:00</span>
+            <span className="text-ink-700">{Math.round(dayProgress * 100)}%</span>
+            <span>18:00</span>
+          </div>
+        </div>
 
-          <Section title="내 정보">
-            <dl className="divide-y divide-ink-100">
-              <Row label="이메일" value={user?.email ?? "—"} mono />
-              <Row label="직급" value={user?.position ?? "—"} />
-              <Row label="팀" value={user?.team ?? "—"} />
-              <Row label="권한" value={user?.role ?? "—"} mono />
-              <Row label="사번" value={(user?.employeeNo as any) ?? "—"} mono />
-            </dl>
-          </Section>
-        </aside>
+        {/* 출근/퇴근 시각 — 카드 하단 부드러운 분리선 */}
+        <div className="grid grid-cols-2 gap-4 mt-5 pt-5 border-t" style={{ borderColor: "var(--c-border)" }}>
+          <KV label="출근 시각" value={timeOf(att?.checkIn ?? null)} />
+          <KV label="퇴근 시각" value={timeOf(att?.checkOut ?? null)} />
+        </div>
+      </TossCard>
+
+      {/* 빠른 메뉴 — 6 grid, soft tint icon + 라벨 */}
+      <TossCard className="p-3">
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
+          <QuickItem to="/schedule" label="일정" tint="#3182F6" Icon={IconCalendar} />
+          <QuickItem to="/journal" label="업무일지" tint="#16A34A" Icon={IconJournal} />
+          <QuickItem to="/meetings" label="회의록" tint="#7C3AED" Icon={IconNote} />
+          <QuickItem to="/approvals" label="결재" tint="#F59E0B" Icon={IconCheck} />
+          <QuickItem to="/expense" label="지출" tint="#DB2777" Icon={IconCard} />
+          <QuickItem to="/directory" label="팀원" tint="#0EA5E9" Icon={IconUsers} />
+        </div>
+      </TossCard>
+
+      {/* 본문 2열 */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 space-y-4">
+          <ScheduleCard events={events} />
+          <NoticeCard notices={notices} />
+        </div>
+        <div className="space-y-4">
+          <ProfileCard
+            name={user?.name ?? ""}
+            email={user?.email}
+            team={user?.team ?? null}
+            position={user?.position ?? null}
+            role={user?.role ?? ""}
+            avatarUrl={user?.avatarUrl ?? null}
+            avatarColor={user?.avatarColor}
+            isDeveloper={isDevAccount(user)}
+          />
+        </div>
       </div>
     </div>
   );
 }
 
 /* ============================================================
- *  building blocks
+ *  TossCard — 모든 카드의 베이스. 부드러운 그림자 + 둥근 모서리.
+ * ============================================================ */
+function TossCard({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div
+      className={`rounded-2xl ${className ?? ""}`}
+      style={{
+        background: "var(--c-surface-1)",
+        boxShadow: "0 1px 2px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.04)",
+        border: "1px solid var(--c-border)",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/* ============================================================
+ *  StatusPill — 색칠된 알약. Toss 의 상태 칩 패턴.
  * ============================================================ */
 type WorkStatus = "IN" | "OFF" | "NONE";
-
-function Section({ title, count, href, children }: { title: string; count?: number; href?: string; children: React.ReactNode }) {
+function StatusPill({ status }: { status: WorkStatus }) {
+  const cfg = status === "IN"
+    ? { bg: "rgba(22,163,74,0.10)", fg: "var(--c-success)", dot: "var(--c-success)", label: "근무 중" }
+    : status === "OFF"
+      ? { bg: "var(--c-surface-3)", fg: "var(--c-text-3)", dot: "var(--c-text-3)", label: "퇴근 완료" }
+      : { bg: "rgba(245,158,11,0.10)", fg: "#D97706", dot: "#F59E0B", label: "출근 전" };
   return (
-    <section>
-      <div className="flex items-baseline justify-between border-b border-ink-150 pb-1.5 mb-3">
-        <h2 className="text-[13px] font-extrabold text-ink-900">
-          {title}
-          {typeof count === "number" && <span className="ml-1.5 text-[11px] font-bold text-ink-400 tabular-nums">{count}</span>}
-        </h2>
-        {href && <Link to={href} className="text-[11px] text-ink-500 hover:text-ink-800">전체 →</Link>}
+    <span
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-extrabold"
+      style={{ background: cfg.bg, color: cfg.fg }}
+    >
+      <span className="w-1.5 h-1.5 rounded-full" style={{ background: cfg.dot }} />
+      {cfg.label}
+    </span>
+  );
+}
+
+/* ============================================================
+ *  Quick item
+ * ============================================================ */
+function QuickItem({ to, label, tint, Icon }: { to: string; label: string; tint: string; Icon: React.ComponentType<{ color: string }> }) {
+  return (
+    <Link
+      to={to}
+      className="flex flex-col items-center justify-center gap-2 py-3 rounded-xl hover:bg-[color:var(--c-surface-3)] transition"
+    >
+      <span
+        className="w-10 h-10 rounded-xl grid place-items-center"
+        style={{ background: tint + "1A" }}
+      >
+        <Icon color={tint} />
+      </span>
+      <span className="text-[12px] font-bold text-ink-900">{label}</span>
+    </Link>
+  );
+}
+
+/* ============================================================
+ *  ScheduleCard
+ * ============================================================ */
+function ScheduleCard({ events }: { events: Event[] }) {
+  const grouped = useMemo(() => groupByDay(events), [events]);
+  return (
+    <TossCard className="px-5 sm:px-6 py-5">
+      <CardHeader title="이번 주 일정" count={events.length} href="/schedule" />
+      {events.length === 0 ? (
+        <Empty>등록된 일정이 없어요</Empty>
+      ) : (
+        <div className="mt-1">
+          {grouped.map(([day, items]) => (
+            <div key={day} className="mt-3 first:mt-2">
+              <div className="text-[10.5px] font-extrabold tracking-[0.06em] uppercase text-ink-500 mb-1">{day}</div>
+              <ul className="space-y-1">
+                {items.map((e) => (
+                  <li key={e.id} className="flex items-center gap-3 py-2">
+                    <span className="w-1 h-8 rounded-full flex-shrink-0" style={{ background: e.color }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13.5px] font-extrabold text-ink-900 truncate">{e.title}</div>
+                      <div className="text-[11px] text-ink-500 mt-0.5 tabular-nums font-mono">
+                        {timeOf(e.startAt)} – {timeOf(e.endAt)}
+                      </div>
+                    </div>
+                    <ScopeChip scope={e.scope} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </TossCard>
+  );
+}
+
+/* ============================================================
+ *  NoticeCard
+ * ============================================================ */
+function NoticeCard({ notices }: { notices: Notice[] }) {
+  return (
+    <TossCard className="px-5 sm:px-6 py-5">
+      <CardHeader title="공지" count={notices.length} href="/notice" />
+      {notices.length === 0 ? (
+        <Empty>아직 공지가 없어요</Empty>
+      ) : (
+        <ul className="mt-1 divide-y divide-[color:var(--c-border)]">
+          {notices.map((n) => (
+            <li key={n.id}>
+              <Link to={`/notice?id=${n.id}`} className="block py-3 hover:opacity-80 transition">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  {n.pinned && (
+                    <span className="inline-block px-1.5 py-0.5 rounded text-[9.5px] font-extrabold" style={{ background: "rgba(220,38,38,0.10)", color: "var(--c-danger)" }}>PIN</span>
+                  )}
+                  <div className="text-[13.5px] font-extrabold text-ink-900 truncate">{n.title}</div>
+                </div>
+                <div className="text-[11px] text-ink-500 flex items-center gap-1.5 flex-wrap">
+                  <span>{n.author?.name}</span>
+                  {isDevAccount(n.author) && <DevBadge size="sm" />}
+                  <span className="text-ink-300">·</span>
+                  <span className="tabular-nums">{relTime(n.createdAt)}</span>
+                </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </TossCard>
+  );
+}
+
+/* ============================================================
+ *  ProfileCard — Toss 프로필 카드 톤
+ * ============================================================ */
+function ProfileCard(p: { name: string; email?: string; team: string | null; position: string | null; role: string; avatarUrl: string | null; avatarColor?: string; isDeveloper: boolean }) {
+  const initial = (p.name?.[0] ?? "?").toUpperCase();
+  return (
+    <TossCard className="px-5 sm:px-6 py-5">
+      <div className="flex items-center gap-3">
+        <div
+          className="w-12 h-12 rounded-2xl grid place-items-center text-white text-[18px] font-extrabold overflow-hidden flex-shrink-0"
+          style={{ background: p.avatarUrl ? "transparent" : (p.avatarColor ?? "#3D54C4") }}
+        >
+          {p.avatarUrl ? <img src={p.avatarUrl} alt={p.name} className="w-full h-full object-cover" /> : initial}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[15px] font-extrabold text-ink-900 truncate">{p.name}</span>
+            {p.isDeveloper && <DevBadge size="sm" />}
+          </div>
+          <div className="text-[12px] text-ink-500 truncate">{p.email}</div>
+        </div>
       </div>
-      {children}
-    </section>
+      <dl className="mt-4 pt-4 border-t" style={{ borderColor: "var(--c-border)" }}>
+        <Row label="직급" value={p.position ?? "—"} />
+        <Row label="팀" value={p.team ?? "—"} />
+        <Row label="권한" value={p.role} mono />
+      </dl>
+    </TossCard>
+  );
+}
+
+/* ============================================================
+ *  building blocks
+ * ============================================================ */
+function CardHeader({ title, count, href }: { title: string; count?: number; href?: string }) {
+  return (
+    <div className="flex items-baseline justify-between">
+      <h2 className="text-[15px] font-extrabold text-ink-900">
+        {title}
+        {typeof count === "number" && <span className="ml-1.5 text-[12px] font-bold text-ink-400 tabular-nums">{count}</span>}
+      </h2>
+      {href && <Link to={href} className="text-[12px] font-bold text-ink-500 hover:text-ink-800">전체 →</Link>}
+    </div>
   );
 }
 
 function KV({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-ink-500">{label}</div>
-      <div className="text-[14px] font-extrabold text-ink-900 tabular-nums" style={{ letterSpacing: "-0.02em" }}>{value}</div>
+      <div className="text-[11px] font-bold text-ink-500 mb-1">{label}</div>
+      <div className="text-[18px] font-extrabold text-ink-900 tabular-nums" style={{ letterSpacing: "-0.02em" }}>{value}</div>
     </div>
-  );
-}
-
-function DayHeader({ label }: { label: string }) {
-  return (
-    <div className="text-[10.5px] font-extrabold tracking-[0.06em] uppercase text-ink-500 mb-0.5 mt-2 first:mt-0">
-      {label}
-    </div>
-  );
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return <div className="py-8 text-center text-[12px] text-ink-500">{children}</div>;
-}
-
-function NavLink({ to, label, hint }: { to: string; label: string; hint: string }) {
-  return (
-    <li>
-      <Link to={to} className="flex items-center justify-between py-2.5 hover:opacity-70 transition">
-        <span className="text-[13px] font-bold text-ink-900">{label}</span>
-        <span className="text-[10.5px] text-ink-500">{hint} <span className="ml-1 text-ink-300">→</span></span>
-      </Link>
-    </li>
   );
 }
 
 function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="flex items-center justify-between py-2 gap-3">
-      <dt className="text-[11.5px] font-bold text-ink-500">{label}</dt>
-      <dd className={`text-[12.5px] font-bold text-ink-900 truncate text-right ${mono ? "font-mono tracking-tight" : ""}`}>
-        {value}
-      </dd>
+    <div className="flex items-center justify-between py-1.5 gap-3">
+      <dt className="text-[12px] font-bold text-ink-500">{label}</dt>
+      <dd className={`text-[13px] font-bold text-ink-900 truncate text-right ${mono ? "font-mono tracking-tight" : ""}`}>{value}</dd>
     </div>
   );
 }
 
-function PinChip() {
-  return (
-    <span className="inline-block px-1.5 py-0.5 rounded text-[9.5px] font-extrabold flex-shrink-0" style={{ background: "rgba(220,38,38,0.10)", color: "var(--c-danger)" }}>
-      PIN
-    </span>
-  );
+function Empty({ children }: { children: React.ReactNode }) {
+  return <div className="py-8 text-center text-[12.5px] text-ink-500">{children}</div>;
 }
 
 function ScopeChip({ scope }: { scope: string }) {
   const label = scope === "COMPANY" ? "전사" : scope === "TEAM" ? "팀" : "개인";
+  const tint = scope === "COMPANY" ? "var(--c-brand)" : scope === "TEAM" ? "#0EA5E9" : "var(--c-text-3)";
   return (
-    <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold text-ink-500 flex-shrink-0" style={{ background: "var(--c-surface-3)" }}>
+    <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-extrabold flex-shrink-0" style={{ background: "var(--c-surface-3)", color: tint }}>
       {label}
     </span>
   );
 }
 
 /* ===== utils ===== */
-function dotColor(s: WorkStatus) {
-  return s === "IN" ? "var(--c-success)" : s === "OFF" ? "var(--c-text-3)" : "#F59E0B";
-}
-function labelOf(s: WorkStatus) {
-  return s === "IN" ? "근무 중" : s === "OFF" ? "퇴근 완료" : "출근 전";
-}
 function timeOf(iso: string | null): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
 }
-function timeRange(a: string, b: string): string {
-  return `${timeOf(a)}–${timeOf(b)}`;
+function relTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 60_000) return "방금";
+  if (diff < 3600_000) return `${Math.floor(diff / 60_000)}분 전`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3600_000)}시간 전`;
+  if (diff < 7 * 86_400_000) return `${Math.floor(diff / 86_400_000)}일 전`;
+  return new Date(iso).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" });
 }
-function shortDate(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getMonth() + 1}.${String(d.getDate()).padStart(2, "0")}`;
-}
-function formatDuration(min: number): string {
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return `${h}h ${String(m).padStart(2, "0")}m`;
+function formatHours(min: number): string { return String(Math.floor(min / 60)); }
+function formatMinutesPart(min: number): string { return String(min % 60).padStart(2, "0"); }
+function greetingFor(d: Date): string {
+  const h = d.getHours();
+  if (h < 6) return "오늘도 고생이 많으세요";
+  if (h < 11) return "좋은 아침이에요";
+  if (h < 14) return "점심은 드셨나요";
+  if (h < 18) return "오후도 화이팅이에요";
+  if (h < 22) return "오늘도 수고하셨어요";
+  return "푹 쉬세요";
 }
 function groupByDay(events: Event[]): [string, Event[]][] {
   const map = new Map<string, Event[]>();
@@ -336,4 +446,24 @@ function groupByDay(events: Event[]): [string, Event[]][] {
     map.get(k)!.push(e);
   }
   return Array.from(map.entries());
+}
+
+/* ===== icons ===== */
+function IconCalendar({ color }: { color: string }) {
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="17" rx="2.5" /><path d="M3 10h18M8 2v4M16 2v4" /></svg>;
+}
+function IconJournal({ color }: { color: string }) {
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 4H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" /><path d="M8 9h8M8 13h8M8 17h5" /></svg>;
+}
+function IconNote({ color }: { color: string }) {
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M8 13h8M8 17h5" /></svg>;
+}
+function IconCheck({ color }: { color: string }) {
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>;
+}
+function IconCard({ color }: { color: string }) {
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2.5" /><path d="M2 10h20" /></svg>;
+}
+function IconUsers({ color }: { color: string }) {
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>;
 }
