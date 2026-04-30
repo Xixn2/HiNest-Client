@@ -162,7 +162,7 @@ function SuperAdminContent() {
 
   return (
     <>
-      <div className="flex items-center gap-1 mb-4 border-b border-ink-150">
+      <div className="flex items-center gap-1 mb-4 border-b border-ink-150 overflow-x-auto whitespace-nowrap" style={{ scrollbarWidth: "thin" }}>
         <TabBtn active={tab === "logs"} onClick={() => setTab("logs")}>활동 로그</TabBtn>
         {chatUnlocked && (
           <div className="flex items-center">
@@ -287,7 +287,7 @@ function TabBtn({
   return (
     <button
       onClick={onClick}
-      className={`relative px-4 h-[36px] text-[13px] font-semibold transition ${
+      className={`relative px-4 h-[36px] text-[13px] font-semibold transition flex-shrink-0 whitespace-nowrap ${
         active ? "text-ink-900" : "text-ink-500 hover:text-ink-800"
       }`}
     >
