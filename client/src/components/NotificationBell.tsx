@@ -113,13 +113,19 @@ export default function NotificationBell() {
 
 function NotifRow({ n, onClick }: { n: Notif; onClick: () => void }) {
   const { icon, color } = typeVisuals(n.type);
+  const unread = !n.readAt;
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left px-4 py-3 border-b border-ink-100 last:border-b-0 hover:bg-ink-25 flex items-start gap-3 ${
-        !n.readAt ? "bg-brand-50/30" : ""
-      }`}
+      className="w-full text-left px-4 py-3 border-b border-ink-100 last:border-b-0 hover:bg-ink-25 flex items-start gap-3 relative"
+      style={unread ? { background: "color-mix(in srgb, var(--c-brand) 8%, transparent)" } : undefined}
     >
+      {unread && (
+        <span
+          aria-hidden
+          style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: "var(--c-brand)" }}
+        />
+      )}
       <div className={`w-8 h-8 rounded-lg grid place-items-center flex-shrink-0`} style={{ background: color + "20", color }}>
         {icon}
       </div>

@@ -8,6 +8,7 @@ import NotificationBell from "./NotificationBell";
 import SearchModal from "./SearchModal";
 import ChatFab from "./ChatFab";
 import ImpersonationBanner from "./ImpersonationBanner";
+import { useApprovalCounts } from "../lib/useApprovalCounts";
 import CreateProjectModal from "./CreateProjectModal";
 import { NotificationProvider, useNotifications } from "../notifications";
 import { PinsProvider, usePins, pinLinkUrl } from "../pins";
@@ -634,6 +635,8 @@ function NavSection({ label, items, dev }: { label: string; items: NavItem[]; de
   // 공지사항 미읽음 알림 개수 — 사이드바에 배지로 표시
   const { bellItems, ready } = useNotifications();
   const noticeUnread = bellItems.filter((n) => n.type === "NOTICE" && !n.readAt).length;
+  // 결재 대기 — 별도 폴링 hook (30s + 가시성 복귀 시 즉시).
+  const approvalCounts = useApprovalCounts();
 
   // 새 공지가 들어왔을 때만 파란 펄스.
   // - 새로고침/재오픈은 localStorage 마지막 본 카운트와 비교해 증가하지 않으면 패스.
@@ -658,7 +661,11 @@ function NavSection({ label, items, dev }: { label: string; items: NavItem[]; de
       <div className="space-y-0.5">
         {items.map((n) => {
           const Icon = n.icon;
-          const badgeCount = n.to === "/notice" ? noticeUnread : 0;
+          const badgeCount = n.to === "/notice"
+            ? noticeUnread
+            : n.to === "/approvals"
+              ? approvalCounts.pending
+              : 0;
           const pulseHere = n.to === "/notice" && noticePulse;
           return (
             <NavLink
