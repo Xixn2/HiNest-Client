@@ -14,6 +14,7 @@ export default function DatePicker({
   className,
   variant = "plain",
   disabled,
+  min,
 }: {
   value: string; // "YYYY-MM-DD" or ""
   onChange: (next: string) => void;
@@ -23,6 +24,8 @@ export default function DatePicker({
   // input: 폼 필드용 — `.input` 과 동일한 테두리/패딩/배경
   variant?: "plain" | "input";
   disabled?: boolean;
+  /** YYYY-MM-DD — 이 날짜 이전 셀은 비활성화. 시작일 이후만 고를 수 있는 종료일 필드용. */
+  min?: string;
 }) {
   const [open, setOpen] = useState(false);
   // 팝오버 커서(보여줄 월) — 값이 없으면 오늘 기준
@@ -168,6 +171,7 @@ export default function DatePicker({
               const isToday = sameDay(d, today);
               const isSelected = selected && sameDay(d, selected);
               const dow = d.getDay();
+              const beforeMin = !!min && fmt(d) < min;
               let color = "text-ink-700";
               if (!inMonth) color = "text-ink-300";
               else if (dow === 0) color = "text-rose-500";
@@ -176,10 +180,11 @@ export default function DatePicker({
                 <button
                   key={i}
                   type="button"
+                  disabled={beforeMin}
                   className={`h-8 w-full text-[12px] font-semibold tabular rounded transition hover:bg-slate-100 ${color} ${
                     isSelected ? "!bg-brand-500 !text-white" : isToday ? "ring-1 ring-brand-400" : ""
-                  }`}
-                  onClick={() => pick(d)}
+                  } ${beforeMin ? "opacity-30 cursor-not-allowed hover:!bg-transparent" : ""}`}
+                  onClick={() => !beforeMin && pick(d)}
                 >
                   {d.getDate()}
                 </button>
