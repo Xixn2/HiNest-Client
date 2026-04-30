@@ -33,6 +33,8 @@ router.get("/", requireAuth, async (req, res) => {
       presenceStatus: user.presenceStatus,
       presenceMessage: user.presenceMessage,
       presenceUpdatedAt: user.presenceUpdatedAt,
+      workStartTime: user.workStartTime,
+      workEndTime: user.workEndTime,
     },
   });
 });

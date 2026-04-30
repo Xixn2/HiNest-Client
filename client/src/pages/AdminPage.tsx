@@ -38,6 +38,8 @@ type UserRow = {
   phone?: string | null;
   note?: string | null;
   autoClockOutTime?: string | null;
+  workStartTime?: string | null;
+  workEndTime?: string | null;
 };
 
 // 나이 계산 (생년월일 기반)
@@ -827,6 +829,8 @@ function UserDetailEditModal({
     disabilityLevel: user.disabilityLevel ?? "",
     note: user.note ?? "",
     autoClockOutTime: user.autoClockOutTime ?? "",
+    workStartTime: user.workStartTime ?? "",
+    workEndTime: user.workEndTime ?? "",
   };
   const [form, setForm] = useState(init);
   const [saving, setSaving] = useState(false);
@@ -927,6 +931,30 @@ function UserDetailEditModal({
               </div>
               <div className="text-[11px] text-ink-500 mt-1">
                 설정된 시간(KST)이 되면 오늘 출근한 기록이 자동으로 퇴근 처리돼요.
+              </div>
+            </Field>
+            <Field label="기준 근무 시각">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <div className="text-[11px] font-bold text-ink-500 mb-1">출근</div>
+                  <TimePicker value={form.workStartTime} onChange={(v) => set("workStartTime", v)} placeholder="09:00" />
+                </div>
+                <div>
+                  <div className="text-[11px] font-bold text-ink-500 mb-1">퇴근</div>
+                  <TimePicker value={form.workEndTime} onChange={(v) => set("workEndTime", v)} placeholder="18:00" />
+                </div>
+              </div>
+              {(form.workStartTime || form.workEndTime) && (
+                <button
+                  type="button"
+                  className="btn-ghost btn-xs mt-2"
+                  onClick={() => { set("workStartTime", ""); set("workEndTime", ""); }}
+                >
+                  기본값으로 (09:00 / 18:00)
+                </button>
+              )}
+              <div className="text-[11px] text-ink-500 mt-1.5">
+                개요 페이지의 근무 진행률 바가 이 시간을 기준으로 표시돼요. 미설정 시 기본 09:00 / 18:00.
               </div>
             </Field>
           </Section>
