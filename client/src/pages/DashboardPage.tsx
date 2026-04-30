@@ -90,10 +90,16 @@ export default function DashboardPage() {
   const workedMin = att?.checkIn
     ? Math.max(0, Math.floor(((att.checkOut ? new Date(att.checkOut).getTime() : now.getTime()) - new Date(att.checkIn).getTime()) / 60000))
     : 0;
+  // 관리자 설정 기반 근무 시각 — 미설정 시 09:00/18:00 fallback.
+  const startMin = parseHHmm(user?.workStartTime ?? "") ?? 9 * 60;
+  const endMin = parseHHmm(user?.workEndTime ?? "") ?? 18 * 60;
+  const startLabel = formatHHmm(startMin);
+  const endLabel = formatHHmm(endMin);
   const dayProgress = useMemo(() => {
-    const h = now.getHours() + now.getMinutes() / 60;
-    return Math.max(0, Math.min(1, (h - 9) / 9));
-  }, [now]);
+    const m = now.getHours() * 60 + now.getMinutes();
+    if (endMin <= startMin) return 0; // 잘못된 설정은 0%
+    return Math.max(0, Math.min(1, (m - startMin) / (endMin - startMin)));
+  }, [now, startMin, endMin]);
 
   return (
     <div className="space-y-4">
@@ -157,9 +163,9 @@ export default function DashboardPage() {
             />
           </div>
           <div className="flex items-center justify-between mt-2.5 text-[11.5px] font-bold text-ink-500 tabular-nums">
-            <span>09:00</span>
+            <span>{startLabel}</span>
             <span className="text-ink-700">{Math.round(dayProgress * 100)}%</span>
-            <span>18:00</span>
+            <span>{endLabel}</span>
           </div>
         </div>
 
@@ -429,6 +435,14 @@ function relTime(iso: string): string {
 }
 function formatHours(min: number): string { return String(Math.floor(min / 60)); }
 function formatMinutesPart(min: number): string { return String(min % 60).padStart(2, "0"); }
+function parseHHmm(s: string): number | null {
+  const m = s?.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+  return m ? +m[1] * 60 + +m[2] : null;
+}
+function formatHHmm(min: number): string {
+  const h = Math.floor(min / 60), m = min % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
 function greetingFor(d: Date): string {
   const h = d.getHours();
   if (h < 6) return "오늘도 고생이 많으세요";

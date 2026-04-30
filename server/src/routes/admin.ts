@@ -99,6 +99,8 @@ const HR_SELECT = {
   phone: true,
   note: true,
   autoClockOutTime: true,
+  workStartTime: true,
+  workEndTime: true,
 } as const;
 
 router.get("/users", async (req, res) => {
@@ -142,6 +144,11 @@ const updateUserSchema = z.object({
   // 자동 퇴근 시간 — "HH:mm" 형식. 빈 문자열이면 null 로 저장해 자동 퇴근 해제.
   autoClockOutTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "HH:mm 형식").optional().nullable()
     .or(z.literal("")),
+  // 기준 근무 시각 — "HH:mm" 형식. 빈 문자열 → null (기본 09:00 / 18:00 로 fallback).
+  workStartTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "HH:mm 형식").optional().nullable()
+    .or(z.literal("")),
+  workEndTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "HH:mm 형식").optional().nullable()
+    .or(z.literal("")),
 });
 
 router.patch("/users/:id", async (req, res) => {
@@ -157,9 +164,9 @@ router.patch("/users/:id", async (req, res) => {
   const data = parsed.data;
 
   // 빈 문자열 "" 는 null 로 정규화 — DB 에 저장되면 "자동 퇴근 미설정" 으로 해석됨.
-  if (data.autoClockOutTime === "") {
-    (data as any).autoClockOutTime = null;
-  }
+  if (data.autoClockOutTime === "") (data as any).autoClockOutTime = null;
+  if (data.workStartTime === "") (data as any).workStartTime = null;
+  if (data.workEndTime === "") (data as any).workEndTime = null;
 
   // 역할 변경은 민감한 권한 에스컬레이션 경로. superAdmin + step-up 쿠키가 있어야 허용.
   // ADMIN 이 자신 또는 동료의 role 을 임의로 바꿀 수 없게 함.

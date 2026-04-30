@@ -16,6 +16,8 @@ export type User = {
   presenceStatus?: string | null;
   presenceMessage?: string | null;
   presenceUpdatedAt?: string | null;
+  workStartTime?: string | null;
+  workEndTime?: string | null;
 };
 
 export type Impersonator = { id: string; name: string };
