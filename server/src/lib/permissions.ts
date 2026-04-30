@@ -87,6 +87,8 @@ type Catalog = {
   label: string;
   group: Group;
   defaults: Record<Role, boolean>;
+  /** UI 에서 숨김 — 개발자 전용 / 직접 토글하면 안 되는 키. hasPermission() 평가는 정상 동작. */
+  hidden?: boolean;
 };
 
 export const PERMISSION_CATALOG: Catalog[] = [
@@ -142,7 +144,7 @@ export const PERMISSION_CATALOG: Catalog[] = [
   // 채팅
   { key: "chat.room.create",        label: "채팅방 생성",              group: "채팅",      defaults: { ADMIN: true,  MANAGER: true,  MEMBER: true  } },
   { key: "chat.room.kick",          label: "채팅방 멤버 추방",          group: "채팅",      defaults: { ADMIN: true,  MANAGER: true,  MEMBER: false } },
-  { key: "chat.audit",              label: "사내톡 감사 접근",          group: "채팅",      defaults: { ADMIN: false, MANAGER: false, MEMBER: false } }, // 개발자 전용
+  { key: "chat.audit",              label: "사내톡 감사 접근",          group: "채팅",      defaults: { ADMIN: false, MANAGER: false, MEMBER: false }, hidden: true }, // 개발자 stepup 전용 — UI 노출 X
 
   // 프로젝트
   { key: "project.create",          label: "프로젝트 생성",            group: "프로젝트",  defaults: { ADMIN: true,  MANAGER: true,  MEMBER: true  } },
