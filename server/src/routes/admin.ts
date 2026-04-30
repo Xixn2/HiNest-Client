@@ -1303,7 +1303,17 @@ import { PERMISSION_CATALOG, getEffectiveMatrix, evictPermissionCache, type Perm
 
 router.get("/role-permissions", requireSuperAdminStepUp, async (_req, res) => {
   const matrix = await getEffectiveMatrix();
-  res.json({ catalog: PERMISSION_CATALOG, matrix });
+  // hidden 키는 UI 에서 노출 안 함 — 카탈로그/매트릭스 둘 다에서 제거.
+  const catalog = PERMISSION_CATALOG.filter((c) => !c.hidden);
+  const visibleKeys = new Set(catalog.map((c) => c.key));
+  const trimmed: Record<string, Record<string, boolean>> = {};
+  for (const [role, perms] of Object.entries(matrix)) {
+    trimmed[role] = {};
+    for (const [k, v] of Object.entries(perms as Record<string, boolean>)) {
+      if (visibleKeys.has(k as any)) trimmed[role][k] = v;
+    }
+  }
+  res.json({ catalog, matrix: trimmed });
 });
 
 router.post("/role-permissions", requireSuperAdminStepUp, async (req, res) => {
