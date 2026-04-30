@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api";
 import { confirmAsync, alertAsync } from "../ConfirmHost";
+import DateTimePicker from "../DateTimePicker";
 
 type Token = {
   id: string;
@@ -74,7 +75,7 @@ export default function TokensPanel() {
         </div>
         <div className="min-w-[160px]">
           <label className="field-label">만료 (선택)</label>
-          <input className="input" type="datetime-local" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
+          <DateTimePicker value={expiresAt} onChange={setExpiresAt} />
         </div>
         <button type="submit" className="btn-primary" disabled={creating}>{creating ? "발급 중…" : "+ 발급"}</button>
       </form>

@@ -226,8 +226,24 @@ export default function MeetingDetailPage() {
   if (!meeting) return null;
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+    <div className="max-w-4xl mx-auto print-area">
+      {/* A4 인쇄 — 본문만 출력하고 사이드바/버튼/네비를 숨김. 1.5cm 여백, 12pt 본문. */}
+      <style>{`
+        @media print {
+          @page { size: A4; margin: 1.5cm; }
+          html, body { background: #fff !important; color: #000 !important; }
+          body * { visibility: hidden; }
+          .print-area, .print-area * { visibility: visible; }
+          .print-area { position: absolute; left: 0; top: 0; width: 100%; max-width: none !important; padding: 0; }
+          .no-print { display: none !important; }
+          .ProseMirror, article, h1, h2, h3, p, li, td, th { color: #000 !important; }
+          a { color: #000 !important; text-decoration: underline; }
+          img { max-width: 100% !important; page-break-inside: avoid; }
+          h1, h2, h3 { page-break-after: avoid; }
+          table, pre, blockquote { page-break-inside: avoid; }
+        }
+      `}</style>
+      <div className="flex items-center justify-between gap-2 mb-3 flex-wrap no-print">
         <Link to="/meetings" className="text-[13px] text-slate-500 hover:text-brand-600 flex-shrink-0">
           ← 회의록 목록
         </Link>
@@ -250,6 +266,7 @@ export default function MeetingDetailPage() {
             링크 복사
           </button>
           <PinButton type="MEETING" id={meeting.id} label={meeting.title} />
+          <button className="btn-ghost no-print" onClick={() => window.print()} title="A4 인쇄">인쇄</button>
           <button className="btn-ghost" onClick={() => setHistoryOpen(true)} title="버전 히스토리">히스토리</button>
           {canEdit && !edit && (
             <button className="btn-ghost" onClick={() => { setEdit(true); setSearchParams({ edit: "1" }); }}>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api";
 import { confirmAsync } from "../ConfirmHost";
+import DateTimePicker from "../DateTimePicker";
 
 type Rate = { id: string; routeGlob: string; perMin: number; perHour: number; scope: string; enabled: boolean; note: string | null; createdAt: string };
 type Block = { id: string; cidr: string; country: string | null; reason: string | null; enabled: boolean; expiresAt: string | null; createdAt: string };
@@ -160,7 +161,7 @@ function IpBlocks() {
             <input className="input font-mono" maxLength={2} value={editing.country ?? ""} onChange={(e) => setEditing({ ...editing, country: e.target.value.toUpperCase(), cidr: "" })} placeholder="예: CN, RU" />
           </Field>
           <Field label="사유"><input className="input" value={editing.reason ?? ""} onChange={(e) => setEditing({ ...editing, reason: e.target.value })} /></Field>
-          <Field label="만료 (선택)"><input className="input" type="datetime-local" value={editing.expiresAt ?? ""} onChange={(e) => setEditing({ ...editing, expiresAt: e.target.value })} /></Field>
+          <Field label="만료 (선택)"><DateTimePicker value={editing.expiresAt ?? ""} onChange={(v) => setEditing({ ...editing, expiresAt: v })} /></Field>
           <Field label="활성">
             <select className="input" value={editing.enabled ? "1" : "0"} onChange={(e) => setEditing({ ...editing, enabled: e.target.value === "1" })}>
               <option value="1">차단 중</option><option value="0">OFF</option>
