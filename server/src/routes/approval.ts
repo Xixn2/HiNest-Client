@@ -25,6 +25,24 @@ const approvalSchema = z.object({
   reviewerIds: z.array(z.string().max(50)).min(1).max(10),
 });
 
+/** 사이드바·탭 배지용 — 결재 대기/내 신청 개수만 가볍게. 60s 캐시 권장. */
+router.get("/counts", async (req, res) => {
+  const u = (req as any).user;
+  const [pending, mine] = await Promise.all([
+    prisma.approval.count({
+      where: {
+        status: "PENDING",
+        steps: { some: { reviewerId: u.id, status: "PENDING" } },
+      },
+    }),
+    prisma.approval.count({
+      where: { requesterId: u.id, status: "PENDING" },
+    }),
+  ]);
+  res.setHeader("Cache-Control", "private, max-age=30");
+  res.json({ pending, mine });
+});
+
 router.get("/", async (req, res) => {
   const u = (req as any).user;
   const scope = String(req.query.scope ?? "mine"); // mine | pending | all

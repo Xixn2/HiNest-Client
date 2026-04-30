@@ -6,6 +6,7 @@ import PageHeader from "../components/PageHeader";
 import DateTimePicker from "../components/DateTimePicker";
 import { alertAsync } from "../components/ConfirmHost";
 import { isDevAccount, DevBadge } from "../lib/devBadge";
+import { useApprovalCounts, refreshApprovalCounts } from "../lib/useApprovalCounts";
 
 type ApprovalType = "TRIP" | "OFFSITE" | "EXPENSE" | "PURCHASE" | "GENERAL" | "OTHER";
 type Step = {
@@ -185,6 +186,7 @@ export default function ApprovalsPage() {
       // selected 가 \"승인/반려 후\" 상태로 즉시 반영되도록 응답값을 사용.
       // load() 가 새 목록을 가져와도 pending scope 에선 이 항목이 빠져있어 selected 갱신이 안 되는 문제 회피.
       if (r?.approval) setSelected(r.approval);
+      refreshApprovalCounts();
       await load();
     } catch (err: any) {
       alertAsync({ title: "처리 실패", description: err?.message ?? "처리에 실패했어요" });
@@ -204,6 +206,7 @@ export default function ApprovalsPage() {
         json: { action: "reject", comment: rejectComment.trim() || undefined },
       });
       if (r?.approval) setSelected(r.approval);
+      refreshApprovalCounts();
       await load();
     } catch (err: any) {
       alertAsync({ title: "반려 실패", description: err?.message ?? "반려에 실패했어요" });
@@ -233,10 +236,9 @@ export default function ApprovalsPage() {
     }
   }
 
-  const pendingCount = useMemo(
-    () => approvals.filter((a) => a.status === "PENDING").length,
-    [approvals]
-  );
+  // 탭 양쪽 다 표시되는 글로벌 카운터 — 현재 scope 와 무관하게 항상 보임.
+  // useApprovalCounts 가 30s 폴링 + 가시성 복귀 시 즉시 새로고침.
+  const counts = useApprovalCounts();
 
   return (
     <div>
@@ -248,10 +250,10 @@ export default function ApprovalsPage() {
           <>
             <div className="tabs flex-shrink-0">
               <button className={`tab ${scope === "mine" ? "tab-active" : ""}`} onClick={() => setScope("mine")}>
-                내 신청 <span className="ml-1 tabular text-ink-500">{scope === "mine" ? pendingCount : ""}</span>
+                내 신청 {counts.mine > 0 && <CountChip n={counts.mine} />}
               </button>
               <button className={`tab ${scope === "pending" ? "tab-active" : ""}`} onClick={() => setScope("pending")}>
-                결재 대기 <span className="ml-1 tabular text-ink-500">{scope === "pending" ? approvals.length : ""}</span>
+                결재 대기 {counts.pending > 0 && <CountChip n={counts.pending} tone="danger" />}
               </button>
             </div>
             <button className="btn-primary" onClick={() => setCreating(true)}>+ 새 결재</button>
@@ -447,6 +449,22 @@ function ConfirmModal({
         </div>
       </div>
     </div>
+  );
+}
+
+/** 탭 옆에 붙는 작은 카운트 칩. */
+function CountChip({ n, tone }: { n: number; tone?: "danger" }) {
+  return (
+    <span
+      className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full text-[10.5px] font-extrabold tabular"
+      style={
+        tone === "danger"
+          ? { background: "var(--c-danger)", color: "#fff" }
+          : { background: "var(--c-surface-3)", color: "var(--c-text-2)" }
+      }
+    >
+      {n > 99 ? "99+" : n}
+    </span>
   );
 }
 
