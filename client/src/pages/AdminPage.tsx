@@ -937,11 +937,11 @@ function UserDetailEditModal({
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <div className="text-[11px] font-bold text-ink-500 mb-1">출근</div>
-                  <TimePicker value={form.workStartTime} onChange={(v) => set("workStartTime", v)} placeholder="09:00" />
+                  <TimePicker value={form.workStartTime} onChange={(v) => set("workStartTime", v)} placeholder="(기본 09:00)" />
                 </div>
                 <div>
                   <div className="text-[11px] font-bold text-ink-500 mb-1">퇴근</div>
-                  <TimePicker value={form.workEndTime} onChange={(v) => set("workEndTime", v)} placeholder="18:00" />
+                  <TimePicker value={form.workEndTime} onChange={(v) => set("workEndTime", v)} placeholder="(기본 18:00)" />
                 </div>
               </div>
               {(form.workStartTime || form.workEndTime) && (
@@ -950,11 +950,11 @@ function UserDetailEditModal({
                   className="btn-ghost btn-xs mt-2"
                   onClick={() => { set("workStartTime", ""); set("workEndTime", ""); }}
                 >
-                  기본값으로 (09:00 / 18:00)
+                  기본값으로 되돌리기
                 </button>
               )}
               <div className="text-[11px] text-ink-500 mt-1.5">
-                개요 페이지의 근무 진행률 바가 이 시간을 기준으로 표시돼요. 미설정 시 기본 09:00 / 18:00.
+                개요 페이지의 근무 진행률 바가 이 시간을 기준으로 표시돼요. 비워두면 기본 09:00 / 18:00.
               </div>
             </Field>
           </Section>

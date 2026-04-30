@@ -12,6 +12,7 @@ import FlagsPanel from "../components/superadmin/FlagsPanel";
 import TokensPanel from "../components/superadmin/TokensPanel";
 import SecurityPanel from "../components/superadmin/SecurityPanel";
 import TwoFAPanel from "../components/superadmin/TwoFAPanel";
+import RolePermissionsPanel from "../components/superadmin/RolePermissionsPanel";
 
 type Log = {
   id: string;
@@ -47,7 +48,7 @@ type Message = {
   sender: { id: string; name: string; avatarColor: string; avatarUrl?: string | null };
 };
 
-type Tab = "logs" | "chat" | "api" | "console" | "server" | "nav" | "sessions" | "errors" | "health" | "trash" | "audit" | "flags" | "tokens" | "security" | "twofa";
+type Tab = "logs" | "chat" | "api" | "console" | "server" | "nav" | "sessions" | "errors" | "health" | "trash" | "audit" | "flags" | "tokens" | "security" | "twofa" | "roles";
 
 type ApiSpecRoute = {
   method: string;
@@ -118,6 +119,7 @@ function SuperAdminContent() {
     : raw === "tokens" ? "tokens"
     : raw === "security" ? "security"
     : raw === "twofa" ? "twofa"
+    : raw === "roles" ? "roles"
     : "logs";
 
   const setTab = (t: Tab) => {
@@ -195,6 +197,7 @@ function SuperAdminContent() {
         <TabBtn active={tab === "tokens"} onClick={() => setTab("tokens")}>API 토큰</TabBtn>
         <TabBtn active={tab === "security"} onClick={() => setTab("security")}>보안 룰</TabBtn>
         <TabBtn active={tab === "twofa"} onClick={() => setTab("twofa")}>2FA 정책</TabBtn>
+        <TabBtn active={tab === "roles"} onClick={() => setTab("roles")}>역할 권한</TabBtn>
       </div>
       {tab === "logs" && <LogsPanel />}
       {tab === "chat" && chatUnlocked && <ChatAuditPanel />}
@@ -211,6 +214,7 @@ function SuperAdminContent() {
       {tab === "tokens" && <TokensPanel />}
       {tab === "security" && <SecurityPanel />}
       {tab === "twofa" && <TwoFAPanel />}
+      {tab === "roles" && <RolePermissionsPanel />}
       {chatPwOpen && (
         <ChatAuditPwModal
           onClose={() => setChatPwOpen(false)}

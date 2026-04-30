@@ -142,6 +142,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             //  같은 유저 세션이 동시에 여러 번 GET /api/notification 치는 문제 → 서버 부하 증가.
             //  30초 주기 poll + visibilitychange poll 으로 서버 기준 재싱크는 이미 커버됨.)
             setItems((prev) => (prev.some((x) => x.id === n.id) ? prev : [n, ...prev]));
+            // 결재 관련 알림이 도착하면 사이드바 배지/탭 카운트 즉시 새로고침.
+            if (n.type === "APPROVAL_REQUEST" || n.type === "APPROVAL_REVIEW") {
+              window.dispatchEvent(new Event("hinest:approvalCountsRefresh"));
+            }
             // 동일 가드 — 음소거된 방의 SSE 푸시는 OS 알림 띄우지 않음.
             if (shouldDeliverNotif(n)) {
               deliverPendingNotifications([

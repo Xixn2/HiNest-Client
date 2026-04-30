@@ -18,7 +18,7 @@ export function useApprovalCounts() {
       } catch { /* 401 등은 무시 */ }
     }
     load();
-    const t = setInterval(load, 30_000);
+    const t = setInterval(load, 15_000);
     function onVis() { if (document.visibilityState === "visible") load(); }
     function onSignal() { load(); }
     document.addEventListener("visibilitychange", onVis);

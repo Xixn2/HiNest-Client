@@ -911,6 +911,18 @@ model Snippet {
   @@index([trigger])
 }
 
+/// 역할(ADMIN/MANAGER/MEMBER) 별 기능 권한 토글. 기본값과 다를 때만 row 생성.
+/// 존재하지 않는 (role, permKey) 는 코드 카탈로그의 default 를 따름.
+model RolePermission {
+  role        String // ADMIN | MANAGER | MEMBER
+  permKey     String
+  enabled     Boolean
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+
+  @@id([role, permKey])
+}
+
 /// 2FA(패스키) 강제 정책 — role 별로 필수 여부와 유예 기간. 미충족 사용자는 별도 화면 안내.
 model TwoFactorPolicy {
   role            String   @id // ADMIN | MANAGER | MEMBER

@@ -1298,6 +1298,40 @@ router.delete("/feature-flags/:key", requireSuperAdminStepUp, async (req, res) =
   res.json({ ok: true });
 });
 
+/* ===== 역할 권한 (RolePermission) ===== */
+import { PERMISSION_CATALOG, getEffectiveMatrix, evictPermissionCache, type PermKey } from "../lib/permissions.js";
+
+router.get("/role-permissions", requireSuperAdminStepUp, async (_req, res) => {
+  const matrix = await getEffectiveMatrix();
+  res.json({ catalog: PERMISSION_CATALOG, matrix });
+});
+
+router.post("/role-permissions", requireSuperAdminStepUp, async (req, res) => {
+  const me = (req as any).user;
+  const { role, permKey, enabled } = req.body ?? {};
+  if (!["ADMIN", "MANAGER", "MEMBER"].includes(role)) return res.status(400).json({ error: "invalid role" });
+  const known = PERMISSION_CATALOG.some((c) => c.key === permKey);
+  if (!known) return res.status(400).json({ error: "unknown permKey" });
+  await prisma.rolePermission.upsert({
+    where: { role_permKey: { role, permKey } },
+    update: { enabled: !!enabled, updatedById: me.id },
+    create: { role, permKey, enabled: !!enabled, updatedById: me.id },
+  });
+  evictPermissionCache();
+  await writeLog(me.id, "ROLE_PERM_UPSERT", `${role}:${permKey}`, `enabled=${!!enabled}`, req.ip);
+  res.json({ ok: true });
+});
+
+router.delete("/role-permissions/:role/:permKey", requireSuperAdminStepUp, async (req, res) => {
+  const me = (req as any).user;
+  await prisma.rolePermission.deleteMany({
+    where: { role: req.params.role, permKey: req.params.permKey as PermKey },
+  });
+  evictPermissionCache();
+  await writeLog(me.id, "ROLE_PERM_RESET", `${req.params.role}:${req.params.permKey}`, undefined, req.ip);
+  res.json({ ok: true });
+});
+
 /* ===== 2FA(패스키) 정책 ===== */
 
 router.get("/2fa-policy", requireSuperAdminStepUp, async (_req, res) => {
