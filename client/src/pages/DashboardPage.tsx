@@ -221,7 +221,10 @@ export default function DashboardPage() {
                 )}
               </div>
               <div className="min-w-0">
-                <div className="text-[14px] font-bold text-ink-900">{user?.name}</div>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[14px] font-bold text-ink-900 truncate">{user?.name}</span>
+                  {isDevAccount(user) && <DevBadge size="sm" />}
+                </div>
                 <div className="text-[12px] text-ink-500 truncate">{user?.email}</div>
               </div>
             </div>
