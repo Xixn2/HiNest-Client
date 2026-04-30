@@ -288,11 +288,20 @@ router.post("/:id/act", async (req, res) => {
   const refreshed = await prisma.approval.findUnique({
     where: { id: a.id },
     include: {
-      requester: { select: { id: true, name: true } },
-      steps: { orderBy: { order: "asc" }, include: { reviewer: { select: { id: true, name: true } } } },
+      requester: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true, position: true, team: true } },
+      steps: {
+        orderBy: { order: "asc" },
+        include: { reviewer: { select: { id: true, name: true, avatarColor: true, isDeveloper: true, avatarUrl: true } } },
+      },
     },
   });
-  res.json({ approval: refreshed });
+  // 목록 응답과 같은 shape — currentReviewerId / currentStepOrder 포함해야 클라가 즉시 selected 갱신 가능.
+  const cur = refreshed?.steps.find((s) => s.status === "PENDING");
+  res.json({
+    approval: refreshed
+      ? { ...refreshed, currentStepOrder: cur?.order ?? null, currentReviewerId: cur?.reviewerId ?? null }
+      : null,
+  });
 });
 
 router.post("/:id/cancel", async (req, res) => {

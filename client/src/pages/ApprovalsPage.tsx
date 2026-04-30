@@ -181,7 +181,10 @@ export default function ApprovalsPage() {
     }
     setActingId(id);
     try {
-      await api(`/api/approval/${id}/act`, { method: "POST", json: { action } });
+      const r = await api<{ approval: Approval }>(`/api/approval/${id}/act`, { method: "POST", json: { action } });
+      // selected 가 \"승인/반려 후\" 상태로 즉시 반영되도록 응답값을 사용.
+      // load() 가 새 목록을 가져와도 pending scope 에선 이 항목이 빠져있어 selected 갱신이 안 되는 문제 회피.
+      if (r?.approval) setSelected(r.approval);
       await load();
     } catch (err: any) {
       alertAsync({ title: "처리 실패", description: err?.message ?? "처리에 실패했어요" });
@@ -196,10 +199,11 @@ export default function ApprovalsPage() {
     setRejectingId(null);
     setActingId(id);
     try {
-      await api(`/api/approval/${id}/act`, {
+      const r = await api<{ approval: Approval }>(`/api/approval/${id}/act`, {
         method: "POST",
         json: { action: "reject", comment: rejectComment.trim() || undefined },
       });
+      if (r?.approval) setSelected(r.approval);
       await load();
     } catch (err: any) {
       alertAsync({ title: "반려 실패", description: err?.message ?? "반려에 실패했어요" });
