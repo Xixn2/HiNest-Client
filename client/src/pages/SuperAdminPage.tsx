@@ -1294,33 +1294,102 @@ function ConsolePanel() {
     }
   }
 
+  const cmdCount = history.filter((h) => h.kind === "input").length;
+
   return (
     <div
       style={{
-        background: "#0E1014",
-        color: "#E5E9F0",
-        borderRadius: 12,
-        border: "1px solid var(--c-border)",
+        borderRadius: 14,
         overflow: "hidden",
-        fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+        boxShadow: "0 20px 50px rgba(2, 6, 23, 0.45), 0 1px 0 rgba(255,255,255,0.04) inset",
+        background: "#0B0E14",
+        color: "#E5E9F0",
+        fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+        border: "1px solid #1F2733",
       }}
     >
+      {/* macOS 스타일 타이틀 바 */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "10px 14px",
+          background: "linear-gradient(180deg, #1A1F2A 0%, #131722 100%)",
+          borderBottom: "1px solid #1F2733",
+          position: "relative",
+        }}
+      >
+        <div style={{ display: "flex", gap: 6 }}>
+          <TrafficLight color="#FF5F57" />
+          <TrafficLight color="#FEBC2E" />
+          <TrafficLight color="#28C840" />
+        </div>
+        <div
+          style={{
+            position: "absolute",
+            left: "50%",
+            transform: "translateX(-50%)",
+            color: "#7F8AA0",
+            fontSize: 11.5,
+            fontWeight: 700,
+            letterSpacing: "0.04em",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
+          </svg>
+          hinest — 개발자 콘솔
+        </div>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 10.5, color: "#5C6577", fontWeight: 600 }}>
+            {cmdCount} cmd
+          </span>
+          <button
+            type="button"
+            onClick={() => setHistory([])}
+            title="화면 비우기 (clear)"
+            style={{
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              color: "#A8B0C2",
+              fontSize: 10.5,
+              fontWeight: 700,
+              padding: "3px 8px",
+              borderRadius: 6,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            clear
+          </button>
+        </div>
+      </div>
+
+      {/* 출력 영역 */}
       <div
         ref={scrollRef}
         style={{
           height: "min(60vh, 540px)",
           overflowY: "auto",
-          padding: "12px 14px",
+          padding: "14px 16px",
           fontSize: 12.5,
-          lineHeight: 1.55,
+          lineHeight: 1.65,
+          background:
+            "radial-gradient(ellipse at top, rgba(124,58,237,0.04) 0%, transparent 60%), #0B0E14",
         }}
       >
         {history.map((h, i) => {
           if (h.kind === "input") {
             return (
-              <div key={i} style={{ color: "#7896FF", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                <span style={{ color: "#9CA3AF", marginRight: 6 }}>$</span>
-                {h.text}
+              <div key={i} style={{ marginTop: i === 0 ? 0 : 12, display: "flex", gap: 8 }}>
+                <Prompt ts={h.ts} />
+                <span style={{ color: "#A8FFE0", whiteSpace: "pre-wrap", wordBreak: "break-word", flex: 1 }}>
+                  {h.text}
+                </span>
               </div>
             );
           }
@@ -1328,26 +1397,43 @@ function ConsolePanel() {
             <div
               key={i}
               style={{
-                color: h.ok ? "#D4D8DE" : "#FCA5A5",
+                display: "flex",
+                gap: 8,
+                marginTop: 4,
+                paddingLeft: 22,
+                color: h.ok ? "#D6DCE8" : "#FCA5A5",
                 whiteSpace: "pre-wrap",
                 wordBreak: "break-word",
-                marginBottom: 6,
+                borderLeft: `2px solid ${h.ok ? "rgba(34,197,94,0.4)" : "rgba(248,113,113,0.5)"}`,
+                paddingTop: 1,
+                paddingBottom: 1,
+                marginLeft: 1,
               }}
             >
-              {h.text}
+              <span style={{ color: h.ok ? "#22C55E" : "#F87171", fontWeight: 800, flexShrink: 0, marginLeft: 8 }}>
+                {h.ok ? "✓" : "✗"}
+              </span>
+              <span style={{ flex: 1 }}>{h.text}</span>
             </div>
           );
         })}
-        {busy && <div style={{ color: "#7F8792" }}>실행 중…</div>}
+        {busy && (
+          <div style={{ display: "flex", gap: 8, marginTop: 8, color: "#A78BFA", alignItems: "center" }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#A78BFA", animation: "hinest-pulse 1s infinite" }} />
+            실행 중…
+          </div>
+        )}
       </div>
+
+      {/* 입력 영역 */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 8,
-          padding: "8px 12px",
-          borderTop: "1px solid rgba(255,255,255,0.08)",
-          background: "#171A20",
+          gap: 10,
+          padding: "10px 14px",
+          borderTop: "1px solid #1F2733",
+          background: "linear-gradient(180deg, #131722 0%, #0F131C 100%)",
           position: "relative",
         }}
       >
@@ -1355,17 +1441,18 @@ function ConsolePanel() {
           <div
             style={{
               position: "absolute",
-              left: 12,
-              right: 12,
+              left: 14,
+              right: 14,
               bottom: "100%",
               marginBottom: 6,
-              background: "#171A20",
-              border: "1px solid rgba(255,255,255,0.12)",
+              background: "#131722",
+              border: "1px solid #2A3344",
               borderRadius: 10,
-              boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+              boxShadow: "0 12px 32px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.04) inset",
               maxHeight: 240,
               overflowY: "auto",
               zIndex: 10,
+              padding: 4,
             }}
             onMouseDown={(e) => e.preventDefault()}
           >
@@ -1381,22 +1468,30 @@ function ConsolePanel() {
                   gap: 8,
                   width: "100%",
                   padding: "7px 10px",
-                  background: i === active ? "rgba(120,150,255,0.12)" : "transparent",
+                  background: i === active
+                    ? "linear-gradient(90deg, rgba(124,58,237,0.18), rgba(124,58,237,0.04))"
+                    : "transparent",
                   border: 0,
+                  borderRadius: 6,
                   cursor: "pointer",
                   textAlign: "left",
                   fontFamily: "inherit",
+                  color: "#E5E9F0",
                 }}
               >
-                <span style={{ color: "#E5E9F0", fontSize: 12.5, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span style={{ color: i === active ? "#A78BFA" : "#5C6577", fontSize: 11, fontWeight: 700, width: 14 }}>
+                  {i === active ? "▶" : ""}
+                </span>
+                <span style={{ fontSize: 12.5, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {s.label}
                 </span>
-                {s.hint && <span style={{ color: "#7F8792", fontSize: 11 }}>{s.hint}</span>}
+                {s.hint && <span style={{ color: "#7F8AA0", fontSize: 11 }}>{s.hint}</span>}
               </button>
             ))}
           </div>
         )}
-        <span style={{ color: "#9CA3AF", fontSize: 13, fontWeight: 700 }}>{">"}</span>
+
+        <PromptInline />
         <input
           ref={inputRef}
           value={input}
@@ -1407,7 +1502,7 @@ function ConsolePanel() {
           spellCheck={false}
           autoCapitalize="off"
           autoCorrect="off"
-          placeholder="Tab 자동완성 / @ 유저·팀·직급 선택 / help"
+          placeholder="Tab 자동완성 · @ 유저/팀/직급 · help"
           style={{
             flex: 1,
             border: 0,
@@ -1417,10 +1512,65 @@ function ConsolePanel() {
             fontFamily: "inherit",
             fontSize: 13,
             padding: "4px 0",
+            caretColor: "#A78BFA",
+          }}
+        />
+        <span
+          style={{
+            display: input || busy ? "none" : "inline-block",
+            width: 8,
+            height: 14,
+            background: "#A78BFA",
+            animation: "hinest-blink 1s steps(2, start) infinite",
+            borderRadius: 1,
+            marginLeft: -4,
           }}
         />
       </div>
+
+      <style>{`
+        @keyframes hinest-blink { 50% { opacity: 0; } }
+        @keyframes hinest-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.4); } }
+      `}</style>
     </div>
+  );
+}
+
+function TrafficLight({ color }: { color: string }) {
+  return (
+    <span
+      style={{
+        width: 12,
+        height: 12,
+        borderRadius: "50%",
+        background: color,
+        boxShadow: "inset 0 0 0 0.5px rgba(0,0,0,0.2)",
+      }}
+    />
+  );
+}
+
+function Prompt({ ts }: { ts: number }) {
+  const t = new Date(ts).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return (
+    <span style={{ color: "#5C6577", fontSize: 11.5, flexShrink: 0, fontWeight: 600, paddingTop: 2 }}>
+      <span style={{ color: "#7F8AA0" }}>[{t}]</span>{" "}
+      <span style={{ color: "#22C55E" }}>dev</span>
+      <span style={{ color: "#7F8AA0" }}>@</span>
+      <span style={{ color: "#7896FF" }}>hinest</span>
+      <span style={{ color: "#A78BFA", marginLeft: 2 }}>$</span>
+    </span>
+  );
+}
+
+function PromptInline() {
+  return (
+    <span style={{ display: "flex", alignItems: "center", gap: 0, fontSize: 12.5, fontWeight: 700, flexShrink: 0 }}>
+      <span style={{ color: "#22C55E" }}>dev</span>
+      <span style={{ color: "#7F8AA0" }}>@</span>
+      <span style={{ color: "#7896FF" }}>hinest</span>
+      <span style={{ color: "#A78BFA", marginLeft: 4 }}>❯</span>
+    </span>
   );
 }
 
