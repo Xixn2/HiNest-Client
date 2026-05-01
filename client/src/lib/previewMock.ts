@@ -620,6 +620,66 @@ const DEMO_PROJECTS = [
 
 function projectList() { return { projects: DEMO_PROJECTS }; }
 
+/* ===== 프로젝트별 QA / 이벤트 데모 ===== */
+const _qaUser = (id: string, name: string, color: string) => ({ id, name, avatarColor: color, avatarUrl: null, position: null, team: null });
+const _grace = _qaUser("u-lead-3", "박그레이스", "#7C3AED");
+const _alice = _qaUser("u-lead-1", "이앨리스",   "#16A34A");
+const _bob   = _qaUser("u-mem-1",  "박밥",       "#7C3AED");
+const _me    = _qaUser(DEMO_ME.id, DEMO_ME.name, DEMO_ME.avatarColor);
+
+function projectQa(projectId: string) {
+  if (projectId === "p1") {
+    // HiNest v2 — 베타 운영 중 발견된 이슈 / 개선
+    return [
+      { id: "qa1", projectId, title: "모바일에서 결재 댓글 알림 누락", note: "iOS 17.4 + 결재 댓글 작성 시 신청자에게 푸시 알림이 가지 않음. APN payload 확인 필요.",
+        screen: "모바일 / 결재 상세", platform: "IOS" as const, assigneeId: _grace.id, status: "IN_PROGRESS" as const, priority: "HIGH" as const, sortOrder: 1, dueDate: iso(3).slice(0, 10),
+        createdAt: iso(-2, 11), updatedAt: iso(-1, 14), resolvedAt: null, createdBy: _alice, resolvedBy: null, assignee: _grace, attachments: [] },
+      { id: "qa2", projectId, title: "회의록 검색 한글 자모 분리 시 매칭 안 됨", note: "사용자가 '서지' 검색 시 '서지완' 결과는 나오지만 '서지'(자소 단위) 단독 입력엔 0건. 인덱싱 토크나이저 검토.",
+        screen: "회의록 / 검색", platform: "WEB" as const, assigneeId: _bob.id, status: "BUG" as const, priority: "NORMAL" as const, sortOrder: 2, dueDate: iso(7).slice(0, 10),
+        createdAt: iso(-4, 10), updatedAt: iso(-3, 16), resolvedAt: null, createdBy: _grace, resolvedBy: null, assignee: _bob, attachments: [] },
+      { id: "qa3", projectId, title: "다크 모드에서 알림 드롭다운 흐림", note: "안 읽은 항목 배경에 brand-50/30 가 사용돼 다크모드에선 회보라 톤. color-mix 솔리드로 교체.",
+        screen: "알림 드롭다운", platform: "WEB" as const, assigneeId: _alice.id, status: "DONE" as const, priority: "LOW" as const, sortOrder: 3, dueDate: null,
+        createdAt: iso(-7, 9), updatedAt: iso(-5, 18), resolvedAt: iso(-5, 18), createdBy: _me, resolvedBy: _alice, assignee: _alice, attachments: [] },
+      { id: "qa4", projectId, title: "결재 자동 추천 정확도 측정 데이터셋 부족", note: "지난 6개월 신청 + 결재선 매칭 정답이 절반만 라벨링됨. 운영팀과 수기 라벨링 일정 합의 필요.",
+        screen: "결재 / 자동 추천", platform: "OTHER" as const, assigneeId: _me.id, status: "ON_HOLD" as const, priority: "HIGH" as const, sortOrder: 4, dueDate: iso(14).slice(0, 10),
+        createdAt: iso(-1, 17), updatedAt: iso(0, 9), resolvedAt: null, createdBy: _grace, resolvedBy: null, assignee: _me, attachments: [] },
+      { id: "qa5", projectId, title: "키보드 단축키 ⌘K 가이드 부족", note: "신규 사용자 절반이 검색 단축키 존재 자체를 모름. 첫 진입 시 1회 노출되는 hints 추가 검토.",
+        screen: "전역 검색", platform: "WEB" as const, assigneeId: null, status: "BUG" as const, priority: "LOW" as const, sortOrder: 5, dueDate: null,
+        createdAt: iso(-3, 13), updatedAt: iso(-3, 13), resolvedAt: null, createdBy: _alice, resolvedBy: null, assignee: null, attachments: [] },
+    ];
+  }
+  if (projectId === "p4") {
+    return [
+      { id: "qa-c1", projectId, title: "Reels 30초 컷 가이드라인 정리", note: "음악·자막·화면 비율 표준. 디자이너 / 영상 외주에 공유.",
+        screen: null, platform: "OTHER" as const, assigneeId: _alice.id, status: "IN_PROGRESS" as const, priority: "NORMAL" as const, sortOrder: 1, dueDate: iso(5).slice(0, 10),
+        createdAt: iso(-2, 14), updatedAt: iso(-1, 16), resolvedAt: null, createdBy: _qaUser("u-lead-4", "최마틴", "#F59E0B"), resolvedBy: null, assignee: _alice, attachments: [] },
+      { id: "qa-c2", projectId, title: "LinkedIn 디자이너 토크 1편 게시", note: "박그레이스님 인터뷰 정리 → 5/20 게시.",
+        screen: null, platform: "OTHER" as const, assigneeId: _qaUser("u-lead-4", "최마틴", "#F59E0B").id, status: "BUG" as const, priority: "HIGH" as const, sortOrder: 2, dueDate: iso(10).slice(0, 10),
+        createdAt: iso(-1, 11), updatedAt: iso(0, 9), resolvedAt: null, createdBy: _qaUser("u-lead-4", "최마틴", "#F59E0B"), resolvedBy: null, assignee: _qaUser("u-lead-4", "최마틴", "#F59E0B"), attachments: [] },
+    ];
+  }
+  return []; // p5 (archived) — 비움
+}
+
+function projectEvents(projectId: string) {
+  if (projectId === "p1") {
+    return [
+      { id: "pe1", projectId, title: "결재 자동화 베타 그룹 선정",   description: "10명 내외, 직급 분포 고려.", startAt: iso(2, 10),  endAt: iso(2, 11),  allDay: false, color: "#3B5CF0", assigneeIds: _me.id, createdById: _me.id, completed: false, completedAt: null, completedById: null },
+      { id: "pe2", projectId, title: "v2 베타 1차 회고",            description: "3주 운영 후 회고. 다음 마일스톤 합의.", startAt: iso(5, 14),  endAt: iso(5, 16),  allDay: false, color: "#3B5CF0", assigneeIds: null, createdById: _alice.id, completed: false, completedAt: null, completedById: null },
+      { id: "pe3", projectId, title: "디자인 시스템 v2.1 마이그레이션", description: "전 화면 컬러 토큰 일괄 갱신.", startAt: iso(7, 9),   endAt: iso(9, 18),  allDay: true,  color: "#7C3AED", assigneeIds: _alice.id, createdById: _alice.id, completed: false, completedAt: null, completedById: null },
+      { id: "pe4", projectId, title: "정식 런칭 D-day",             description: "공식 발표 + 외부 파트너 도입 시작.", startAt: iso(45, 10), endAt: iso(45, 11), allDay: false, color: "#DB2777", assigneeIds: null, createdById: _me.id, completed: false, completedAt: null, completedById: null },
+      { id: "pe5", projectId, title: "회의록 검색 인덱싱 도입",      description: "한글 자모 분리 토크나이저 적용 + 검색 응답 80ms 목표.", startAt: iso(-3, 14), endAt: iso(-3, 18), allDay: false, color: "#16A34A", assigneeIds: _bob.id, createdById: _grace.id, completed: true, completedAt: iso(-3, 18), completedById: _grace.id },
+    ];
+  }
+  if (projectId === "p4") {
+    return [
+      { id: "pe-c1", projectId, title: "Reels 1편 촬영", description: "본사 1층 카페에서 짧은 인터뷰 + B-roll.", startAt: iso(3, 14),  endAt: iso(3, 17),  allDay: false, color: "#DB2777", assigneeIds: _qaUser("u-lead-4", "최마틴", "#F59E0B").id, createdById: _qaUser("u-lead-4", "최마틴", "#F59E0B").id, completed: false, completedAt: null, completedById: null },
+      { id: "pe-c2", projectId, title: "LinkedIn 디자이너 토크 게시", description: "박그레이스님 편 — 디자인 시스템 v2 비하인드.", startAt: iso(10, 10), endAt: iso(10, 11), allDay: false, color: "#0EA5E9", assigneeIds: _alice.id, createdById: _qaUser("u-lead-4", "최마틴", "#F59E0B").id, completed: false, completedAt: null, completedById: null },
+    ];
+  }
+  return [];
+}
+
 /* ===== 문서함 데모 ===== */
 function demoFolders() {
   return [
@@ -1053,8 +1113,8 @@ const HANDLERS: { test: (p: string) => boolean; data: (p?: string) => any }[] = 
     } },
 
   /* === 프로젝트 === */
-  { test: (p) => /^\/api\/project\/[^/?]+\/events/.test(p),  data: () => ({ events: [] }) },
-  { test: (p) => /^\/api\/project\/[^/?]+\/qa/.test(p),      data: () => ({ items: [] }) },
+  { test: (p) => /^\/api\/project\/[^/?]+\/events/.test(p),  data: (p?: string) => ({ events: projectEvents((p ?? "").match(/\/api\/project\/([^/?]+)/)?.[1] ?? "p1") }) },
+  { test: (p) => /^\/api\/project\/[^/?]+\/qa/.test(p),      data: (p?: string) => ({ items: projectQa((p ?? "").match(/\/api\/project\/([^/?]+)/)?.[1] ?? "p1") }) },
   { test: (p) => /^\/api\/project\/[^/?]+\/webhook/.test(p), data: () => ({ channels: [] }) },
   { test: (p) => /^\/api\/project\/[^/?]+\/member/.test(p),  data: () => ({ members: [] }) },
   { test: (p) => /^\/api\/project\/[^/?]+(?:\?|$)/.test(p),  data: (p?: string) => projectDetail((p ?? "").replace(/^\/api\/project\//, "").split(/[/?]/)[0]) },
