@@ -983,17 +983,37 @@ function demoAccounts() {
 }
 function projectDetail(id: string) {
   const p = DEMO_PROJECTS.find((x) => x.id === id) ?? DEMO_PROJECTS[0];
-  // 간단히 본인 + 임의 멤버 4~6명을 멤버로.
-  const members = [DEMO_ME, ...DEMO_USERS.slice(1, 6)].map((u, i) => ({
-    id: `m${i}`,
-    userId: u.id,
-    role: i === 0 ? "OWNER" : i === 1 ? "MANAGER" : "MEMBER",
-    user: { id: u.id, name: u.name, avatarColor: u.avatarColor, avatarUrl: null, isDeveloper: (u as any).isDeveloper ?? false, position: u.position, team: u.team, email: u.email },
-  }));
+  // 프로젝트별 멤버 구성을 다르게 — 진짜 회사 프로젝트처럼.
+  let pickIds: string[];
+  let creatorId: string = DEMO_ME.id;
+  if (id === "p1") {
+    // HiNest v2 — 본인(OWNER) + 디자인/개발 리드 + 사원 6명
+    pickIds = [DEMO_ME.id, "u-lead-1", "u-lead-3", "u-mem-1", "u-mem-2", "u-mem-3", "u-sr-9", "u-sr-13"];
+    creatorId = DEMO_ME.id;
+  } else if (id === "p4") {
+    // Q3 캠페인 — 마케팅 리드(OWNER) + 디자인 리드 + 마케팅 사원
+    pickIds = ["u-lead-4", "u-lead-1", "u-mem-4", "u-mem-7", "u-mem-12"];
+    creatorId = "u-lead-4";
+  } else {
+    // 사내 자료 정리 (보관)
+    pickIds = ["u-lead-2", DEMO_ME.id, "u-mem-15", "u-mem-18"];
+    creatorId = "u-lead-2";
+  }
+  const members = pickIds.map((uid, i) => {
+    const u = DEMO_USERS.find((x) => x.id === uid) ?? DEMO_USERS[0];
+    const role = i === 0 ? "OWNER" : i === 1 ? "MANAGER" : "MEMBER";
+    return {
+      id: `m-${id}-${i}`,
+      userId: u.id,
+      role,
+      user: { id: u.id, name: u.name, avatarColor: u.avatarColor, avatarUrl: null, isDeveloper: (u as any).isDeveloper ?? false, position: u.position, team: u.team, email: u.email },
+    };
+  });
+  const creator = DEMO_USERS.find((x) => x.id === creatorId) ?? DEMO_ME;
   return {
     project: {
       ...p,
-      createdBy: { id: DEMO_ME.id, name: DEMO_ME.name },
+      createdBy: { id: creator.id, name: creator.name },
       members,
     },
   };
