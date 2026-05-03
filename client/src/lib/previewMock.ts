@@ -527,12 +527,32 @@ function demoFolders() {
 function demoDocs() {
   const meAuthor = { name: DEMO_ME.name, avatarColor: DEMO_ME.avatarColor, avatarUrl: null };
   return [
-    { id: "d1", title: "복리후생 가이드 v3",     description: "휴가/식대/교육비 정책",        folderId: "f1", fileUrl: null, fileName: null, fileType: null, fileSize: null, tags: "HR,복리후생",       scope: "ALL"     as const, scopeTeam: null,        scopeUserIds: null, createdAt: iso(-60), updatedAt: iso(-3),  author: meAuthor, folder: { name: "회사 운영" } },
-    { id: "d2", title: "신규 입사자 온보딩",      description: "1~2주 체크리스트",             folderId: "f1", fileUrl: null, fileName: null, fileType: null, fileSize: null, tags: "온보딩,HR",         scope: "ALL"     as const, scopeTeam: null,        scopeUserIds: null, createdAt: iso(-40), updatedAt: iso(-10), author: meAuthor, folder: { name: "회사 운영" } },
-    { id: "d3", title: "API 컨벤션",              description: "REST 네이밍 / 에러 코드",      folderId: "f2", fileUrl: null, fileName: null, fileType: null, fileSize: null, tags: "개발,API",           scope: "TEAM"    as const, scopeTeam: "개발팀",    scopeUserIds: null, createdAt: iso(-90), updatedAt: iso(-5),  author: { name: "박그레이스", avatarColor: "#7C3AED", avatarUrl: null }, folder: { name: "개발 자료" } },
-    { id: "d4", title: "Figma 컬러 토큰",         description: "디자인 시스템 v2",            folderId: "f3", fileUrl: null, fileName: null, fileType: null, fileSize: null, tags: "디자인,토큰",       scope: "TEAM"    as const, scopeTeam: "디자인팀",  scopeUserIds: null, createdAt: iso(-50), updatedAt: iso(-1),  author: { name: "이앨리스",   avatarColor: "#16A34A", avatarUrl: null }, folder: { name: "디자인 리소스" } },
-    { id: "d5", title: "주간 업무 보고 템플릿",   description: null,                            folderId: null, fileUrl: null, fileName: null, fileType: null, fileSize: null, tags: "템플릿",             scope: "ALL"     as const, scopeTeam: null,        scopeUserIds: null, createdAt: iso(-20), updatedAt: iso(-7),  author: meAuthor, folder: null },
-    { id: "d6", title: "내 회고 노트",             description: "주간 회고 모음",                folderId: "f4", fileUrl: null, fileName: null, fileType: null, fileSize: null, tags: "회고",               scope: "PRIVATE" as const, scopeTeam: null,        scopeUserIds: null, createdAt: iso(-15), updatedAt: iso(0),   author: meAuthor, folder: { name: "내 메모" } },
+    { id: "d1", title: "복리후생 가이드 v3 — 2026 개정",
+      description: "연차 / 식대 / 교육비 / 자기계발 / 헬스 케어 / 경조사 정책 종합. 2026년 1월 개정안 반영본. 신규 입사자도 첫 주에 한 번 정독 권장.",
+      folderId: "f1", fileUrl: null, fileName: null, fileType: null, fileSize: null, tags: "HR,복리후생,2026개정",
+      scope: "ALL"     as const, scopeTeam: null, scopeUserIds: null, createdAt: iso(-60), updatedAt: iso(-3), author: meAuthor, folder: { name: "회사 운영" } },
+    { id: "d2", title: "신규 입사자 온보딩 체크리스트 (1 ~ 2주차)",
+      description: "Day 1 환경 셋업 / Day 2~5 도메인 학습 / 2주차 첫 PR 머지 까지의 단계별 체크리스트. 메이트 매칭 가이드 포함.",
+      folderId: "f1", fileUrl: null, fileName: null, fileType: null, fileSize: null, tags: "온보딩,HR,체크리스트",
+      scope: "ALL"     as const, scopeTeam: null, scopeUserIds: null, createdAt: iso(-40), updatedAt: iso(-10), author: meAuthor, folder: { name: "회사 운영" } },
+    { id: "d3", title: "API 컨벤션 — REST · 에러 · 페이지네이션",
+      description: "리소스 네이밍 / 동사 사용 / 에러 코드 (4xx / 5xx) / 페이지네이션 (cursor vs offset) / 버전 관리 정책. 전 백엔드 코드 리뷰 시 1차 기준.",
+      folderId: "f2", fileUrl: null, fileName: null, fileType: null, fileSize: null, tags: "개발,API,컨벤션",
+      scope: "TEAM"    as const, scopeTeam: "개발팀", scopeUserIds: null, createdAt: iso(-90), updatedAt: iso(-5),
+      author: { name: "박그레이스", avatarColor: "#7C3AED", avatarUrl: null }, folder: { name: "개발 자료" } },
+    { id: "d4", title: "디자인 시스템 v2 — Figma 컬러 / 타이포 토큰",
+      description: "Light / Dark / Brand 3 모드 컬러 토큰. 본문 / 라벨 / 코드 블록 타이포 위계. CSS 변수 매핑표 동봉.",
+      folderId: "f3", fileUrl: null, fileName: null, fileType: null, fileSize: null, tags: "디자인,토큰,Figma",
+      scope: "TEAM"    as const, scopeTeam: "디자인팀", scopeUserIds: null, createdAt: iso(-50), updatedAt: iso(-1),
+      author: { name: "이앨리스", avatarColor: "#16A34A", avatarUrl: null }, folder: { name: "디자인 리소스" } },
+    { id: "d5", title: "주간 업무 보고 템플릿 — 한 일 / 막힌 것 / 다음",
+      description: "매주 금요일 17시 까지 작성 / 공유. 한 일 (체크리스트), 막힌 것 (도움 요청), 다음 주 계획 3블록 구성.",
+      folderId: null, fileUrl: null, fileName: null, fileType: null, fileSize: null, tags: "템플릿,주간보고",
+      scope: "ALL"     as const, scopeTeam: null, scopeUserIds: null, createdAt: iso(-20), updatedAt: iso(-7), author: meAuthor, folder: null },
+    { id: "d6", title: "내 회고 노트 (주간 모음)",
+      description: "매주 금요일 작성하는 개인 회고. KPT 형식 (Keep / Problem / Try). 분기 말 OKR 회고 원본 데이터로 활용.",
+      folderId: "f4", fileUrl: null, fileName: null, fileType: null, fileSize: null, tags: "회고,KPT,개인",
+      scope: "PRIVATE" as const, scopeTeam: null, scopeUserIds: null, createdAt: iso(-15), updatedAt: iso(0), author: meAuthor, folder: { name: "내 메모" } },
   ];
 }
 
