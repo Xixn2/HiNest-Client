@@ -40,6 +40,8 @@ type UserRow = {
   autoClockOutTime?: string | null;
   workStartTime?: string | null;
   workEndTime?: string | null;
+  failedLoginCount?: number;
+  lockedAt?: string | null;
 };
 
 // 나이 계산 (생년월일 기반)
@@ -990,6 +992,10 @@ function UserDetailEditModal({
                 maxLength={5_000}
               />
             </Field>
+          </Section>
+
+          <Section title="보안" cols={1}>
+            <SecurityBlock user={user} onChanged={onSaved} />
           </Section>
         </div>
 
@@ -2020,4 +2026,116 @@ function TrashIcon() {
   return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
   </svg>;
+}
+
+/* =================== 보안 블록 (잠금 상태 + 비밀번호 재설정) =================== */
+
+function SecurityBlock({ user, onChanged }: { user: UserRow; onChanged: () => void }) {
+  const [pw1, setPw1] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [busy, setBusy] = useState(false);
+  const locked = !!user.lockedAt;
+  const fails = user.failedLoginCount ?? 0;
+
+  async function unlock() {
+    setBusy(true);
+    try {
+      await api(`/api/admin/users/${user.id}/unlock`, { method: "POST" });
+      await alertAsync({ title: "잠금 해제됨", description: "다음 로그인부터 정상 시도 가능합니다." });
+      onChanged();
+    } catch (e: any) {
+      alertAsync({ title: "해제 실패", description: e?.message ?? String(e) });
+    } finally { setBusy(false); }
+  }
+
+  async function resetPassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (pw1.length < 8) { alertAsync({ title: "8자 이상이어야 합니다" }); return; }
+    if (pw1 !== pw2) { alertAsync({ title: "비밀번호 확인이 일치하지 않습니다" }); return; }
+    if (!(await confirmAsync({ title: `${user.name}님의 비밀번호 재설정`, description: "기존 비밀번호로는 더 이상 로그인할 수 없게 됩니다. 사용자에게 새 비밀번호를 안전한 채널로 전달해 주세요." }))) return;
+    setBusy(true);
+    try {
+      await api(`/api/admin/users/${user.id}/reset-password`, {
+        method: "POST",
+        json: { newPassword: pw1 },
+      });
+      setPw1(""); setPw2("");
+      await alertAsync({ title: "비밀번호 변경됨", description: "잠금 상태도 자동으로 해제됐어요." });
+      onChanged();
+    } catch (err: any) {
+      alertAsync({ title: "변경 실패", description: err?.message ?? String(err) });
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* 잠금 상태 */}
+      <div
+        className="rounded-lg p-3.5 border"
+        style={{
+          background: locked ? "rgba(220,38,38,0.08)" : "var(--c-surface-3)",
+          borderColor: locked ? "rgba(220,38,38,0.25)" : "var(--c-border)",
+        }}
+      >
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="w-2 h-2 rounded-full" style={{ background: locked ? "var(--c-danger)" : "var(--c-success)" }} />
+          <span className="text-[13px] font-extrabold text-ink-900">
+            {locked ? "잠긴 계정" : "정상"}
+          </span>
+          <span className="text-[11.5px] text-ink-500">
+            로그인 실패 {fails} / 5회
+            {locked && user.lockedAt && ` · ${new Date(user.lockedAt).toLocaleString("ko-KR")} 잠김`}
+          </span>
+          {locked && (
+            <button
+              type="button"
+              className="btn-ghost btn-xs ml-auto"
+              onClick={unlock}
+              disabled={busy}
+            >
+              잠금 해제
+            </button>
+          )}
+        </div>
+        <div className="text-[11px] text-ink-500 mt-1.5 leading-relaxed">
+          비밀번호 5회 연속 오류 시 자동 잠금됩니다. 관리자가 명시적으로 해제할 때까지 로그인이 차단돼요.
+        </div>
+      </div>
+
+      {/* 비밀번호 재설정 */}
+      <form onSubmit={resetPassword} className="rounded-lg p-3.5 border" style={{ borderColor: "var(--c-border)" }}>
+        <div className="text-[13px] font-extrabold text-ink-900 mb-2.5">비밀번호 재설정</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <input
+            type="password"
+            className="input"
+            placeholder="새 비밀번호 (8자 이상)"
+            value={pw1}
+            onChange={(e) => setPw1(e.target.value)}
+            minLength={8}
+            maxLength={128}
+            autoComplete="new-password"
+          />
+          <input
+            type="password"
+            className="input"
+            placeholder="새 비밀번호 확인"
+            value={pw2}
+            onChange={(e) => setPw2(e.target.value)}
+            minLength={8}
+            maxLength={128}
+            autoComplete="new-password"
+          />
+        </div>
+        <div className="flex items-center gap-2 mt-2">
+          <div className="text-[11px] text-ink-500 flex-1 leading-relaxed">
+            저장 시 잠금 상태도 함께 해제됩니다. 사용자에게는 안전한 채널(사내톡 DM 등)로만 전달하세요.
+          </div>
+          <button type="submit" className="btn-primary btn-xs" disabled={busy || !pw1 || pw1 !== pw2}>
+            변경
+          </button>
+        </div>
+      </form>
+    </div>
+  );
 }
