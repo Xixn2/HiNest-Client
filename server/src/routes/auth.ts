@@ -20,6 +20,15 @@ import {
 
 const router = Router();
 
+// 타이밍 공격 방어용 더미 해시 — 가입되지 않은 이메일로도 동일하게 bcrypt.compare 가
+// 호출되도록 만들어, \"존재하는 이메일\" 과 \"없는 이메일\" 의 응답 시간 차이로 가입 여부를
+// 추측하지 못하게 한다. 모듈 로드 시 한 번만 생성 (rounds 12 — 실제 사용자와 동일 비용).
+// 임의 32바이트 토큰을 해시해 절대 일치하지 않는 정상 포맷의 해시를 만든다.
+const TIMING_DUMMY_HASH = bcrypt.hashSync(
+  Math.random().toString(36) + Date.now().toString(36),
+  12,
+);
+
 const loginSchema = z.object({
   // 이메일 전용. 과거에는 사내 ID 도 허용했지만 정책 단순화로 이메일로만 로그인.
   email: z.string().email().max(200),
@@ -52,9 +61,18 @@ router.post("/login", async (req, res) => {
   const { email, password } = parsed.data;
 
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !user.active) return res.status(401).json({ error: "잘못된 이메일 또는 비밀번호" });
 
-  // 잠금된 계정 — 관리자가 풀어주기 전엔 무조건 거부. 비밀번호 비교까지 가지 않음.
+  // === 타이밍 공격 방어 ===
+  // 이메일이 없어도 / 비활성이어도 / 잠겨있어도, 일단 bcrypt.compare 는 항상 한 번 수행.
+  // 그래야 \"가입된 이메일\" 과 \"없는 이메일\" 의 응답 시간 차이가 사라져 이메일 enumeration 불가.
+  // 분기 결과(로그/응답)는 그 후 균일하게 처리.
+  const hashToCompare = user?.passwordHash ?? TIMING_DUMMY_HASH;
+  const compareOk = await bcrypt.compare(password, hashToCompare);
+
+  // 사용자 부재 / 비활성 / 잠금 — 메시지는 같게(이메일 존재 노출 X). 잠금 케이스만 별도 코드 반환.
+  if (!user || !user.active) {
+    return res.status(401).json({ error: "잘못된 이메일 또는 비밀번호" });
+  }
   if (user.lockedAt) {
     await writeLog(user.id, "LOGIN_BLOCKED", user.email, "account locked", req.ip);
     return res.status(401).json({
@@ -63,7 +81,7 @@ router.post("/login", async (req, res) => {
     });
   }
 
-  const ok = await bcrypt.compare(password, user.passwordHash);
+  const ok = compareOk;
   if (!ok) {
     // 실패 카운터 증가. 5 회 누적 시 잠금.
     const nextCount = (user.failedLoginCount ?? 0) + 1;
@@ -128,36 +146,67 @@ router.post("/signup", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: "입력값을 확인해주세요 (비밀번호는 8자 이상)" });
   const { inviteKey, email, name, password } = parsed.data;
 
+  // 사전 검증 — 트랜잭션 밖에서 빠르게 거를 수 있는 케이스만.
+  // 진짜 race-safe 한 \"사용 가능 여부\" 판단은 트랜잭션 안의 atomic updateMany 가 결정.
   const key = await prisma.inviteKey.findUnique({ where: { key: inviteKey } });
   if (!key) return res.status(400).json({ error: "유효하지 않은 초대키" });
-  if (key.used) return res.status(400).json({ error: "이미 사용된 초대키" });
   if (key.expiresAt && key.expiresAt < new Date()) return res.status(400).json({ error: "만료된 초대키" });
   if (key.email && key.email.toLowerCase() !== email.toLowerCase())
     return res.status(400).json({ error: "초대키에 등록된 이메일과 일치하지 않습니다" });
 
-  const dup = await prisma.user.findUnique({ where: { email } });
-  if (dup) return res.status(400).json({ error: "이미 가입된 이메일" });
-
   // 2026 기준 bcrypt rounds 12 — 로그인/가입 지연은 체감 없고 GPU 공격 비용은 4x 증가.
   const passwordHash = await bcrypt.hash(password, 12);
-  // 사번은 서버가 자동 부여 — 사용자가 입력하지 않음. 중복 절대 없음 (유니크 체크 반복).
   const employeeNo = await generateUniqueEmployeeNo();
-  const user = await prisma.user.create({
-    data: {
-      email,
-      name,
-      passwordHash,
-      role: key.role,
-      team: key.team,
-      position: key.position,
-      employeeNo,
-    },
-  });
 
-  await prisma.inviteKey.update({
-    where: { id: key.id },
-    data: { used: true, usedAt: new Date(), usedById: user.id },
-  });
+  // ===== Atomic claim + create =====
+  // 이전엔 (1) findUnique 로 used=false 확인 → (2) user.create → (3) inviteKey.update used=true 였는데
+  // (1) 과 (3) 사이에 같은 초대키로 동시 요청이 들어오면 둘 다 used=false 를 보고 통과 → 키 1개로 N명 가입.
+  // updateMany({ where:{id, used:false}, data:{used:true} }) 는 \"하나만 통과\" 를 DB 가 보장하므로
+  // 트랜잭션 안에서 이 결과 count 를 보고 분기하면 어떤 동시성 시나리오에서도 단 한 명만 가입한다.
+  let user: { id: string; email: string; name: string; role: string; team: string | null; position: string | null; avatarColor: string; avatarUrl: string | null; superAdmin: boolean };
+  try {
+    user = await prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const claim = await tx.inviteKey.updateMany({
+        where: {
+          id: key.id,
+          used: false,
+          OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+        },
+        data: { used: true, usedAt: now },
+      });
+      if (claim.count === 0) {
+        throw Object.assign(new Error("이미 사용된 초대키"), { _http: 400 });
+      }
+      const created = await tx.user.create({
+        data: {
+          email,
+          name,
+          passwordHash,
+          role: key.role,
+          team: key.team,
+          position: key.position,
+          employeeNo,
+        },
+      });
+      // usedById 는 user.id 가 있어야 채울 수 있어 같은 트랜잭션 안에서 추가 update.
+      await tx.inviteKey.update({
+        where: { id: key.id },
+        data: { usedById: created.id },
+      });
+      return {
+        id: created.id, email: created.email, name: created.name, role: created.role,
+        team: created.team, position: created.position,
+        avatarColor: created.avatarColor, avatarUrl: created.avatarUrl, superAdmin: created.superAdmin,
+      };
+    }, { isolationLevel: "Serializable" });
+  } catch (e: any) {
+    // 동시성 충돌 또는 race 결과. 메시지는 통일.
+    if (e?._http === 400) return res.status(400).json({ error: e.message });
+    // Prisma unique violation (이메일 중복 등) — 일반 메시지로.
+    if (e?.code === "P2002") return res.status(400).json({ error: "이미 가입된 이메일이거나 충돌이 발생했습니다" });
+    throw e;
+  }
 
   const sid = await createSession(user.id, req);
   const token = signToken({ id: user.id, role: user.role, name: user.name, email: user.email }, sid);
