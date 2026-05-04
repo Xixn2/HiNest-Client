@@ -53,8 +53,46 @@ router.post("/login", async (req, res) => {
 
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user || !user.active) return res.status(401).json({ error: "잘못된 이메일 또는 비밀번호" });
+
+  // 잠금된 계정 — 관리자가 풀어주기 전엔 무조건 거부. 비밀번호 비교까지 가지 않음.
+  if (user.lockedAt) {
+    await writeLog(user.id, "LOGIN_BLOCKED", user.email, "account locked", req.ip);
+    return res.status(401).json({
+      error: "계정이 잠겨있습니다. 관리자에게 문의해 주세요.",
+      code: "ACCOUNT_LOCKED",
+    });
+  }
+
   const ok = await bcrypt.compare(password, user.passwordHash);
-  if (!ok) return res.status(401).json({ error: "잘못된 이메일 또는 비밀번호" });
+  if (!ok) {
+    // 실패 카운터 증가. 5 회 누적 시 잠금.
+    const nextCount = (user.failedLoginCount ?? 0) + 1;
+    const shouldLock = nextCount >= 5;
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { failedLoginCount: nextCount, ...(shouldLock ? { lockedAt: new Date() } : {}) },
+    });
+    if (shouldLock) {
+      await writeLog(user.id, "LOGIN_LOCKED", user.email, `fails=${nextCount}`, req.ip);
+      return res.status(401).json({
+        error: "비밀번호 5회 오류로 계정이 잠겼습니다. 관리자에게 문의해 주세요.",
+        code: "ACCOUNT_LOCKED",
+      });
+    }
+    await writeLog(user.id, "LOGIN_FAIL", user.email, `fails=${nextCount}/5`, req.ip);
+    const remaining = 5 - nextCount;
+    return res.status(401).json({
+      error: `잘못된 이메일 또는 비밀번호 (남은 시도: ${remaining}회)`,
+    });
+  }
+
+  // 성공 시 카운터 리셋.
+  if ((user.failedLoginCount ?? 0) > 0) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { failedLoginCount: 0 },
+    });
+  }
 
   const sid = await createSession(user.id, req);
   const token = signToken({ id: user.id, role: user.role, name: user.name, email: user.email }, sid);

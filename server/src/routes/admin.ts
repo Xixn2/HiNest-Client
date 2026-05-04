@@ -101,6 +101,8 @@ const HR_SELECT = {
   autoClockOutTime: true,
   workStartTime: true,
   workEndTime: true,
+  failedLoginCount: true,
+  lockedAt: true,
 } as const;
 
 router.get("/users", async (req, res) => {
@@ -408,6 +410,40 @@ router.post("/users/:id/resign", async (req, res) => {
  * 퇴사 취소(복직) — 실수로 퇴사 처리한 경우를 되돌리기 위함.
  * 동일하게 관리자 비밀번호 재확인 필요.
  */
+/** 잠긴 계정 해제 — failedLoginCount 0, lockedAt null. ADMIN 권한 필요. */
+router.post("/users/:id/unlock", async (req, res) => {
+  const u = (req as any).user;
+  const target = await prisma.user.findUnique({ where: { id: req.params.id }, select: { id: true, email: true, lockedAt: true, superAdmin: true } });
+  if (!target) return res.status(404).json({ error: "not found" });
+  if (target.superAdmin && !u.superAdmin) return res.status(404).json({ error: "not found" });
+  await prisma.user.update({
+    where: { id: target.id },
+    data: { failedLoginCount: 0, lockedAt: null },
+  });
+  await evictUserCache(target.id);
+  await writeLog(u.id, "USER_UNLOCK", target.id, target.email, req.ip);
+  res.json({ ok: true });
+});
+
+/** 관리자가 유저 비밀번호를 직접 설정. 기존 console 명령은 임시 비번 생성이고, 이건 명시 비번 입력. */
+router.post("/users/:id/reset-password", async (req, res) => {
+  const u = (req as any).user;
+  const parsed = z.object({ newPassword: z.string().min(8).max(128) }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "비밀번호는 8자 이상이어야 합니다" });
+  const target = await prisma.user.findUnique({ where: { id: req.params.id }, select: { id: true, email: true, superAdmin: true } });
+  if (!target) return res.status(404).json({ error: "not found" });
+  if (target.superAdmin && !u.superAdmin) return res.status(404).json({ error: "not found" });
+  const passwordHash = await bcrypt.hash(parsed.data.newPassword, 12);
+  await prisma.user.update({
+    where: { id: target.id },
+    // 비밀번호를 새로 설정했으면 잠김도 같이 풀어주는 게 자연스러움.
+    data: { passwordHash, failedLoginCount: 0, lockedAt: null },
+  });
+  await evictUserCache(target.id);
+  await writeLog(u.id, "USER_PW_RESET", target.id, target.email, req.ip);
+  res.json({ ok: true });
+});
+
 router.post("/users/:id/unresign", async (req, res) => {
   const u = (req as any).user;
   const parsed = z.object({ password: z.string().min(1).max(128) }).safeParse(req.body);
