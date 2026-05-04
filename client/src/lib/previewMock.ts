@@ -740,14 +740,14 @@ function demoLeaves(all: boolean) {
 /* ===== 법인카드 지출 데모 ===== */
 function demoExpenses() {
   return [
-    { id: "ex1", userId: DEMO_ME.id,  usedAt: iso(0, 12, 30),  merchant: "스타벅스 강남점",      category: "식비",   amount:  18000, memo: "팀 미팅",                receiptUrl: null, status: "PENDING",  user: { name: DEMO_ME.name,  team: DEMO_ME.team } },
-    { id: "ex2", userId: "u-lead-1",  usedAt: iso(-1, 13, 10), merchant: "본죽 역삼점",          category: "식비",   amount:  12500, memo: "야근 식대",              receiptUrl: null, status: "APPROVED", user: { name: "이앨리스",     team: "디자인팀" } },
-    { id: "ex3", userId: DEMO_ME.id,  usedAt: iso(-1, 19, 15), merchant: "카카오T",              category: "교통",   amount:  14300, memo: "외근 복귀",              receiptUrl: null, status: "APPROVED", user: { name: DEMO_ME.name,  team: DEMO_ME.team } },
-    { id: "ex4", userId: "u-lead-3",  usedAt: iso(-2, 11, 0),  merchant: "쿠팡",                  category: "비품",   amount:  86000, memo: "키보드 / 마우스",       receiptUrl: null, status: "APPROVED", user: { name: "박그레이스",   team: "개발팀" } },
-    { id: "ex5", userId: "u-lead-4",  usedAt: iso(-3, 18, 30), merchant: "더미식 한정식",        category: "접대",   amount: 240000, memo: "외부 미팅 회식",        receiptUrl: null, status: "APPROVED", user: { name: "최마틴",       team: "마케팅팀" } },
-    { id: "ex6", userId: DEMO_ME.id,  usedAt: iso(-4, 20, 0),  merchant: "Notion Pro",            category: "업무",   amount:  18000, memo: "월 구독",                receiptUrl: null, status: "APPROVED", user: { name: DEMO_ME.name,  team: DEMO_ME.team } },
-    { id: "ex7", userId: "u-lead-2",  usedAt: iso(-5, 9, 30),  merchant: "GS25 본사점",          category: "식비",   amount:   4800, memo: "샌드위치/커피",         receiptUrl: null, status: "APPROVED", user: { name: "한이브",       team: "운영팀" } },
-    { id: "ex8", userId: DEMO_ME.id,  usedAt: iso(-7, 14, 20), merchant: "Figma",                 category: "업무",   amount:  20000, memo: "Pro 시트 추가",         receiptUrl: null, status: "APPROVED", user: { name: DEMO_ME.name,  team: DEMO_ME.team } },
+    { id: "ex1", userId: DEMO_ME.id,  usedAt: iso(0, 12, 30),  merchant: "스타벅스 강남역점",   category: "식비",   amount:  18000, memo: "프로덕트팀 주간 미팅 (참석 4명) — 아이스 아메리카노 4잔",  receiptUrl: null, status: "PENDING",  user: { name: DEMO_ME.name,  team: DEMO_ME.team } },
+    { id: "ex2", userId: "u-lead-1",  usedAt: iso(-1, 13, 10), merchant: "본죽 역삼점",          category: "식비",   amount:  12500, memo: "디자인 시스템 v2.1 마감 야근 식대 (단품 1)",                  receiptUrl: null, status: "APPROVED", user: { name: "이앨리스",     team: "디자인팀" } },
+    { id: "ex3", userId: DEMO_ME.id,  usedAt: iso(-1, 19, 15), merchant: "카카오T 블루",          category: "교통",   amount:  14300, memo: "외근 복귀 (광화문 → 본사). 늦은 시간 대중교통 단절로 택시 이용", receiptUrl: null, status: "APPROVED", user: { name: DEMO_ME.name,  team: DEMO_ME.team } },
+    { id: "ex4", userId: "u-lead-3",  usedAt: iso(-2, 11, 0),  merchant: "쿠팡",                   category: "비품",   amount:  86000, memo: "재택 근무 셋업 — Logitech MX Keys + MX Master 3S 세트 (재택 표준 키트)", receiptUrl: null, status: "APPROVED", user: { name: "박그레이스",   team: "개발팀" } },
+    { id: "ex5", userId: "u-lead-4",  usedAt: iso(-3, 18, 30), merchant: "더미식 한정식",         category: "접대",   amount: 240000, memo: "Q3 캠페인 협업사 미팅 (참석 6명, 4코스 한정식 + 음료). 사후 보고서 별첨", receiptUrl: null, status: "APPROVED", user: { name: "최마틴",       team: "마케팅팀" } },
+    { id: "ex6", userId: DEMO_ME.id,  usedAt: iso(-4, 20, 0),  merchant: "Notion Inc.",            category: "업무",   amount:  18000, memo: "Notion Pro 1인 월 구독 — 회의록 / 스펙 작성 협업",          receiptUrl: null, status: "APPROVED", user: { name: DEMO_ME.name,  team: DEMO_ME.team } },
+    { id: "ex7", userId: "u-lead-2",  usedAt: iso(-5, 9, 30),  merchant: "GS25 본사점",            category: "식비",   amount:   4800, memo: "전사 미팅 준비 시간 — 직원 4명 샌드위치 / 음료",            receiptUrl: null, status: "APPROVED", user: { name: "한이브",       team: "운영팀" } },
+    { id: "ex8", userId: DEMO_ME.id,  usedAt: iso(-7, 14, 20), merchant: "Figma Inc.",             category: "업무",   amount:  20000, memo: "Pro 시트 1인 추가 — 신규 입사자(이서연) 합류로 디자인 협업 자리 확보", receiptUrl: null, status: "APPROVED", user: { name: DEMO_ME.name,  team: DEMO_ME.team } },
   ];
 }
 
