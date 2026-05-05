@@ -661,6 +661,22 @@ function projectQa(projectId: string) {
   return []; // p5 (archived) — 비움
 }
 
+function projectWebhooks(projectId: string) {
+  if (projectId === "p1") {
+    return [
+      { id: "wh1", projectId, name: "GitHub — push / PR 알림", url: "https://hooks.slack.com/services/T01/B02/<masked>", secret: "wh_••••••", events: ["push", "pull_request", "issues"], active: true,  lastDeliveredAt: iso(0, 11, 12), createdAt: iso(-60), createdBy: { id: _grace.id, name: "박그레이스" } },
+      { id: "wh2", projectId, name: "Datadog — P1 알람",       url: "https://app.datadoghq.com/integrations/slack/webhook/<masked>", secret: "wh_••••••", events: ["alert.triggered"], active: true,  lastDeliveredAt: iso(-1, 9, 30), createdAt: iso(-50), createdBy: { id: _me.id,  name: DEMO_ME.name } },
+      { id: "wh3", projectId, name: "Vercel — 배포 완료",       url: "https://hooks.slack.com/services/T01/B03/<masked>", secret: "wh_••••••", events: ["deploy.success", "deploy.failure"], active: false, lastDeliveredAt: iso(-7, 13, 0), createdAt: iso(-90), createdBy: { id: _me.id,  name: DEMO_ME.name } },
+    ];
+  }
+  if (projectId === "p4") {
+    return [
+      { id: "wh-c1", projectId, name: "Instagram Graph API — Reels 인사이트", url: "https://graph.facebook.com/<page-id>/insights", secret: "wh_••••••", events: ["impressions.daily"], active: true, lastDeliveredAt: iso(-1, 22, 0), createdAt: iso(-20), createdBy: { id: _qaUser("u-lead-4", "최마틴", "#F59E0B").id, name: "최마틴" } },
+    ];
+  }
+  return [];
+}
+
 function projectEvents(projectId: string) {
   if (projectId === "p1") {
     return [
@@ -1135,7 +1151,7 @@ const HANDLERS: { test: (p: string) => boolean; data: (p?: string) => any }[] = 
   /* === 프로젝트 === */
   { test: (p) => /^\/api\/project\/[^/?]+\/events/.test(p),  data: (p?: string) => ({ events: projectEvents((p ?? "").match(/\/api\/project\/([^/?]+)/)?.[1] ?? "p1") }) },
   { test: (p) => /^\/api\/project\/[^/?]+\/qa/.test(p),      data: (p?: string) => ({ items: projectQa((p ?? "").match(/\/api\/project\/([^/?]+)/)?.[1] ?? "p1") }) },
-  { test: (p) => /^\/api\/project\/[^/?]+\/webhook/.test(p), data: () => ({ channels: [] }) },
+  { test: (p) => /^\/api\/project\/[^/?]+\/webhook/.test(p), data: (p?: string) => ({ channels: projectWebhooks((p ?? "").match(/\/api\/project\/([^/?]+)/)?.[1] ?? "p1") }) },
   { test: (p) => /^\/api\/project\/[^/?]+\/member/.test(p),  data: () => ({ members: [] }) },
   { test: (p) => /^\/api\/project\/[^/?]+(?:\?|$)/.test(p),  data: (p?: string) => projectDetail((p ?? "").replace(/^\/api\/project\//, "").split(/[/?]/)[0]) },
   { test: (p) => p.startsWith("/api/project"),               data: projectList },
