@@ -477,20 +477,72 @@ function demoApprovalsAll() {
   const step = (n: number, who: typeof reviewers[number], status: "PENDING"|"APPROVED"|"REJECTED"|"SKIPPED", actedAt?: string|null, comment?: string|null) =>
     ({ id: `s${n}-${Math.random().toString(36).slice(2, 6)}`, order: n, status, comment: comment ?? null, actedAt: actedAt ?? null, reviewer: who });
   return [
-    { id: "ap1", type: "TRIP" as const, title: "부산 출장 — 고객 미팅", content: "5/15~16, 부산 KT 본사 미팅 동행. 항공+호텔 1박.",
+    { id: "ap1", type: "TRIP" as const, title: "부산 KT 본사 미팅 동행 — 5/15 ~ 5/16",
+      content: `[목적]
+KT 본사와 v2 베타 도입 협의 (의사결정자 미팅).
+
+[일정]
+- 5/15 (수) 09:00 김포 → 김해 / 11:00 KT 본사 미팅 / 18:00 호텔 체크인
+- 5/16 (목) 10:00 후속 미팅 / 14:00 김해 → 김포 복귀
+
+[비용 추산]
+- 항공 왕복 (김포-김해, 평일): 180,000
+- 호텔 1박 (이비스 부산역): 110,000
+- 식비 / 교통 (현지): 30,000
+- 합계: 320,000원
+
+[기대 효과]
+연간 계약 규모 약 4억원 / 협업 마일스톤 합의.`,
       status: "PENDING" as const, startDate: iso(7).slice(0,10), endDate: iso(8).slice(0,10), amount: 320000, createdAt: iso(-1, 11),
-      requester: meReq, steps: [step(1, reviewers[0], "APPROVED", iso(-1, 14), "확인했습니다."), step(2, reviewers[1], "PENDING")], currentReviewerId: reviewers[1].id },
-    { id: "ap2", type: "PURCHASE" as const, title: "키보드/마우스 구매", content: "재택용 무선 키보드 + 마우스 (Logitech).",
+      requester: meReq, steps: [step(1, reviewers[0], "APPROVED", iso(-1, 14), "출장 일정 확인했습니다. 자료 준비 잘 부탁드려요."), step(2, reviewers[1], "PENDING")], currentReviewerId: reviewers[1].id },
+    { id: "ap2", type: "PURCHASE" as const, title: "재택 근무 셋업 — 무선 키보드 / 마우스",
+      content: `[필요 사유]
+주 2회 재택 전환에 따른 표준 키트 구매.
+
+[품목]
+- Logitech MX Keys (텐키리스, USB-C, 다중 페어링): 1
+- Logitech MX Master 3S (3 디바이스 동시 페어링): 1
+
+[금액] 86,000원 (쿠팡 정가 대비 18% 할인 적용)
+[구매처] 쿠팡 (영수증 첨부)`,
       status: "APPROVED" as const, amount: 86000, createdAt: iso(-3, 9),
-      requester: meReq, steps: [step(1, reviewers[0], "APPROVED", iso(-3, 10), null), step(2, reviewers[1], "APPROVED", iso(-3, 13), "OK")], currentReviewerId: undefined },
-    { id: "ap3", type: "EXPENSE" as const, title: "외부 컨퍼런스 참가", content: "5/30 NextJS Conf 온라인 티켓 + 점심.",
+      requester: meReq, steps: [step(1, reviewers[0], "APPROVED", iso(-3, 10), "재택 표준 키트 정책에 부합."), step(2, reviewers[1], "APPROVED", iso(-3, 13), "승인합니다.")], currentReviewerId: undefined },
+    { id: "ap3", type: "EXPENSE" as const, title: "외부 컨퍼런스 참가 — Next.js Conf 2026",
+      content: `[일정]
+5/30 (금) 22:00 ~ 5/31 (토) 03:00 (한국시간) 온라인 라이브 + 다시보기.
+
+[금액] 120,000원
+- 컨퍼런스 티켓 (얼리버드): 100,000
+- 야간 식비 (도시락 + 음료): 20,000
+
+[기대]
+v2 의 SSR / RSC 전략 점검 + 신기능 데모 / Vercel 발표 동향 파악.`,
       status: "REJECTED" as const, amount: 120000, createdAt: iso(-5, 14),
-      requester: meReq, steps: [step(1, reviewers[0], "APPROVED", iso(-5, 15), null), step(2, reviewers[1], "REJECTED", iso(-4, 10), "올해 교육 예산 소진 — 다음 분기에 재신청 부탁드립니다.")], currentReviewerId: undefined },
-    { id: "ap4", type: "OFFSITE" as const, title: "광화문 고객사 외근", content: "5/12 오후 — 미팅 후 곧장 퇴근.",
+      requester: meReq, steps: [step(1, reviewers[0], "APPROVED", iso(-5, 15), "내용 OK."), step(2, reviewers[1], "REJECTED", iso(-4, 10), "올해 교육 예산 소진 — 다음 분기에 다시 신청 부탁드립니다. 영상 다시보기는 회사 계정으로 별도 구독 가능하니 그쪽 활용해 주세요.")], currentReviewerId: undefined },
+    { id: "ap4", type: "OFFSITE" as const, title: "광화문 고객사 외근 — Q3 캠페인 킥오프",
+      content: `[일정] 5/12 (월) 14:00 ~ 17:00
+[장소] 광화문 D-Tower (○○○ 마케팅사)
+[참석] 박민서 (단독)
+
+[목적]
+Q3 캠페인 킥오프 — 채널별 액션 / 일정 / KPI 합의.
+
+[복귀]
+미팅 종료 후 사무실 미복귀, 곧장 퇴근.`,
       status: "PENDING" as const, startDate: iso(2).slice(0,10), endDate: iso(2).slice(0,10), createdAt: iso(0, 9),
       requester: { id: "u-mem-12", name: "박민서", avatarColor: "#F59E0B", avatarUrl: null, position: "사원", team: "마케팅팀" },
       steps: [step(1, { id: DEMO_ME.id, name: DEMO_ME.name, avatarColor: DEMO_ME.avatarColor, avatarUrl: null, position: DEMO_ME.position }, "PENDING")], currentReviewerId: DEMO_ME.id },
-    { id: "ap5", type: "GENERAL" as const, title: "재택 근무 신청", content: "이사로 인해 5/20 하루 재택.",
+    { id: "ap5", type: "GENERAL" as const, title: "재택 근무 신청 — 5/20 하루",
+      content: `[일자] 5/20 (수)
+[사유] 이사 — 가구 / 가전 배송 수령 필요.
+
+[근무]
+- 09:00 ~ 18:00 평소대로 근무
+- 사내톡 / 회의 정상 참여
+- 피크 미팅 없는 시간대 (12 ~ 14시) 잠시 자리 비울 수 있음 — 사전에 팀에 공유 예정.
+
+[참고]
+이번 한 번만 신청, 정기 재택은 별도 결재로 진행 예정.`,
       status: "PENDING" as const, startDate: iso(10).slice(0,10), endDate: iso(10).slice(0,10), createdAt: iso(0, 13),
       requester: { id: "u-mem-3", name: "최지유", avatarColor: "#7C3AED", avatarUrl: null, position: "사원", team: "디자인팀" },
       steps: [step(1, { id: DEMO_ME.id, name: DEMO_ME.name, avatarColor: DEMO_ME.avatarColor, avatarUrl: null, position: DEMO_ME.position }, "PENDING")], currentReviewerId: DEMO_ME.id },
