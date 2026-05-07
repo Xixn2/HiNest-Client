@@ -722,12 +722,24 @@ const list = await prisma.approval.findMany({
     ];
   }
 
-  // 전사 공지방
+  // 전사 공지방 — 운영팀 한이브가 주로 공지
   return [
-    m("m3-1", eve,   "5/15(수) 09:00~10:00 정수기 점검 예정입니다. 양해 부탁드려요 🙏", { at: iso(-1, 9, 30),
-      reactions: [{ userId: alice.id, emoji: "👌", user: { name: "이앨리스" } }, { userId: grace.id, emoji: "👍", user: { name: "박그레이스" } }] }),
-    m("m3-2", eve,   "본사 1층 카페 무료 음료 쿠폰 배포 중입니다 ☕", { at: iso(0, 9, 5),
-      reactions: [{ userId: me.id, emoji: "🙌", user: { name: DEMO_ME.name } }] }),
+    m("m3-1", eve,   "5월 15일 (수) 09:00 ~ 10:00 본사 1층 / 3층 정수기 정기 점검이 진행됩니다. 잠시 사용이 어려우니 양해 부탁드려요 🙏", { at: iso(-1, 9, 30),
+      reactions: [{ userId: alice.id, emoji: "👌", user: { name: "이앨리스" } }, { userId: grace.id, emoji: "👍", user: { name: "박그레이스" } }, { userId: me.id, emoji: "🙏", user: { name: DEMO_ME.name } }] }),
+    m("m3-2", eve,   "본사 1층 카페에서 무료 음료 쿠폰 배포 중입니다 ☕ 운영팀 좌석 옆 박스에서 1인 1매씩 가져가세요!", { at: iso(0, 9, 5),
+      reactions: [{ userId: me.id, emoji: "🙌", user: { name: DEMO_ME.name } }, { userId: grace.id, emoji: "☕", user: { name: "박그레이스" } }] }),
+    m("m3-3", eve,   "신규 입사자 4명이 합류했어요 — 김지우 / 이서연 / 박민서 / 최지유 님 환영합니다 🎉 마주칠 때 따뜻하게 인사해 주세요!", { at: iso(0, 10, 12),
+      reactions: [
+        { userId: alice.id, emoji: "🎉", user: { name: "이앨리스" } },
+        { userId: grace.id, emoji: "🎉", user: { name: "박그레이스" } },
+        { userId: me.id, emoji: "👋", user: { name: DEMO_ME.name } },
+      ] }),
+    m("m3-4", { id: "u-lead-7", name: "임도훈", avatarColor: "#3D54C4", avatarUrl: null }, "1분기 재무 결산 미팅 자료 공유드립니다. 5/15 전사 미팅에서 핵심만 발표할 예정이고, 상세 내역은 첨부 PDF 참고해 주세요.",
+      { at: iso(0, 13, 40),
+        reactions: [{ userId: alice.id, emoji: "📊", user: { name: "이앨리스" } }, { userId: me.id, emoji: "👀", user: { name: DEMO_ME.name } }] }),
+    m("m3-5", eve,   "이번 달 사내 동호회 모집 안내드립니다 🏃‍♂️ 러닝 / 보드게임 / 독서 — 자세한 신청 링크는 사내 위키에 있어요!",
+      { at: iso(0, 15, 0),
+        reactions: [{ userId: grace.id, emoji: "🏃", user: { name: "박그레이스" } }] }),
   ];
 }
 
