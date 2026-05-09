@@ -739,10 +739,16 @@ function featureFlags() { return { flags: {} }; }
 function teams() { return { teams: DEMO_TEAMS }; }
 function navConfig() { return { items: [] }; }
 
-/** 경로별 매처 — 정확히 일치하거나 prefix 매치. data 는 path 도 받을 수 있어 동적 라우트(예: /api/project/:id) 에서 ID 를 뽑아 다른 응답을 줄 수 있다. */
+/** 경로별 매처 — 위에서 아래로 검사하므로 **세부 경로 → 일반 경로** 순서. */
 const HANDLERS: { test: (p: string) => boolean; data: (p?: string) => any }[] = [
+  /* === 본인 / 인증 === */
   { test: (p) => p === "/api/me",                      data: () => ({ user: DEMO_ME, impersonator: null }) },
+  { test: (p) => p === "/api/me/presence",             data: () => ({ presenceStatus: null, presenceMessage: null, presenceUpdatedAt: null }) },
+  { test: (p) => p.startsWith("/api/version"),         data: () => ({ version: "preview" }) },
+
+  /* === 사용자 / 디렉토리 === */
   { test: (p) => p.startsWith("/api/users/teams"),     data: teams },
+  { test: (p) => p.startsWith("/api/users/presence"),  data: () => ({ users: DEMO_USERS.map((u) => ({ id: u.id, presenceStatus: u.presenceStatus, presenceMessage: u.presenceMessage, workStatus: "IN" })) }) },
   { test: (p) => p === "/api/users" || p.startsWith("/api/users?"), data: () => {
       const enriched = DEMO_USERS.map((u, i) => ({
         ...u,
@@ -753,88 +759,141 @@ const HANDLERS: { test: (p: string) => boolean; data: (p?: string) => any }[] = 
         leaveType: null,
       }));
       return { users: enriched };
-    },
-  },
-  { test: (p) => p.startsWith("/api/users/presence"),  data: () => ({ users: DEMO_USERS.map((u) => ({ id: u.id, presenceStatus: u.presenceStatus, presenceMessage: u.presenceMessage, workStatus: "IN" })) }) },
-  { test: (p) => p.startsWith("/api/users/"),          data: () => ({ user: DEMO_USERS[1] }) }, // 다른 사람 프로필 진입 시
-  { test: (p) => p.startsWith("/api/notice"),          data: notices },
-  { test: (p) => p.startsWith("/api/schedule"),        data: schedule },
-  { test: (p) => p === "/api/attendance/today",        data: attendanceToday },
-  { test: (p) => p.startsWith("/api/attendance"),      data: () => ({ attendances: [], leaves: [] }) },
-  { test: (p) => p.startsWith("/api/meeting/mentionable"), data: () => ({ users: DEMO_USERS.slice(0, 8).map((u) => ({ id: u.id, name: u.name, avatarColor: u.avatarColor })) }) },
-  { test: (p) => /^\/api\/meeting\/[^/?]+\/revisions/.test(p), data: (p?: string) => ({ revisions: meetingRevisions((p ?? "").match(/\/api\/meeting\/([^/?]+)/)?.[1] ?? "m1") }) },
-  { test: (p) => /^\/api\/meeting\/[^/?]+(?:\?|$)/.test(p), data: (p?: string) => meetingDetail((p ?? "").replace(/^\/api\/meeting\//, "").split(/[/?]/)[0]) },
-  { test: (p) => p.startsWith("/api/meeting"),         data: meetings },
-  // Document revisions — 같은 패턴
-  { test: (p) => /^\/api\/document\/[^/?]+\/revisions/.test(p), data: () => ({ revisions: [] }) },
-  { test: (p) => p.startsWith("/api/journal"),         data: journalsList },
-  { test: (p) => p === "/api/approval/counts",         data: approvalCounts },
-  { test: (p) => p.startsWith("/api/approval"),        data: approvals },
-  { test: (p) => p.startsWith("/api/notification"),    data: notificationList },
-  { test: (p) => p.startsWith("/api/feature-flags"),   data: featureFlags },
-  { test: (p) => p.startsWith("/api/nav"),             data: navConfig },
-  { test: (p) => p.startsWith("/api/document"),        data: () => ({ documents: [], folders: [] }) },
-  { test: (p) => p.startsWith("/api/expense"),         data: () => {
-      const list = demoExpenses();
-      return { expenses: list, totalAmount: list.reduce((a, e) => a + e.amount, 0) };
-    },
-  },
-  // Chat — 메시지 상세 라우트가 먼저, 그다음 룸 목록.
-  { test: (p) => /\/api\/chat\/rooms\/[^/]+\/messages/.test(p), data: (p?: string) => {
-      const m = (p ?? "").match(/\/rooms\/([^/]+)\/messages/);
-      const id = m?.[1] ?? "r1";
-      return { messages: chatMessages(id), readStates: [] };
-    },
-  },
-  { test: (p) => p.startsWith("/api/chat/rooms"),      data: () => ({ rooms: chatRooms() }) },
-  { test: (p) => p.startsWith("/api/chat"),            data: () => ({ rooms: chatRooms() }) },
-  // 프로젝트 — 하위 경로(events/qa/webhook) 부터 잡고 마지막에 상세/목록.
-  { test: (p) => /^\/api\/project\/[^/?]+\/events/.test(p),  data: () => ({ events: [] }) },
-  { test: (p) => /^\/api\/project\/[^/?]+\/qa/.test(p),      data: () => ({ items: [] }) },
-  { test: (p) => /^\/api\/project\/[^/?]+\/webhook/.test(p), data: () => ({ channels: [] }) },
-  { test: (p) => /^\/api\/project\/[^/?]+(?:\?|$)/.test(p),  data: (p?: string) => projectDetail((p ?? "").replace(/^\/api\/project\//, "").split(/[/?]/)[0]) },
-  { test: (p) => p.startsWith("/api/project"),               data: projectList },
-  { test: (p) => p.startsWith("/api/version"),         data: () => ({ version: "preview" }) },
-  { test: (p) => p.startsWith("/api/pins"),            data: () => ({ pins: [] }) },
-  { test: (p) => p.startsWith("/api/snippet"),         data: () => ({ snippets: [] }) },
+    } },
+  { test: (p) => p.startsWith("/api/users/"),          data: () => ({ user: DEMO_USERS[1] }) },
 
-  // Attendance / Leave — 한 달치 출퇴근 + 휴가 데모
+  /* === 공지 === */
+  { test: (p) => /^\/api\/notice\/[^/?]+\/reactions/.test(p), data: () => ({ reactions: [] }) },
+  { test: (p) => /^\/api\/notice\/[^/?]+(?:\?|$)/.test(p),    data: (p?: string) => {
+      const id = (p ?? "").replace(/^\/api\/notice\//, "").split(/[/?]/)[0];
+      const list = notices().notices;
+      return { notice: list.find((n) => n.id === id) ?? list[0] };
+    } },
+  { test: (p) => p.startsWith("/api/notice"),          data: notices },
+
+  /* === 일정 === */
+  { test: (p) => /^\/api\/schedule\/[^/?]+/.test(p),   data: () => ({ event: schedule().events[0] }) },
+  { test: (p) => p.startsWith("/api/schedule"),        data: schedule },
+
+  /* === 출퇴근 / 휴가 === */
+  { test: (p) => p === "/api/attendance/today",        data: attendanceToday },
   { test: (p) => p.startsWith("/api/attendance/leave"), data: (p?: string) => ({ leaves: demoLeaves(/\?all=1/.test(p ?? "")) }) },
   { test: (p) => p.startsWith("/api/attendance/month"), data: () => ({ attendances: demoMonthAttendance() }) },
   { test: (p) => p.startsWith("/api/attendance"),       data: () => ({ attendances: demoMonthAttendance(), leaves: demoLeaves(false) }) },
 
-  // Document — 데모 폴더 4개 + 문서 6개
-  { test: (p) => p.startsWith("/api/document/folders"),  data: () => ({ folders: demoFolders() }) },
-  { test: (p) => p.startsWith("/api/document/projects"), data: () => ({ projects: DEMO_PROJECTS.map((x) => ({ id: x.id, name: x.name, color: x.color })) }) },
-  { test: (p) => p.startsWith("/api/document"),          data: () => ({ documents: demoDocs(), folders: demoFolders() }) },
+  /* === 회의록 === */
+  { test: (p) => p.startsWith("/api/meeting/mentionable"),                data: () => ({ users: DEMO_USERS.slice(0, 8).map((u) => ({ id: u.id, name: u.name, avatarColor: u.avatarColor })) }) },
+  { test: (p) => /^\/api\/meeting\/[^/?]+\/revisions/.test(p),            data: (p?: string) => ({ revisions: meetingRevisions((p ?? "").match(/\/api\/meeting\/([^/?]+)/)?.[1] ?? "m1") }) },
+  { test: (p) => /^\/api\/meeting\/[^/?]+(?:\?|$)/.test(p),               data: (p?: string) => meetingDetail((p ?? "").replace(/^\/api\/meeting\//, "").split(/[/?]/)[0]) },
+  { test: (p) => p.startsWith("/api/meeting"),                            data: meetings },
 
-  // Service accounts — 데모 계정 8개
-  { test: (p) => p.startsWith("/api/service-accounts/projects"), data: () => ({ projects: DEMO_PROJECTS.map((p) => ({ id: p.id, name: p.name, color: p.color })) }) },
-  { test: (p) => p.startsWith("/api/service-accounts"), data: () => ({ accounts: demoAccounts() }) },
+  /* === 업무일지 === */
+  { test: (p) => /^\/api\/journal\/[^/?]+/.test(p),    data: (p?: string) => {
+      const id = (p ?? "").replace(/^\/api\/journal\//, "").split(/[/?]/)[0];
+      const list = journalsList().journals;
+      return { journal: list.find((j) => j.id === id) ?? list[0] };
+    } },
+  { test: (p) => p.startsWith("/api/journal"),         data: journalsList },
 
-  // Approval extras
+  /* === 결재 === */
+  { test: (p) => p === "/api/approval/counts",         data: approvalCounts },
+  { test: (p) => /^\/api\/approval\/[^/?]+/.test(p),   data: (p?: string) => {
+      const id = (p ?? "").replace(/^\/api\/approval\//, "").split(/[/?]/)[0];
+      const a = demoApprovalsAll().find((x) => x.id === id) ?? demoApprovalsAll()[0];
+      return { approval: { ...a, comments: [], revisions: [], revisedFrom: null } };
+    } },
   { test: (p) => p.startsWith("/api/approval-extras/lines"),     data: () => ({ lines: [] }) },
   { test: (p) => p.startsWith("/api/approval-extras/templates"), data: () => ({ templates: [] }) },
   { test: (p) => p.startsWith("/api/approval-extras"),           data: () => ({}) },
+  { test: (p) => p.startsWith("/api/approval"),                  data: approvals },
 
-  // Profile
+  /* === 알림 === */
+  { test: (p) => p.startsWith("/api/notification/prefs"), data: () => ({ prefs: {}, dndStart: null, dndEnd: null }) },
+  { test: (p) => p.startsWith("/api/notification"),       data: notificationList },
+
+  /* === 채팅 === */
+  { test: (p) => /\/api\/chat\/rooms\/[^/]+\/messages/.test(p), data: (p?: string) => {
+      const m = (p ?? "").match(/\/rooms\/([^/]+)\/messages/);
+      return { messages: chatMessages(m?.[1] ?? "r1"), readStates: [] };
+    } },
+  { test: (p) => p.startsWith("/api/chat/search"),     data: () => ({ hits: [] }) },
+  { test: (p) => p.startsWith("/api/chat/rooms"),      data: () => ({ rooms: chatRooms() }) },
+  { test: (p) => p.startsWith("/api/chat"),            data: () => ({ rooms: chatRooms() }) },
+
+  /* === 문서함 === */
+  { test: (p) => /^\/api\/document\/[^/?]+\/revisions/.test(p), data: () => ({ revisions: [] }) },
+  { test: (p) => p.startsWith("/api/document/folders"),  data: () => ({ folders: demoFolders() }) },
+  { test: (p) => p.startsWith("/api/document/projects"), data: () => ({ projects: DEMO_PROJECTS.map((x) => ({ id: x.id, name: x.name, color: x.color })) }) },
+  { test: (p) => /^\/api\/document\/[^/?]+/.test(p),     data: (p?: string) => {
+      const id = (p ?? "").replace(/^\/api\/document\//, "").split(/[/?]/)[0];
+      const d = demoDocs().find((x) => x.id === id) ?? demoDocs()[0];
+      return { document: d };
+    } },
+  { test: (p) => p.startsWith("/api/document"),          data: () => ({ documents: demoDocs(), folders: demoFolders() }) },
+
+  /* === 지출 / 카드 === */
+  { test: (p) => /^\/api\/expense\/[^/?]+/.test(p),    data: (p?: string) => {
+      const id = (p ?? "").replace(/^\/api\/expense\//, "").split(/[/?]/)[0];
+      const list = demoExpenses();
+      return { expense: list.find((e) => e.id === id) ?? list[0] };
+    } },
+  { test: (p) => p.startsWith("/api/expense"),         data: () => {
+      const list = demoExpenses();
+      return { expenses: list, totalAmount: list.reduce((a, e) => a + e.amount, 0) };
+    } },
+
+  /* === 프로젝트 === */
+  { test: (p) => /^\/api\/project\/[^/?]+\/events/.test(p),  data: () => ({ events: [] }) },
+  { test: (p) => /^\/api\/project\/[^/?]+\/qa/.test(p),      data: () => ({ items: [] }) },
+  { test: (p) => /^\/api\/project\/[^/?]+\/webhook/.test(p), data: () => ({ channels: [] }) },
+  { test: (p) => /^\/api\/project\/[^/?]+\/member/.test(p),  data: () => ({ members: [] }) },
+  { test: (p) => /^\/api\/project\/[^/?]+(?:\?|$)/.test(p),  data: (p?: string) => projectDetail((p ?? "").replace(/^\/api\/project\//, "").split(/[/?]/)[0]) },
+  { test: (p) => p.startsWith("/api/project"),               data: projectList },
+
+  /* === 서비스 계정 === */
+  { test: (p) => p.startsWith("/api/service-accounts/projects"), data: () => ({ projects: DEMO_PROJECTS.map((p) => ({ id: p.id, name: p.name, color: p.color })) }) },
+  { test: (p) => /^\/api\/service-accounts\/[^/?]+/.test(p), data: () => ({ account: demoAccounts()[0] }) },
+  { test: (p) => p.startsWith("/api/service-accounts"),  data: () => ({ accounts: demoAccounts() }) },
+
+  /* === 스니펫 / 핀 / 프로필 === */
+  { test: (p) => p.startsWith("/api/snippet/search"),  data: () => ({ snippets: [] }) },
+  { test: (p) => p.startsWith("/api/snippet"),         data: () => ({ snippets: [] }) },
+  { test: (p) => p.startsWith("/api/pins"),            data: () => ({ pins: [] }) },
   { test: (p) => p.startsWith("/api/profile"),         data: () => ({ user: DEMO_ME }) },
 
-  // Admin — 클라이언트가 기대하는 키 이름에 정확히 맞춤
-  { test: (p) => p.startsWith("/api/admin/invites"),        data: () => ({ keys: [] }) }, // ⚠ keys 가 정답
+  /* === Feature Flags / 네비 === */
+  { test: (p) => p.startsWith("/api/feature-flags"),   data: featureFlags },
+  { test: (p) => p.startsWith("/api/nav"),             data: navConfig },
+
+  /* === 검색 / 미리보기 / 공유링크 === */
+  { test: (p) => p.startsWith("/api/search"),          data: () => ({ users: [], notices: [], events: [], documents: [], messages: [], meetings: [], approvals: [] }) },
+  { test: (p) => p.startsWith("/api/unfurl"),          data: () => ({ url: null, title: null, description: null, image: null }) },
+  { test: (p) => p.startsWith("/api/share-links"),     data: () => ({ links: [] }) },
+  { test: (p) => p.startsWith("/api/folder-share-links"), data: () => ({ links: [] }) },
+  { test: (p) => p.startsWith("/api/public-share"),    data: () => ({ ok: false, error: "preview" }) },
+
+  /* === 관리자 페이지 === */
+  { test: (p) => p.startsWith("/api/admin/invites"),        data: () => ({ keys: [] }) },
   { test: (p) => p.startsWith("/api/admin/teams"),          data: () => ({ teams: DEMO_TEAMS.map((t, i) => ({ id: `t${i}`, name: t, createdAt: iso(-30) })) }) },
-  // 직급 rank 는 \"낮을수록 상위\" — 이사(0) … 인턴(6)
   { test: (p) => p.startsWith("/api/admin/positions"),      data: () => ({ positions: ["이사", "팀장", "리드", "대리", "주임", "사원", "인턴"].map((n, i) => ({ id: `p${i}`, name: n, rank: i, createdAt: iso(-30) })) }) },
   { test: (p) => p.startsWith("/api/admin/users"),          data: () => ({ users: DEMO_USERS.map((u) => ({ ...u, active: true, createdAt: iso(-90) })) }) },
   { test: (p) => p.startsWith("/api/admin/nav-visibility"), data: () => ({ items: [] }) },
   { test: (p) => p.startsWith("/api/admin/logs"),           data: () => ({ logs: [] }) },
+  /* SuperAdmin 영역은 demo 사용자 권한으론 못 가지만, 사이드바/번들 prefetch 등이 호출할 수 있어 안전 응답. */
+  { test: (p) => p.startsWith("/api/admin/2fa-policy"),     data: () => ({ policies: [], users: [] }) },
+  { test: (p) => p.startsWith("/api/admin/feature-flags"),  data: () => ({ flags: [] }) },
+  { test: (p) => p.startsWith("/api/admin/audit"),          data: () => ({ logs: [], actions: [] }) },
+  { test: (p) => p.startsWith("/api/admin/health"),         data: () => ({ ok: true, ts: Date.now(), checks: {} }) },
+  { test: (p) => p.startsWith("/api/admin/sessions"),       data: () => ({ sessions: [] }) },
+  { test: (p) => p.startsWith("/api/admin/api-tokens"),     data: () => ({ tokens: [] }) },
+  { test: (p) => p.startsWith("/api/admin/role-permissions"), data: () => ({ catalog: [], matrix: {} }) },
+  { test: (p) => p.startsWith("/api/admin/server-logs"),    data: () => ({ logs: [] }) },
+  { test: (p) => p.startsWith("/api/admin/api-spec"),       data: () => ({ routes: [] }) },
+  { test: (p) => p.startsWith("/api/admin/errors"),         data: () => ({ groups: [] }) },
+  { test: (p) => p.startsWith("/api/admin/rate-rules"),     data: () => ({ rules: [] }) },
+  { test: (p) => p.startsWith("/api/admin/ip-blocks"),      data: () => ({ blocks: [] }) },
+  { test: (p) => p.startsWith("/api/admin/trash"),          data: () => ({ meeting: [], document: [], journal: [], notice: [] }) },
   { test: (p) => p.startsWith("/api/admin"),                data: () => ({}) },
-
-  // 알림 설정 / 채팅
-  { test: (p) => p.startsWith("/api/notification/prefs"), data: () => ({ prefs: {}, dndStart: null, dndEnd: null }) },
-
-  // 검색
-  { test: (p) => p.startsWith("/api/search"),          data: () => ({ users: [], notices: [], events: [], documents: [], messages: [], meetings: [], approvals: [] }) },
 ];
 
 /** 미리보기 모드에서 api.ts 가 호출하는 진입점. */
@@ -868,6 +927,7 @@ export function isPreviewMode(): boolean {
   try {
     if (sessionStorage.getItem(PREVIEW_KEY) === "1") {
       (window as any).__HINEST_PREVIEW__ = true; // 다음 호출 빠르게.
+      installNetworkPatches();                    // 새로고침 직후에도 fetch/SSE 패치 재적용.
       return true;
     }
   } catch {}
@@ -876,14 +936,75 @@ export function isPreviewMode(): boolean {
 
 const PREVIEW_KEY = "hinest:preview";
 
+let _origFetch: typeof fetch | null = null;
+let _origEventSource: typeof EventSource | null = null;
+
 export function enablePreview() {
   if (typeof window === "undefined") return;
   (window as any).__HINEST_PREVIEW__ = true;
   try { sessionStorage.setItem(PREVIEW_KEY, "1"); } catch {}
+  installNetworkPatches();
 }
 
 export function disablePreview() {
   if (typeof window === "undefined") return;
   (window as any).__HINEST_PREVIEW__ = false;
   try { sessionStorage.removeItem(PREVIEW_KEY); } catch {}
+  uninstallNetworkPatches();
+  // 이전 가짜 응답이 sessionStorage 에 캐시돼있을 수 있어 비움 — 진짜 서버 호출 시 stale 데이터 방지.
+  try {
+    const PREFIX = "hinest.swr:";
+    const keys: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (k && k.startsWith(PREFIX)) keys.push(k);
+    }
+    for (const k of keys) sessionStorage.removeItem(k);
+  } catch {}
+}
+
+/* ---- 보안 ----
+ *  api() 만 미리보기로 단락하면 직접 fetch / EventSource 를 쓰는 코드(파일 업로드, SSE 등) 가
+ *  실제 서버로 노출된다. enablePreview() 시점에 window 레벨에서 monkey-patch 해 /api/* 진출을 막는다.
+ *  - fetch: /api/* 면 mock 응답, 외부 URL(이미지 등) 은 그대로 통과
+ *  - EventSource: /api/* 라면 즉시 close 되는 더미 객체, 외부는 통과 */
+function installNetworkPatches() {
+  if (typeof window === "undefined") return;
+  if (!_origFetch) {
+    _origFetch = window.fetch.bind(window);
+    window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
+      if (url.startsWith("/api/")) {
+        // 쓰기 차단 + 알려진 GET 은 mock 응답.
+        return previewMockFetch(url, { method: init?.method, headers: init?.headers as any });
+      }
+      return _origFetch!(input as any, init);
+    }) as typeof fetch;
+  }
+  if (!_origEventSource && typeof EventSource !== "undefined") {
+    _origEventSource = EventSource;
+    // /api/* 로 가는 SSE 는 실제 서버에 연결되지 않게 더미 객체 반환.
+    (window as any).EventSource = function PreviewEventSource(url: string) {
+      if (typeof url === "string" && url.startsWith("/api/")) {
+        const stub: any = {
+          url, readyState: 2, // CLOSED
+          withCredentials: false,
+          onopen: null, onmessage: null, onerror: null,
+          addEventListener() {}, removeEventListener() {}, close() {}, dispatchEvent() { return false; },
+        };
+        return stub;
+      }
+      return new _origEventSource!(url as any);
+    };
+    // 정적 상수 유지 (CONNECTING/OPEN/CLOSED).
+    (window as any).EventSource.CONNECTING = 0;
+    (window as any).EventSource.OPEN = 1;
+    (window as any).EventSource.CLOSED = 2;
+  }
+}
+
+function uninstallNetworkPatches() {
+  if (typeof window === "undefined") return;
+  if (_origFetch) { window.fetch = _origFetch; _origFetch = null; }
+  if (_origEventSource) { (window as any).EventSource = _origEventSource; _origEventSource = null; }
 }

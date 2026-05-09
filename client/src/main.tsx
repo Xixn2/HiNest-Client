@@ -4,8 +4,12 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { AuthProvider } from "./auth";
 import { FeatureFlagsProvider } from "./lib/featureFlags";
+import { isPreviewMode } from "./lib/previewMock";
 import { ThemeProvider } from "./theme";
 import "./styles.css";
+
+// 미리보기 모드 부트스트랩 — 새로고침 후 fetch/EventSource 가 실제 서버로 새지 않게 가장 먼저 패치.
+isPreviewMode();
 
 // iOS Safari 는 user-scalable=no 를 무시하므로 제스처/더블탭 확대를 JS 로 차단.
 if (typeof window !== "undefined") {
