@@ -259,7 +259,8 @@ const HANDLERS: { test: (p: string) => boolean; data: () => any }[] = [
   // Admin — 클라이언트가 기대하는 키 이름에 정확히 맞춤
   { test: (p) => p.startsWith("/api/admin/invites"),        data: () => ({ keys: [] }) }, // ⚠ keys 가 정답
   { test: (p) => p.startsWith("/api/admin/teams"),          data: () => ({ teams: DEMO_TEAMS.map((t, i) => ({ id: `t${i}`, name: t, createdAt: iso(-30) })) }) },
-  { test: (p) => p.startsWith("/api/admin/positions"),      data: () => ({ positions: ["인턴", "사원", "주임", "대리", "리드", "팀장", "이사"].map((n, i) => ({ id: `p${i}`, name: n, rank: i, createdAt: iso(-30) })) }) },
+  // 직급 rank 는 \"낮을수록 상위\" — 이사(0) … 인턴(6)
+  { test: (p) => p.startsWith("/api/admin/positions"),      data: () => ({ positions: ["이사", "팀장", "리드", "대리", "주임", "사원", "인턴"].map((n, i) => ({ id: `p${i}`, name: n, rank: i, createdAt: iso(-30) })) }) },
   { test: (p) => p.startsWith("/api/admin/users"),          data: () => ({ users: DEMO_USERS.map((u) => ({ ...u, active: true, createdAt: iso(-90) })) }) },
   { test: (p) => p.startsWith("/api/admin/nav-visibility"), data: () => ({ items: [] }) },
   { test: (p) => p.startsWith("/api/admin/logs"),           data: () => ({ logs: [] }) },
