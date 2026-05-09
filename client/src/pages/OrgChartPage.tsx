@@ -595,11 +595,13 @@ function TreeStyles() {
       .org-vtree-members {
         display: flex;
         justify-content: center;
-        gap: 16px;
-        flex-wrap: nowrap;
+        gap: 12px 16px;
+        /* 인원 많은 직급(사원 등)이 한 줄에 늘어져 가로 스크롤만 강요하던 문제 — 다음 줄로 wrap. */
+        flex-wrap: wrap;
+        max-width: min(100%, 1200px);
+        margin: 2px auto 0;
         position: relative;
         padding-top: 18px;
-        margin-top: 2px;
       }
       /* Level 노드에서 내려가는 세로선 */
       .org-vtree-members::after {
