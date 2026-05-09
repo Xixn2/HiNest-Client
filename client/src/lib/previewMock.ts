@@ -348,6 +348,41 @@ const DEMO_PROJECTS = [
 
 function projectList() { return { projects: DEMO_PROJECTS }; }
 
+/* ===== 문서함 데모 ===== */
+function demoFolders() {
+  return [
+    { id: "f1", name: "회사 운영", parentId: null, createdAt: iso(-180), scope: "ALL" as const, scopeTeam: null, scopeUserIds: null },
+    { id: "f2", name: "개발 자료", parentId: null, createdAt: iso(-120), scope: "TEAM" as const, scopeTeam: "개발팀", scopeUserIds: null },
+    { id: "f3", name: "디자인 리소스", parentId: null, createdAt: iso(-90),  scope: "TEAM" as const, scopeTeam: "디자인팀", scopeUserIds: null },
+    { id: "f4", name: "내 메모", parentId: null, createdAt: iso(-30),  scope: "PRIVATE" as const, scopeTeam: null, scopeUserIds: null },
+  ];
+}
+function demoDocs() {
+  const meAuthor = { name: DEMO_ME.name, avatarColor: DEMO_ME.avatarColor, avatarUrl: null };
+  return [
+    { id: "d1", title: "복리후생 가이드 v3",     description: "휴가/식대/교육비 정책",        folderId: "f1", fileUrl: null, fileName: null, fileType: null, fileSize: null, tags: "HR,복리후생",       scope: "ALL"     as const, scopeTeam: null,        scopeUserIds: null, createdAt: iso(-60), updatedAt: iso(-3),  author: meAuthor, folder: { name: "회사 운영" } },
+    { id: "d2", title: "신규 입사자 온보딩",      description: "1~2주 체크리스트",             folderId: "f1", fileUrl: null, fileName: null, fileType: null, fileSize: null, tags: "온보딩,HR",         scope: "ALL"     as const, scopeTeam: null,        scopeUserIds: null, createdAt: iso(-40), updatedAt: iso(-10), author: meAuthor, folder: { name: "회사 운영" } },
+    { id: "d3", title: "API 컨벤션",              description: "REST 네이밍 / 에러 코드",      folderId: "f2", fileUrl: null, fileName: null, fileType: null, fileSize: null, tags: "개발,API",           scope: "TEAM"    as const, scopeTeam: "개발팀",    scopeUserIds: null, createdAt: iso(-90), updatedAt: iso(-5),  author: { name: "박그레이스", avatarColor: "#7C3AED", avatarUrl: null }, folder: { name: "개발 자료" } },
+    { id: "d4", title: "Figma 컬러 토큰",         description: "디자인 시스템 v2",            folderId: "f3", fileUrl: null, fileName: null, fileType: null, fileSize: null, tags: "디자인,토큰",       scope: "TEAM"    as const, scopeTeam: "디자인팀",  scopeUserIds: null, createdAt: iso(-50), updatedAt: iso(-1),  author: { name: "이앨리스",   avatarColor: "#16A34A", avatarUrl: null }, folder: { name: "디자인 리소스" } },
+    { id: "d5", title: "주간 업무 보고 템플릿",   description: null,                            folderId: null, fileUrl: null, fileName: null, fileType: null, fileSize: null, tags: "템플릿",             scope: "ALL"     as const, scopeTeam: null,        scopeUserIds: null, createdAt: iso(-20), updatedAt: iso(-7),  author: meAuthor, folder: null },
+    { id: "d6", title: "내 회고 노트",             description: "주간 회고 모음",                folderId: "f4", fileUrl: null, fileName: null, fileType: null, fileSize: null, tags: "회고",               scope: "PRIVATE" as const, scopeTeam: null,        scopeUserIds: null, createdAt: iso(-15), updatedAt: iso(0),   author: meAuthor, folder: { name: "내 메모" } },
+  ];
+}
+
+/* ===== 법인카드 지출 데모 ===== */
+function demoExpenses() {
+  return [
+    { id: "ex1", userId: DEMO_ME.id,  usedAt: iso(0, 12, 30),  merchant: "스타벅스 강남점",      category: "식비",   amount:  18000, memo: "팀 미팅",                receiptUrl: null, status: "PENDING",  user: { name: DEMO_ME.name,  team: DEMO_ME.team } },
+    { id: "ex2", userId: "u-lead-1",  usedAt: iso(-1, 13, 10), merchant: "본죽 역삼점",          category: "식비",   amount:  12500, memo: "야근 식대",              receiptUrl: null, status: "APPROVED", user: { name: "이앨리스",     team: "디자인팀" } },
+    { id: "ex3", userId: DEMO_ME.id,  usedAt: iso(-1, 19, 15), merchant: "카카오T",              category: "교통",   amount:  14300, memo: "외근 복귀",              receiptUrl: null, status: "APPROVED", user: { name: DEMO_ME.name,  team: DEMO_ME.team } },
+    { id: "ex4", userId: "u-lead-3",  usedAt: iso(-2, 11, 0),  merchant: "쿠팡",                  category: "비품",   amount:  86000, memo: "키보드 / 마우스",       receiptUrl: null, status: "APPROVED", user: { name: "박그레이스",   team: "개발팀" } },
+    { id: "ex5", userId: "u-lead-4",  usedAt: iso(-3, 18, 30), merchant: "더미식 한정식",        category: "접대",   amount: 240000, memo: "외부 미팅 회식",        receiptUrl: null, status: "APPROVED", user: { name: "최마틴",       team: "마케팅팀" } },
+    { id: "ex6", userId: DEMO_ME.id,  usedAt: iso(-4, 20, 0),  merchant: "Notion Pro",            category: "업무",   amount:  18000, memo: "월 구독",                receiptUrl: null, status: "APPROVED", user: { name: DEMO_ME.name,  team: DEMO_ME.team } },
+    { id: "ex7", userId: "u-lead-2",  usedAt: iso(-5, 9, 30),  merchant: "GS25 본사점",          category: "식비",   amount:   4800, memo: "샌드위치/커피",         receiptUrl: null, status: "APPROVED", user: { name: "한이브",       team: "운영팀" } },
+    { id: "ex8", userId: DEMO_ME.id,  usedAt: iso(-7, 14, 20), merchant: "Figma",                 category: "업무",   amount:  20000, memo: "Pro 시트 추가",         receiptUrl: null, status: "APPROVED", user: { name: DEMO_ME.name,  team: DEMO_ME.team } },
+  ];
+}
+
 /* ===== 서비스 계정 데모 ===== */
 function demoAccounts() {
   const me = { id: DEMO_ME.id, name: DEMO_ME.name, avatarColor: DEMO_ME.avatarColor, avatarUrl: null };
@@ -443,7 +478,11 @@ const HANDLERS: { test: (p: string) => boolean; data: (p?: string) => any }[] = 
   { test: (p) => p.startsWith("/api/feature-flags"),   data: featureFlags },
   { test: (p) => p.startsWith("/api/nav"),             data: navConfig },
   { test: (p) => p.startsWith("/api/document"),        data: () => ({ documents: [], folders: [] }) },
-  { test: (p) => p.startsWith("/api/expense"),         data: () => ({ expenses: [] }) },
+  { test: (p) => p.startsWith("/api/expense"),         data: () => {
+      const list = demoExpenses();
+      return { expenses: list, totalAmount: list.reduce((a, e) => a + e.amount, 0) };
+    },
+  },
   { test: (p) => p.startsWith("/api/chat"),            data: () => ({ rooms: [], messages: [] }) },
   // 프로젝트 — 하위 경로(events/qa/webhook) 부터 잡고 마지막에 상세/목록.
   { test: (p) => /^\/api\/project\/[^/?]+\/events/.test(p),  data: () => ({ events: [] }) },
@@ -459,10 +498,10 @@ const HANDLERS: { test: (p: string) => boolean; data: (p?: string) => any }[] = 
   { test: (p) => p.startsWith("/api/attendance/leave"), data: () => ({ leaves: [] }) },
   { test: (p) => p.startsWith("/api/attendance"),      data: () => ({ attendances: [], leaves: [] }) },
 
-  // Document
-  { test: (p) => p.startsWith("/api/document/folders"),  data: () => ({ folders: [] }) },
-  { test: (p) => p.startsWith("/api/document/projects"), data: () => ({ projects: [] }) },
-  { test: (p) => p.startsWith("/api/document"),          data: () => ({ documents: [], folders: [] }) },
+  // Document — 데모 폴더 4개 + 문서 6개
+  { test: (p) => p.startsWith("/api/document/folders"),  data: () => ({ folders: demoFolders() }) },
+  { test: (p) => p.startsWith("/api/document/projects"), data: () => ({ projects: DEMO_PROJECTS.map((x) => ({ id: x.id, name: x.name, color: x.color })) }) },
+  { test: (p) => p.startsWith("/api/document"),          data: () => ({ documents: demoDocs(), folders: demoFolders() }) },
 
   // Service accounts — 데모 계정 8개
   { test: (p) => p.startsWith("/api/service-accounts/projects"), data: () => ({ projects: DEMO_PROJECTS.map((p) => ({ id: p.id, name: p.name, color: p.color })) }) },
