@@ -172,13 +172,31 @@ function attendanceToday() {
   return { attendance: { checkIn: today.toISOString(), checkOut: null } };
 }
 
+const DEMO_MEETINGS = [
+  { id: "m1", title: "프로덕트 정기 회의 (5/8)",  visibility: "ALL",     projectId: null, authorId: "u-lead-1", createdAt: iso(-2, 14), updatedAt: iso(-1, 16), author: { id: "u-lead-1", name: "이앨리스", avatarColor: "#16A34A", isDeveloper: false, avatarUrl: null }, project: null },
+  { id: "m2", title: "신규 기능 스펙 정리",       visibility: "PROJECT", projectId: "p1", authorId: "u-lead-3", createdAt: iso(-4, 10), updatedAt: iso(-3, 11), author: { id: "u-lead-3", name: "박그레이스", avatarColor: "#7C3AED", isDeveloper: true,  avatarUrl: null }, project: { id: "p1", name: "HiNest v2", color: "#3B5CF0" } },
+  { id: "m3", title: "5월 캠페인 브레인스토밍",   visibility: "ALL",     projectId: null, authorId: "u-lead-4", createdAt: iso(-6, 13), updatedAt: iso(-5, 14), author: { id: "u-lead-4", name: "최마틴", avatarColor: "#F59E0B", isDeveloper: false, avatarUrl: null }, project: null },
+];
+
 function meetings() {
+  return { meetings: DEMO_MEETINGS };
+}
+
+function meetingDetail(id: string) {
+  const base = DEMO_MEETINGS.find((m) => m.id === id) ?? DEMO_MEETINGS[0];
+  const sample = base.id === "m1"
+    ? "이번 주 진행 사항 점검과 다음 스프린트 계획을 다뤘습니다."
+    : base.id === "m2"
+      ? "신규 기능의 기술 스펙과 구현 일정 합의."
+      : "여름 시즌 캠페인 아이디어 발산 — 후속 액션은 5/15 까지.";
   return {
-    meetings: [
-      { id: "m1", title: "프로덕트 정기 회의 (5/8)",  visibility: "ALL",     projectId: null, authorId: "u2", createdAt: iso(-2, 14), updatedAt: iso(-1, 16), author: { id: "u2", name: "이앨리스", avatarColor: "#16A34A", isDeveloper: false, avatarUrl: null }, project: null },
-      { id: "m2", title: "신규 기능 스펙 정리",       visibility: "PROJECT", projectId: "p1", authorId: "u3", createdAt: iso(-4, 10), updatedAt: iso(-3, 11), author: { id: "u3", name: "박밥",     avatarColor: "#7C3AED", isDeveloper: true,  avatarUrl: null }, project: { id: "p1", name: "HiNest v2", color: "#3B5CF0" } },
-      { id: "m3", title: "5월 캠페인 브레인스토밍",   visibility: "ALL",     projectId: null, authorId: "u5", createdAt: iso(-6, 13), updatedAt: iso(-5, 14), author: { id: "u5", name: "정데이브", avatarColor: "#F59E0B", isDeveloper: false, avatarUrl: null }, project: null },
-    ],
+    meeting: {
+      ...base,
+      content: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: sample }] }] },
+      viewers: [],
+      revisions: [],
+      revisedFrom: null,
+    },
   };
 }
 
@@ -192,14 +210,42 @@ function journalsList() {
 }
 
 function approvals() { return { approvals: [] }; }
+
+/* ===== 데모 프로젝트 ===== */
+const DEMO_PROJECTS = [
+  { id: "p1", name: "HiNest v2",      description: "차세대 사내 협업 플랫폼 리뉴얼", color: "#3B5CF0", status: "ACTIVE" as const,   createdById: DEMO_ME.id, createdAt: iso(-90), updatedAt: iso(-1) },
+  { id: "p2", name: "Petmoa 런칭",    description: "반려동물 헬스케어 서비스 베타",   color: "#F59E0B", status: "ACTIVE" as const,   createdById: "u-lead-1",  createdAt: iso(-60), updatedAt: iso(-2) },
+  { id: "p3", name: "Rooti",          description: "프리랜서 매칭 플랫폼",            color: "#16A34A", status: "ACTIVE" as const,   createdById: "u-lead-3",  createdAt: iso(-45), updatedAt: iso(-3) },
+  { id: "p4", name: "마케팅 Q3 캠페인", description: "여름 시즌 SNS·바이럴 캠페인",   color: "#DB2777", status: "ACTIVE" as const,   createdById: "u-lead-4",  createdAt: iso(-30), updatedAt: iso(-1) },
+  { id: "p5", name: "사내 자료 정리",  description: "레거시 문서 마이그레이션 스프린트", color: "#7C3AED", status: "ARCHIVED" as const, createdById: "u-lead-2",  createdAt: iso(-180), updatedAt: iso(-60) },
+];
+
+function projectList() { return { projects: DEMO_PROJECTS }; }
+function projectDetail(id: string) {
+  const p = DEMO_PROJECTS.find((x) => x.id === id) ?? DEMO_PROJECTS[0];
+  // 간단히 본인 + 임의 멤버 4~6명을 멤버로.
+  const members = [DEMO_ME, ...DEMO_USERS.slice(1, 6)].map((u, i) => ({
+    id: `m${i}`,
+    userId: u.id,
+    role: i === 0 ? "OWNER" : i === 1 ? "MANAGER" : "MEMBER",
+    user: { id: u.id, name: u.name, avatarColor: u.avatarColor, avatarUrl: null, isDeveloper: (u as any).isDeveloper ?? false, position: u.position, team: u.team, email: u.email },
+  }));
+  return {
+    project: {
+      ...p,
+      createdBy: { id: DEMO_ME.id, name: DEMO_ME.name },
+      members,
+    },
+  };
+}
 function approvalCounts() { return { pending: 0, mine: 0 }; }
 function notificationList() { return { notifications: [], unread: 0 }; }
 function featureFlags() { return { flags: {} }; }
 function teams() { return { teams: DEMO_TEAMS }; }
 function navConfig() { return { items: [] }; }
 
-/** 경로별 매처 — 정확히 일치하거나 prefix 매치. */
-const HANDLERS: { test: (p: string) => boolean; data: () => any }[] = [
+/** 경로별 매처 — 정확히 일치하거나 prefix 매치. data 는 path 도 받을 수 있어 동적 라우트(예: /api/project/:id) 에서 ID 를 뽑아 다른 응답을 줄 수 있다. */
+const HANDLERS: { test: (p: string) => boolean; data: (p?: string) => any }[] = [
   { test: (p) => p === "/api/me",                      data: () => ({ user: DEMO_ME, impersonator: null }) },
   { test: (p) => p.startsWith("/api/users/teams"),     data: teams },
   { test: (p) => p === "/api/users" || p.startsWith("/api/users?"), data: () => {
@@ -220,6 +266,8 @@ const HANDLERS: { test: (p: string) => boolean; data: () => any }[] = [
   { test: (p) => p.startsWith("/api/schedule"),        data: schedule },
   { test: (p) => p === "/api/attendance/today",        data: attendanceToday },
   { test: (p) => p.startsWith("/api/attendance"),      data: () => ({ attendances: [], leaves: [] }) },
+  { test: (p) => p.startsWith("/api/meeting/mentionable"), data: () => ({ users: DEMO_USERS.slice(0, 8).map((u) => ({ id: u.id, name: u.name, avatarColor: u.avatarColor })) }) },
+  { test: (p) => /^\/api\/meeting\/[^/?]+/.test(p),    data: (p?: string) => meetingDetail((p ?? "").replace(/^\/api\/meeting\//, "").split(/[/?]/)[0]) },
   { test: (p) => p.startsWith("/api/meeting"),         data: meetings },
   { test: (p) => p.startsWith("/api/journal"),         data: journalsList },
   { test: (p) => p === "/api/approval/counts",         data: approvalCounts },
@@ -230,7 +278,9 @@ const HANDLERS: { test: (p: string) => boolean; data: () => any }[] = [
   { test: (p) => p.startsWith("/api/document"),        data: () => ({ documents: [], folders: [] }) },
   { test: (p) => p.startsWith("/api/expense"),         data: () => ({ expenses: [] }) },
   { test: (p) => p.startsWith("/api/chat"),            data: () => ({ rooms: [], messages: [] }) },
-  { test: (p) => p.startsWith("/api/project"),         data: () => ({ projects: [] }) },
+  // /api/project/<id> → 상세, /api/project (?all 등) → 목록
+  { test: (p) => /^\/api\/project\/[^/?]+/.test(p), data: (p?: string) => projectDetail((p ?? "").replace(/^\/api\/project\//, "").split(/[/?]/)[0]) },
+  { test: (p) => p.startsWith("/api/project"),         data: projectList },
   { test: (p) => p.startsWith("/api/version"),         data: () => ({ version: "preview" }) },
   { test: (p) => p.startsWith("/api/pins"),            data: () => ({ pins: [] }) },
   { test: (p) => p.startsWith("/api/snippet"),         data: () => ({ snippets: [] }) },
@@ -284,7 +334,7 @@ export function previewMockFetch(path: string, init: RequestInit & { json?: any 
 
   const handler = HANDLERS.find((h) => h.test(path));
   if (handler) {
-    return Promise.resolve(jsonResponse(200, handler.data()));
+    return Promise.resolve(jsonResponse(200, handler.data(path)));
   }
   // 매처 없는 경로는 빈 객체로 graceful — 컴포넌트가 빈 상태로 렌더.
   return Promise.resolve(jsonResponse(200, {}));
