@@ -10,12 +10,17 @@ export async function api<T = any>(
     headers["Content-Type"] = "application/json";
     body = JSON.stringify(init.json);
   }
-  const res = await fetch(path, {
-    ...init,
-    headers,
-    body,
-    credentials: "include",
-  });
+  // 미리보기 모드 — 실제 네트워크 X, 가짜 응답으로 단락.
+  // 동기 import 대신 dynamic 으로 가져와 번들 분리(미리보기 미진입 시 코드 안 끌어옴).
+  const preview = typeof window !== "undefined" && (window as any).__HINEST_PREVIEW__ === true;
+  const res = preview
+    ? await (await import("./lib/previewMock")).previewMockFetch(path, { ...init, json: init.json })
+    : await fetch(path, {
+        ...init,
+        headers,
+        body,
+        credentials: "include",
+      });
   if (!res.ok) {
     let msg = "요청 실패";
     let code: string | undefined;
