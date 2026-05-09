@@ -213,11 +213,9 @@ function approvals() { return { approvals: [] }; }
 
 /* ===== 데모 프로젝트 ===== */
 const DEMO_PROJECTS = [
-  { id: "p1", name: "HiNest v2",      description: "차세대 사내 협업 플랫폼 리뉴얼", color: "#3B5CF0", status: "ACTIVE" as const,   createdById: DEMO_ME.id, createdAt: iso(-90), updatedAt: iso(-1) },
-  { id: "p2", name: "Petmoa 런칭",    description: "반려동물 헬스케어 서비스 베타",   color: "#F59E0B", status: "ACTIVE" as const,   createdById: "u-lead-1",  createdAt: iso(-60), updatedAt: iso(-2) },
-  { id: "p3", name: "Rooti",          description: "프리랜서 매칭 플랫폼",            color: "#16A34A", status: "ACTIVE" as const,   createdById: "u-lead-3",  createdAt: iso(-45), updatedAt: iso(-3) },
-  { id: "p4", name: "마케팅 Q3 캠페인", description: "여름 시즌 SNS·바이럴 캠페인",   color: "#DB2777", status: "ACTIVE" as const,   createdById: "u-lead-4",  createdAt: iso(-30), updatedAt: iso(-1) },
-  { id: "p5", name: "사내 자료 정리",  description: "레거시 문서 마이그레이션 스프린트", color: "#7C3AED", status: "ARCHIVED" as const, createdById: "u-lead-2",  createdAt: iso(-180), updatedAt: iso(-60) },
+  { id: "p1", name: "HiNest v2",      description: "차세대 사내 협업 플랫폼 리뉴얼",  color: "#3B5CF0", status: "ACTIVE" as const,   createdById: DEMO_ME.id, createdAt: iso(-90), updatedAt: iso(-1) },
+  { id: "p4", name: "마케팅 Q3 캠페인", description: "여름 시즌 SNS·바이럴 캠페인",    color: "#DB2777", status: "ACTIVE" as const,   createdById: "u-lead-4",  createdAt: iso(-30), updatedAt: iso(-1) },
+  { id: "p5", name: "사내 자료 정리",   description: "레거시 문서 마이그레이션 스프린트", color: "#7C3AED", status: "ARCHIVED" as const, createdById: "u-lead-2",  createdAt: iso(-180), updatedAt: iso(-60) },
 ];
 
 function projectList() { return { projects: DEMO_PROJECTS }; }
@@ -258,7 +256,7 @@ function demoAccounts() {
     base({ id: "sa5", serviceName: "Cloudflare",       category: "DOMAIN",  loginId: "ops@hinest.app",     url: "https://dash.cloudflare.com" }),
     base({ id: "sa6", serviceName: "Google Workspace", category: "EMAIL",   loginId: "admin@hinest.app",   url: "https://admin.google.com" }),
     base({ id: "sa7", serviceName: "Datadog",          category: "MONITOR", loginId: "ops@hinest.app",     url: "https://app.datadoghq.com",   projectId: "p1" }),
-    base({ id: "sa8", serviceName: "OpenAI Platform",  category: "AI",      loginId: "team@hinest.app",    url: "https://platform.openai.com", projectId: "p3" }),
+    base({ id: "sa8", serviceName: "OpenAI Platform",  category: "AI",      loginId: "team@hinest.app",    url: "https://platform.openai.com", projectId: "p1" }),
     base({ id: "sa9", serviceName: "RDS Postgres",     category: "DB",      loginId: "hinest",             url: null,                          notes: "운영 DB · IAM 회전 6개월 주기" }),
   ];
 }
