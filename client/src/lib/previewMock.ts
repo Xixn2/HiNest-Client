@@ -182,17 +182,145 @@ function meetings() {
   return { meetings: DEMO_MEETINGS };
 }
 
+/* ===== TipTap JSON 헬퍼 — 회의록 본문 작성용 ===== */
+type TipTapNode = any;
+const t  = (text: string, ...marks: string[]): TipTapNode => ({ type: "text", text, ...(marks.length ? { marks: marks.map((m) => ({ type: m })) } : {}) });
+const tH = (text: string, color: string): TipTapNode => ({ type: "text", text, marks: [{ type: "highlight", attrs: { color } }] });
+const tL = (text: string, href: string): TipTapNode => ({ type: "text", text, marks: [{ type: "link", attrs: { href, target: "_blank", rel: "noopener" } }] });
+const p   = (...kids: TipTapNode[]): TipTapNode => ({ type: "paragraph", content: kids.length ? kids : [{ type: "text", text: "" }] });
+const h   = (level: 1 | 2 | 3, ...kids: TipTapNode[]): TipTapNode => ({ type: "heading", attrs: { level }, content: kids });
+const li  = (...kids: TipTapNode[]): TipTapNode => ({ type: "listItem", content: kids });
+const ul  = (...items: TipTapNode[]): TipTapNode => ({ type: "bulletList", content: items });
+const ol  = (...items: TipTapNode[]): TipTapNode => ({ type: "orderedList", content: items });
+const tk  = (checked: boolean, ...kids: TipTapNode[]): TipTapNode => ({ type: "taskItem", attrs: { checked }, content: kids });
+const tkl = (...items: TipTapNode[]): TipTapNode => ({ type: "taskList", content: items });
+const cb  = (language: string, code: string): TipTapNode => ({ type: "codeBlock", attrs: { language }, content: [{ type: "text", text: code }] });
+const bq  = (...kids: TipTapNode[]): TipTapNode => ({ type: "blockquote", content: kids });
+const hr  = (): TipTapNode => ({ type: "horizontalRule" });
+const mention = (id: string, label: string): TipTapNode => ({ type: "mention", attrs: { id, label } });
+
+const MEETING_BODIES: Record<string, TipTapNode> = {
+  m1: {
+    type: "doc",
+    content: [
+      h(1, t("프로덕트 정기 회의 — 5월 8일")),
+      p(t("일시 ", "bold"), t("· 5월 8일 (목) 14:00 ~ 15:30  "), t("· 회의실 B", "italic")),
+      p(t("참석 ", "bold"), mention("u-lead-1", "이앨리스"), t(" "), mention("u-lead-3", "박그레이스"), t(" "), mention("u-lead-4", "최마틴"), t(" "), mention(DEMO_ME.id, "김데모")),
+      hr(),
+      h(2, t("📋 안건")),
+      ol(
+        li(p(t("지난 주 마일스톤 회고"))),
+        li(p(t("v2 베타 피드백 정리"))),
+        li(p(t("다음 스프린트 우선순위 조정"))),
+        li(p(t("Q3 OKR 초안 검토"))),
+      ),
+      h(2, t("✅ 결정 사항")),
+      ul(
+        li(p(t("베타 사용자 ", "bold"), tH("30% 추가 모집", "#FEF3C7"), t(" — 이번 주 안에 시작"))),
+        li(p(t("v2 정식 런칭은 ", "bold"), t("6월 2주차", "italic"), t(" 로 확정"))),
+        li(p(t("디자인 시스템 마이그레이션을 v2.1 로 미루기로 합의"))),
+      ),
+      bq(p(t("\"속도보다는 첫 인상이 중요하다\" — 베타 피드백 키워드 정리에서 가장 많이 나온 의견."))),
+      h(2, t("🎯 액션 아이템")),
+      tkl(
+        tk(true,  p(t("베타 만족도 설문 v2 발송 (")), p(mention("u-lead-1", "이앨리스"))),
+        tk(false, p(t("로딩 화면 스켈레톤 톤 통일 — "), mention("u-lead-3", "박그레이스"))),
+        tk(false, p(t("Q3 OKR 초안 작성 — "), mention(DEMO_ME.id, "김데모"), t(" / 5/12 까지"))),
+        tk(false, p(t("마케팅 협업 미팅 잡기 — "), mention("u-lead-4", "최마틴"))),
+      ),
+      h(2, t("📊 현재 메트릭")),
+      ul(
+        li(p(t("주간 활성 사용자 ", "bold"), t("1,240명", "code"), t(" (전주 대비 +18%)"))),
+        li(p(t("평균 응답 시간 ", "bold"), t("184ms", "code"), t(" / 목표 200ms"))),
+        li(p(t("신규 가입 전환율 ", "bold"), tH("23%", "#D1FAE5"), t(" — 사상 최고"))),
+      ),
+      h(2, t("📎 참고 링크")),
+      p(tL("v2 베타 피드백 보드", "https://example.com/feedback"), t(" / "), tL("Q3 OKR 템플릿", "https://example.com/okr")),
+      hr(),
+      p(t("다음 회의: ", "bold"), t("5월 15일 (목) 14:00 — 같은 자리.")),
+    ],
+  },
+  m2: {
+    type: "doc",
+    content: [
+      h(1, t("신규 기능 스펙 — 결재 자동화 v1")),
+      bq(p(t("자주 쓰는 결재(출장/지출/구매)를 한 번에 만드는 ", "bold"), t("템플릿 + 자동 결재선 추천"), t(" 기능. 5월 말 베타 목표."))),
+      h(2, t("📐 요구사항")),
+      ul(
+        li(p(t("결재 템플릿 5종 기본 제공 (출장/지출/구매/외근/연차)"))),
+        li(p(t("이전 신청 패턴 기반 ", "italic"), t("결재선 자동 추천", "bold"))),
+        li(p(t("Slack/사내톡 멘션으로 진행 상황 알림"))),
+        li(p(t("모바일에서도 동일하게 작동"))),
+      ),
+      h(2, t("🔌 API 스펙 (초안)")),
+      cb("ts", `// 결재 템플릿 목록
+GET /api/approval/templates
+→ { templates: [{ id, name, type, fields, suggestedReviewers }] }
+
+// 자동 결재선 추천
+POST /api/approval/suggest-line
+body: { type: "TRIP", amount?: number, projectId?: string }
+→ { reviewers: [{ id, name, reason }] }
+
+// 템플릿으로 신청
+POST /api/approval
+body: { templateId, data }`),
+      h(2, t("⏱ 마일스톤")),
+      tkl(
+        tk(true,  p(t("DB 스키마 ApprovalTemplate / SuggestionRule 추가"))),
+        tk(true,  p(t("템플릿 5종 시드 데이터 작성"))),
+        tk(false, p(t("자동 결재선 추천 알고리즘 구현 — "), mention("u-lead-3", "박그레이스"))),
+        tk(false, p(t("프론트 결재 신청 화면에 템플릿 선택 UI 추가"))),
+        tk(false, p(t("QA + 베타 그룹 테스트 (5월 4주차)"))),
+        tk(false, p(t("정식 배포 (6월 1주차)"))),
+      ),
+      h(2, t("⚠️ 리스크 / 미정 사항")),
+      ul(
+        li(p(t("자동 추천 정확도 ", "bold"), tH("70% 미만이면 베타 연기", "#FEE2E2"), t(" 결정"))),
+        li(p(t("기존 결재선 즐겨찾기와 UX 충돌 가능 — 우선순위 합의 필요"))),
+      ),
+      hr(),
+      p(t("다음 점검: 5월 15일 정기 회의에서 진행률 공유.")),
+    ],
+  },
+  m3: {
+    type: "doc",
+    content: [
+      h(1, t("5월 캠페인 브레인스토밍")),
+      p(t("여름 시즌 SNS · 바이럴 캠페인 아이디어 발산. 후속 액션은 ", "italic"), t("5/15", "bold"), t(" 까지 정리.")),
+      h(2, t("🌟 핵심 키워드")),
+      p(tH("간결함", "#FEF3C7"), t(" · "), tH("일상의 작은 변화", "#D1FAE5"), t(" · "), tH("동료의 한 마디", "#DBEAFE")),
+      h(2, t("💡 떠오른 아이디어")),
+      ul(
+        li(p(t("\"우리 팀의 5분 회의\"", "bold"), t(" — 임직원 인터뷰 시리즈"))),
+        li(p(t("\"오늘 하루 1줄\"", "bold"), t(" — 사용자가 매일 짧은 회고를 남기는 챌린지"))),
+        li(p(t("템플릿 갤러리", "bold"), t(" — 회의록/일지 템플릿 무료 공유 마이크로사이트"))),
+        li(p(t("디자이너 토크", "bold"), t(" — 스펙 작성 → 디자인 → 출시까지의 비하인드 콘텐츠"))),
+      ),
+      h(2, t("📅 채널별 액션")),
+      tkl(
+        tk(false, p(t("Instagram Reels — 주 2회, 30초 이내"))),
+        tk(false, p(t("YouTube Shorts — 인터뷰 시리즈 (월 4편)"))),
+        tk(false, p(t("LinkedIn — 디자이너 토크 장문 포스팅"))),
+        tk(false, p(t("X(Twitter) — 템플릿 갤러리 트위터 카드"))),
+        tk(false, p(t("팀 블로그 — 키워드별 매주 1편"))),
+      ),
+      h(2, t("📎 참고")),
+      p(tL("벤치마킹 무드보드", "https://example.com/moodboard"), t(" · "), tL("브랜드 컬러 가이드", "https://example.com/brand")),
+      bq(p(t("\"광고처럼 만들지 말자.\" — "), mention("u-lead-4", "최마틴"))),
+      hr(),
+      p(t("다음 미팅: 5월 13일 (월) 11:00 — 액션별 owner 확정.")),
+    ],
+  },
+};
+
 function meetingDetail(id: string) {
   const base = DEMO_MEETINGS.find((m) => m.id === id) ?? DEMO_MEETINGS[0];
-  const sample = base.id === "m1"
-    ? "이번 주 진행 사항 점검과 다음 스프린트 계획을 다뤘습니다."
-    : base.id === "m2"
-      ? "신규 기능의 기술 스펙과 구현 일정 합의."
-      : "여름 시즌 캠페인 아이디어 발산 — 후속 액션은 5/15 까지.";
+  const body = MEETING_BODIES[base.id] ?? { type: "doc", content: [p(t("(빈 회의록)"))] };
   return {
     meeting: {
       ...base,
-      content: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: sample }] }] },
+      content: body,
       viewers: [],
       revisions: [],
       revisedFrom: null,
