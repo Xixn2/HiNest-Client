@@ -71,13 +71,13 @@ const SENIORS = [
   { name: "유서연",   team: "재무팀",   position: "주임" },
 ];
 
-// 사원 — 30명 보장
+// 사원 — 30명 (요청에 맞춰 조정)
 const STAFF_NAMES = [
   "박밥", "최캐롤", "정데이브",
   "김지우", "이서연", "박민서", "최지유", "정하윤", "강지호", "조서윤",
   "윤예진", "임지안", "한서아", "오도윤", "신하준", "권시우", "백지민", "남수빈",
   "유주원", "장태윤", "전다은", "황현우", "송지아", "양은우", "구나윤", "노시은",
-  "심예준", "차은서", "추민재", "도하린", "표시현", "공준서", "왕유진", "엄현서",
+  "심예준", "차은서", "추민재",
 ];
 
 function makeStaff(idx: number, name: string) {
@@ -256,11 +256,11 @@ const HANDLERS: { test: (p: string) => boolean; data: () => any }[] = [
   // Profile
   { test: (p) => p.startsWith("/api/profile"),         data: () => ({ user: DEMO_ME }) },
 
-  // Admin (미리보기 진입은 ADMIN role 이지만 admin 페이지는 거의 빈 응답으로)
-  { test: (p) => p.startsWith("/api/admin/invites"),        data: () => ({ invites: [] }) },
-  { test: (p) => p.startsWith("/api/admin/teams"),          data: () => ({ teams: [] }) },
-  { test: (p) => p.startsWith("/api/admin/positions"),      data: () => ({ positions: [] }) },
-  { test: (p) => p.startsWith("/api/admin/users"),          data: () => ({ users: DEMO_USERS }) },
+  // Admin — 클라이언트가 기대하는 키 이름에 정확히 맞춤
+  { test: (p) => p.startsWith("/api/admin/invites"),        data: () => ({ keys: [] }) }, // ⚠ keys 가 정답
+  { test: (p) => p.startsWith("/api/admin/teams"),          data: () => ({ teams: DEMO_TEAMS.map((t, i) => ({ id: `t${i}`, name: t, createdAt: iso(-30) })) }) },
+  { test: (p) => p.startsWith("/api/admin/positions"),      data: () => ({ positions: ["인턴", "사원", "주임", "대리", "리드", "팀장", "이사"].map((n, i) => ({ id: `p${i}`, name: n, rank: i, createdAt: iso(-30) })) }) },
+  { test: (p) => p.startsWith("/api/admin/users"),          data: () => ({ users: DEMO_USERS.map((u) => ({ ...u, active: true, createdAt: iso(-90) })) }) },
   { test: (p) => p.startsWith("/api/admin/nav-visibility"), data: () => ({ items: [] }) },
   { test: (p) => p.startsWith("/api/admin/logs"),           data: () => ({ logs: [] }) },
   { test: (p) => p.startsWith("/api/admin"),                data: () => ({}) },
