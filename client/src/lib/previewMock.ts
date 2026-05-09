@@ -1171,6 +1171,17 @@ export function disablePreview() {
     }
     for (const k of keys) sessionStorage.removeItem(k);
   } catch {}
+  // 미리보기 동안 localStorage 에 누적될 수 있는 데모-결정 키들도 정리 — 실 가입 후 데모 ID 가 잔존해 색/상태가 어긋나는 일 방지.
+  try {
+    const PREFIXES = ["chat:theme:", "chat:lastSeen:", "hinest:lastSeenNoticeUnread", "emoji-recent", "desktop-notify-seen", "hinest:notif-prefs"];
+    const toRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      if (PREFIXES.some((p) => k === p || k.startsWith(p))) toRemove.push(k);
+    }
+    for (const k of toRemove) localStorage.removeItem(k);
+  } catch {}
 }
 
 /* ---- 보안 ----
@@ -1184,9 +1195,14 @@ function installNetworkPatches() {
     _origFetch = window.fetch.bind(window);
     window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
-      if (url.startsWith("/api/")) {
-        // 쓰기 차단 + 알려진 GET 은 mock 응답.
-        return previewMockFetch(url, { method: init?.method, headers: init?.headers as any });
+      // 동일 출처 절대 URL (https://hinest.app/api/...) 도 잡도록 location.origin 기준으로 비교.
+      let path = url;
+      try {
+        const parsed = new URL(url, window.location.origin);
+        if (parsed.origin === window.location.origin) path = parsed.pathname + parsed.search;
+      } catch { /* relative URL 그대로 */ }
+      if (path.startsWith("/api/")) {
+        return previewMockFetch(path, { method: init?.method, headers: init?.headers as any });
       }
       return _origFetch!(input as any, init);
     }) as typeof fetch;

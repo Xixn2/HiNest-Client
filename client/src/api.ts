@@ -11,8 +11,12 @@ export async function api<T = any>(
     body = JSON.stringify(init.json);
   }
   // 미리보기 모드 — 실제 네트워크 X, 가짜 응답으로 단락.
-  // 동기 import 대신 dynamic 으로 가져와 번들 분리(미리보기 미진입 시 코드 안 끌어옴).
-  const preview = typeof window !== "undefined" && (window as any).__HINEST_PREVIEW__ === true;
+  // 단순 window 플래그 외에 sessionStorage 까지 함께 검사 — 두 신호가 모두 \"1\" 일 때만 신뢰.
+  // 책임자가 아닌 외부 스크립트(북마클릿 등)가 임의로 window 플래그만 켜는 사고를 막는다.
+  let preview = false;
+  if (typeof window !== "undefined" && (window as any).__HINEST_PREVIEW__ === true) {
+    try { preview = sessionStorage.getItem("hinest:preview") === "1"; } catch {}
+  }
   const res = preview
     ? await (await import("./lib/previewMock")).previewMockFetch(path, { ...init, json: init.json })
     : await fetch(path, {

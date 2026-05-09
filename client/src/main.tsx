@@ -45,7 +45,9 @@ if (typeof window !== "undefined") {
   // - 배너는 AppLayout 쪽에서 "hinest:update-ready" 커스텀 이벤트를 수신해서 표시.
   //   여기선 등록과 이벤트 전파만 담당.
   // - localhost 에선 등록 안 함 (dev 에서 캐시 꼬이는 거 방지).
-  if ("serviceWorker" in navigator && !/localhost|127\.0\.0\.1/.test(window.location.hostname)) {
+  // 미리보기 모드면 SW 등록 자체 skip — /sw.js GET, 30분 update 폴링, controllerchange 자동 새로고침 모두
+  // 데모 방문자에게 불필요. 실 서버 요청도 안 가게.
+  if ("serviceWorker" in navigator && !/localhost|127\.0\.0\.1/.test(window.location.hostname) && !isPreviewMode()) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
         .register("/sw.js", { scope: "/" })
