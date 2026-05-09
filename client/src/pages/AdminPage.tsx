@@ -6,6 +6,7 @@ import { downloadCSV, downloadXLSX, openPrintable, parseSheet, type TableColumn 
 import DatePicker from "../components/DatePicker";
 import TimePicker from "../components/TimePicker";
 import { confirmAsync, alertAsync, promptAsync } from "../components/ConfirmHost";
+import { useAuth } from "../auth";
 
 type UserRow = {
   id: string;
@@ -350,6 +351,7 @@ function StatCard({ label, value, sub }: { label: string; value: number; sub: st
 function UsersTab({
   users, teams, positions, reload,
 }: { users: UserRow[]; teams: Team[]; positions: Position[]; reload: () => void }) {
+  const { user: me } = useAuth();
   const [q, setQ] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   // "resigned" 는 퇴사자(resignedAt != null) 만 — 재직 중 inactive 와 구분.
@@ -605,7 +607,18 @@ function UsersTab({
                       퇴사 · {new Date(u.resignedAt).toLocaleDateString("ko-KR", { year: "2-digit", month: "numeric", day: "numeric" })}
                     </span>
                   ) : (
-                    <button onClick={() => update(u.id, { active: !u.active })} className={u.active ? "chip-green" : "chip-gray"}>
+                    <button
+                      onClick={() => {
+                        if (u.id === me?.id && u.active) {
+                          alertAsync({ title: "본인 계정은 비활성화할 수 없어요", description: "다른 관리자에게 처리를 요청하거나, 퇴사 처리를 사용하세요." });
+                          return;
+                        }
+                        update(u.id, { active: !u.active });
+                      }}
+                      className={u.active ? "chip-green" : "chip-gray"}
+                      title={u.id === me?.id && u.active ? "본인 계정은 비활성화 불가" : undefined}
+                      style={u.id === me?.id && u.active ? { cursor: "not-allowed", opacity: 0.85 } : undefined}
+                    >
                       <span className="badge-dot" style={{ background: u.active ? "#16A34A" : "#8E959E" }} />
                       {u.active ? "Active" : "Inactive"}
                     </button>

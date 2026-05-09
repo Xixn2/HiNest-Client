@@ -190,6 +190,12 @@ router.patch("/users/:id", async (req, res) => {
     }
   }
 
+  // 본인 계정 비활성화 차단 — 자기 자신 락아웃 사고 방지.
+  // (resign 엔드포인트도 별도로 가드 — 아래 참조)
+  if (data.active === false && target.id === u.id) {
+    return res.status(400).json({ error: "본인 계정은 비활성화할 수 없습니다" });
+  }
+
   const updated = await prisma.user.update({
     where: { id: req.params.id },
     data,
