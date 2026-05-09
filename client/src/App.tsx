@@ -8,6 +8,7 @@ import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import DownloadPage from "./pages/DownloadPage";
 import PublicSharePage from "./pages/PublicSharePage";
+import PreviewEntry from "./pages/PreviewEntry";
 import AppLayout from "./components/AppLayout";
 import DashboardPage from "./pages/DashboardPage";
 import {
@@ -76,6 +77,7 @@ export default function App() {
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/download" element={<DownloadPage />} />
         <Route path="/share/:token" element={<PublicSharePage />} />
+        <Route path="/preview" element={<PreviewEntry />} />
         <Route
           path="/"
           element={
