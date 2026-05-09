@@ -99,7 +99,7 @@ function journalsList() {
 
 function approvals() { return { approvals: [] }; }
 function approvalCounts() { return { pending: 0, mine: 0 }; }
-function notificationList() { return { items: [], unread: 0 }; }
+function notificationList() { return { notifications: [], unread: 0 }; }
 function featureFlags() { return { flags: {} }; }
 function teams() { return { teams: ["프로덕트팀", "디자인팀", "개발팀", "마케팅팀", "운영팀"] }; }
 function navConfig() { return { items: [] }; }
@@ -138,6 +138,8 @@ const HANDLERS: { test: (p: string) => boolean; data: () => any }[] = [
   { test: (p) => p.startsWith("/api/chat"),            data: () => ({ rooms: [], messages: [] }) },
   { test: (p) => p.startsWith("/api/project"),         data: () => ({ projects: [] }) },
   { test: (p) => p.startsWith("/api/version"),         data: () => ({ version: "preview" }) },
+  { test: (p) => p.startsWith("/api/pins"),            data: () => ({ pins: [] }) },
+  { test: (p) => p.startsWith("/api/snippet"),         data: () => ({ snippets: [] }) },
 ];
 
 /** 미리보기 모드에서 api.ts 가 호출하는 진입점. */
