@@ -314,6 +314,19 @@ body: { templateId, data }`),
   },
 };
 
+/* 회의록 수정 이력 — 미리보기에선 회의록 별 2개씩 가짜 이력. */
+function meetingRevisions(id: string) {
+  const me = { id: DEMO_ME.id, name: DEMO_ME.name };
+  const alice = { id: "u-lead-1", name: "이앨리스" };
+  const grace = { id: "u-lead-3", name: "박그레이스" };
+  const author = id === "m1" ? alice : id === "m2" ? grace : { id: "u-lead-4", name: "최마틴" };
+  const body = MEETING_BODIES[id] ?? { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "" }] }] };
+  return [
+    { id: `${id}-rev2`, title: (DEMO_MEETINGS.find((m) => m.id === id)?.title ?? "회의록") + "",   content: body, createdAt: iso(-1, 16, 30), author: me },
+    { id: `${id}-rev1`, title: "회의록 (초안)", content: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "초안 — 안건만 정리" }] }] }, createdAt: iso(-2, 14), author },
+  ];
+}
+
 function meetingDetail(id: string) {
   const base = DEMO_MEETINGS.find((m) => m.id === id) ?? DEMO_MEETINGS[0];
   const body = MEETING_BODIES[base.id] ?? { type: "doc", content: [p(t("(빈 회의록)"))] };
@@ -749,8 +762,11 @@ const HANDLERS: { test: (p: string) => boolean; data: (p?: string) => any }[] = 
   { test: (p) => p === "/api/attendance/today",        data: attendanceToday },
   { test: (p) => p.startsWith("/api/attendance"),      data: () => ({ attendances: [], leaves: [] }) },
   { test: (p) => p.startsWith("/api/meeting/mentionable"), data: () => ({ users: DEMO_USERS.slice(0, 8).map((u) => ({ id: u.id, name: u.name, avatarColor: u.avatarColor })) }) },
-  { test: (p) => /^\/api\/meeting\/[^/?]+/.test(p),    data: (p?: string) => meetingDetail((p ?? "").replace(/^\/api\/meeting\//, "").split(/[/?]/)[0]) },
+  { test: (p) => /^\/api\/meeting\/[^/?]+\/revisions/.test(p), data: (p?: string) => ({ revisions: meetingRevisions((p ?? "").match(/\/api\/meeting\/([^/?]+)/)?.[1] ?? "m1") }) },
+  { test: (p) => /^\/api\/meeting\/[^/?]+(?:\?|$)/.test(p), data: (p?: string) => meetingDetail((p ?? "").replace(/^\/api\/meeting\//, "").split(/[/?]/)[0]) },
   { test: (p) => p.startsWith("/api/meeting"),         data: meetings },
+  // Document revisions — 같은 패턴
+  { test: (p) => /^\/api\/document\/[^/?]+\/revisions/.test(p), data: () => ({ revisions: [] }) },
   { test: (p) => p.startsWith("/api/journal"),         data: journalsList },
   { test: (p) => p === "/api/approval/counts",         data: approvalCounts },
   { test: (p) => p.startsWith("/api/approval"),        data: approvals },
