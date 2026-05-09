@@ -38,14 +38,108 @@ const DEMO_ME = {
   workEndTime: "18:00",
 };
 
-const DEMO_USERS = [
-  DEMO_ME,
-  { id: "u2", email: "alice@hinest.app", name: "이앨리스", role: "MANAGER", team: "디자인팀", position: "리드", avatarColor: "#16A34A",   avatarUrl: null, isDeveloper: false, presenceStatus: "AVAILABLE",  presenceMessage: null, presenceUpdatedAt: iso(0, 9) },
-  { id: "u3", email: "bob@hinest.app",   name: "박밥",     role: "MEMBER",  team: "개발팀",   position: "사원", avatarColor: "#7C3AED",   avatarUrl: null, isDeveloper: true,  presenceStatus: "MEETING",    presenceMessage: "스프린트 회의", presenceUpdatedAt: iso(0, 10) },
-  { id: "u4", email: "carol@hinest.app", name: "최캐롤",   role: "MEMBER",  team: "개발팀",   position: "주임", avatarColor: "#DB2777",   avatarUrl: null, isDeveloper: false, presenceStatus: "MEAL",       presenceMessage: null, presenceUpdatedAt: iso(0, 12) },
-  { id: "u5", email: "dave@hinest.app",  name: "정데이브", role: "MEMBER",  team: "마케팅팀", position: "사원", avatarColor: "#F59E0B",   avatarUrl: null, isDeveloper: false, presenceStatus: null,         presenceMessage: null, presenceUpdatedAt: null },
-  { id: "u6", email: "eve@hinest.app",   name: "한이브",   role: "MANAGER", team: "운영팀",   position: "팀장", avatarColor: "#0EA5E9",   avatarUrl: null, isDeveloper: false, presenceStatus: "OUT",        presenceMessage: "외근", presenceUpdatedAt: iso(0, 14) },
+/* ===== 한국 회사 톤의 풍부한 데모 명단 — 8개 팀 / 6개 직급 / 사원 30명+ =====
+ * 구성:
+ *  - 임원/부장/팀장/매니저 약간 + 사원~대리 다수 → 진짜 회사처럼 피라미드 형태.
+ *  - presenceStatus 와 avatarColor 는 결정론적 분배로 매 새로고침마다 동일.
+ */
+const DEMO_TEAMS = ["프로덕트팀", "디자인팀", "개발팀", "마케팅팀", "운영팀", "영업팀", "인사팀", "재무팀"];
+const AVATAR_PALETTE = ["#3D54C4", "#16A34A", "#7C3AED", "#DB2777", "#F59E0B", "#0EA5E9", "#EF4444", "#0891B2", "#84CC16", "#F97316"];
+const PRESENCE_CYCLE: (string | null)[] = ["AVAILABLE", null, "MEETING", "MEAL", "OUT", null, "AWAY"];
+function pick<T>(arr: T[], i: number): T { return arr[i % arr.length]; }
+
+// 임원/매니저 라인 (소수)
+const LEADS = [
+  { name: "이앨리스",  role: "MANAGER", team: "디자인팀",   position: "리드",   isDeveloper: false, presenceStatus: "AVAILABLE", presenceMessage: null },
+  { name: "한이브",    role: "MANAGER", team: "운영팀",     position: "팀장",   isDeveloper: false, presenceStatus: "OUT",        presenceMessage: "외근" },
+  { name: "박그레이스", role: "MANAGER", team: "개발팀",     position: "팀장",   isDeveloper: true,  presenceStatus: "MEETING",    presenceMessage: "스프린트 회의" },
+  { name: "최마틴",    role: "MANAGER", team: "마케팅팀",   position: "팀장",   isDeveloper: false, presenceStatus: "AVAILABLE", presenceMessage: null },
+  { name: "강레오",    role: "MANAGER", team: "영업팀",     position: "팀장",   isDeveloper: false, presenceStatus: "MEAL",       presenceMessage: null },
+  { name: "윤소피아",  role: "MANAGER", team: "인사팀",     position: "팀장",   isDeveloper: false, presenceStatus: null,         presenceMessage: null },
+  { name: "임도훈",    role: "ADMIN",   team: "재무팀",     position: "이사",   isDeveloper: false, presenceStatus: "MEETING",    presenceMessage: "이사회" },
 ];
+
+// 대리·주임 (중간 라인)
+const SENIORS = [
+  { name: "오민준",   team: "개발팀",   position: "대리" },
+  { name: "신유나",   team: "디자인팀", position: "대리" },
+  { name: "권지호",   team: "프로덕트팀", position: "대리" },
+  { name: "백수아",   team: "마케팅팀", position: "대리" },
+  { name: "정하림",   team: "영업팀",   position: "대리" },
+  { name: "조윤서",   team: "개발팀",   position: "주임" },
+  { name: "남지훈",   team: "운영팀",   position: "주임" },
+  { name: "유서연",   team: "재무팀",   position: "주임" },
+];
+
+// 사원 — 30명 보장
+const STAFF_NAMES = [
+  "박밥", "최캐롤", "정데이브",
+  "김지우", "이서연", "박민서", "최지유", "정하윤", "강지호", "조서윤",
+  "윤예진", "임지안", "한서아", "오도윤", "신하준", "권시우", "백지민", "남수빈",
+  "유주원", "장태윤", "전다은", "황현우", "송지아", "양은우", "구나윤", "노시은",
+  "심예준", "차은서", "추민재", "도하린", "표시현", "공준서", "왕유진", "엄현서",
+];
+
+function makeStaff(idx: number, name: string) {
+  return {
+    name,
+    role: "MEMBER" as const,
+    team: pick(DEMO_TEAMS, idx),
+    position: idx % 7 === 0 ? "인턴" : "사원",
+    isDeveloper: false,
+    presenceStatus: pick(PRESENCE_CYCLE, idx),
+    presenceMessage: null as string | null,
+  };
+}
+
+function buildUsers() {
+  const out: any[] = [DEMO_ME];
+  let n = 0;
+  // 리더진
+  for (const l of LEADS) {
+    n++;
+    out.push({
+      id: `u-lead-${n}`,
+      email: `${(l.name || "user")}${n}@hinest.app`,
+      avatarColor: pick(AVATAR_PALETTE, n),
+      avatarUrl: null,
+      presenceUpdatedAt: l.presenceStatus ? iso(0, 9 + (n % 8)) : null,
+      ...l,
+    });
+  }
+  // 시니어
+  for (const s of SENIORS) {
+    n++;
+    out.push({
+      id: `u-sr-${n}`,
+      email: `${s.name}${n}@hinest.app`,
+      role: "MEMBER" as const,
+      isDeveloper: false,
+      avatarColor: pick(AVATAR_PALETTE, n + 3),
+      avatarUrl: null,
+      presenceStatus: pick(PRESENCE_CYCLE, n),
+      presenceMessage: null,
+      presenceUpdatedAt: iso(0, 9 + (n % 9)),
+      ...s,
+    });
+  }
+  // 사원 (인턴 포함) — 30명+
+  STAFF_NAMES.forEach((nm, i) => {
+    n++;
+    const base = makeStaff(i, nm);
+    out.push({
+      id: `u-mem-${n}`,
+      email: `${nm}${n}@hinest.app`,
+      avatarColor: pick(AVATAR_PALETTE, n + 5),
+      avatarUrl: null,
+      presenceUpdatedAt: base.presenceStatus ? iso(0, 9 + (n % 9)) : null,
+      ...base,
+    });
+  });
+  return out;
+}
+
+const DEMO_USERS = buildUsers();
 
 /* ===== fixtures ===== */
 function notices() {
@@ -101,7 +195,7 @@ function approvals() { return { approvals: [] }; }
 function approvalCounts() { return { pending: 0, mine: 0 }; }
 function notificationList() { return { notifications: [], unread: 0 }; }
 function featureFlags() { return { flags: {} }; }
-function teams() { return { teams: ["프로덕트팀", "디자인팀", "개발팀", "마케팅팀", "운영팀"] }; }
+function teams() { return { teams: DEMO_TEAMS }; }
 function navConfig() { return { items: [] }; }
 
 /** 경로별 매처 — 정확히 일치하거나 prefix 매치. */
