@@ -120,6 +120,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, []);
 
   useEffect(() => {
+    // 미리보기 모드는 실제 서버에 SSE 연결을 만들지 않는다 — 데모 환경에서 어차피 푸시될 알림 없음.
+    if (typeof window !== "undefined" && (window as any).__HINEST_PREVIEW__) {
+      setReady(true);
+      return;
+    }
     reload();
 
     let retry: number | null = null;
