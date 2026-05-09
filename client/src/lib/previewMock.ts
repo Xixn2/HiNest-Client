@@ -329,15 +329,109 @@ function meetingDetail(id: string) {
 }
 
 function journalsList() {
+  const me = { name: DEMO_ME.name };
+  const J = (n: number, title: string, content: string) => ({
+    id: `j${-n}`,
+    date: iso(n).slice(0, 10),
+    title,
+    content,
+    createdAt: iso(n, 18),
+    updatedAt: iso(n, 18),
+    user: me,
+  });
   return {
     journals: [
-      { id: "j1", date: ymd, title: "오늘 한 일", content: "기능 명세 검토, 디자인 시안 피드백, 1:1 미팅 진행.", createdAt: iso(0, 18), updatedAt: iso(0, 18), user: { name: "김데모" } },
-      { id: "j2", date: iso(-1).slice(0, 10), title: "어제 진행 현황", content: "백엔드 API 스펙 합의, 프론트 라우팅 정리.", createdAt: iso(-1, 18), updatedAt: iso(-1, 18), user: { name: "김데모" } },
+      J(0, "오늘",
+`■ 한 일
+- 결재 자동화 v1 스펙 PR 리뷰 (#231) — 댓글 6개, 1차 승인
+- 베타 사용자 피드백 정리 (총 18건 → 우선순위 4단계로 분류)
+- 박그레이스님과 1:1 — 다음 스프린트 인력 배분 합의
+- Q3 OKR 초안 1/3 작성
+
+■ 막힌 것
+- 자동 결재선 추천 정확도 측정 데이터셋이 부족함. 운영팀 협조 필요.
+
+■ 내일
+- Q3 OKR 초안 마무리 (오전)
+- 마케팅팀 캠페인 협업 미팅 (14시)
+- 결재 자동화 베타 그룹 선정`),
+      J(-1, "수요일",
+`■ 한 일
+- v2 베타 모니터링 — 평균 응답 시간 184ms (목표 200ms 이내, 안정)
+- 회의록 검색 인덱싱 도입 PR 머지 (#229)
+- 신규 입사자 온보딩 문서 v3 검토
+
+■ 메모
+- 베타 사용자 만족도 설문 v2 발송 → 24시간 내 응답률 41%`),
+      J(-2, "화요일",
+`■ 한 일
+- 결재 자동화 마일스톤 정리 — 5월 4주 베타, 6월 1주 정식
+- 사내톡 메시지 필터링 정책 회의
+- 인사팀과 휴가 자동 연동 케이스 합의
+
+■ 내일
+- 결재 자동화 v1 스펙 마무리`),
+      J(-3, "월요일",
+`■ 한 일
+- 주간 회고 — 지난 주 OKR 진척률 72%
+- 디자인 시스템 v2.1 보류 결정 사유 정리
+
+■ 메모
+- 다음 스프린트는 결재 자동화에 집중`),
+      J(-7, "지난 주 회고",
+`■ 잘 된 것
+- v2 베타 첫 주 안정적 운영 — 사고 0건
+- 신규 가입 전환율 23% (사상 최고)
+
+■ 부족했던 것
+- 모바일 채팅 알림 누락 이슈 — 발견 후 회복까지 5시간
+
+■ 다음 주
+- 결재 자동화 스펙 확정
+- 모바일 알림 SLA 모니터링 추가`),
     ],
   };
 }
 
-function approvals() { return { approvals: [] }; }
+/* ===== 전자결재 데모 ===== */
+function demoApprovalsAll() {
+  const meReq = { id: DEMO_ME.id, name: DEMO_ME.name, avatarColor: DEMO_ME.avatarColor, avatarUrl: null, position: DEMO_ME.position, team: DEMO_ME.team };
+  const reviewers = [
+    { id: "u-lead-1", name: "이앨리스",   avatarColor: "#16A34A", avatarUrl: null, position: "리드" },
+    { id: "u-lead-7", name: "임도훈",     avatarColor: "#3D54C4", avatarUrl: null, position: "이사" },
+    { id: "u-lead-3", name: "박그레이스", avatarColor: "#7C3AED", avatarUrl: null, position: "팀장" },
+  ];
+  const step = (n: number, who: typeof reviewers[number], status: "PENDING"|"APPROVED"|"REJECTED"|"SKIPPED", actedAt?: string|null, comment?: string|null) =>
+    ({ id: `s${n}-${Math.random().toString(36).slice(2, 6)}`, order: n, status, comment: comment ?? null, actedAt: actedAt ?? null, reviewer: who });
+  return [
+    { id: "ap1", type: "TRIP" as const, title: "부산 출장 — 고객 미팅", content: "5/15~16, 부산 KT 본사 미팅 동행. 항공+호텔 1박.",
+      status: "PENDING" as const, startDate: iso(7).slice(0,10), endDate: iso(8).slice(0,10), amount: 320000, createdAt: iso(-1, 11),
+      requester: meReq, steps: [step(1, reviewers[0], "APPROVED", iso(-1, 14), "확인했습니다."), step(2, reviewers[1], "PENDING")], currentReviewerId: reviewers[1].id },
+    { id: "ap2", type: "PURCHASE" as const, title: "키보드/마우스 구매", content: "재택용 무선 키보드 + 마우스 (Logitech).",
+      status: "APPROVED" as const, amount: 86000, createdAt: iso(-3, 9),
+      requester: meReq, steps: [step(1, reviewers[0], "APPROVED", iso(-3, 10), null), step(2, reviewers[1], "APPROVED", iso(-3, 13), "OK")], currentReviewerId: undefined },
+    { id: "ap3", type: "EXPENSE" as const, title: "외부 컨퍼런스 참가", content: "5/30 NextJS Conf 온라인 티켓 + 점심.",
+      status: "REJECTED" as const, amount: 120000, createdAt: iso(-5, 14),
+      requester: meReq, steps: [step(1, reviewers[0], "APPROVED", iso(-5, 15), null), step(2, reviewers[1], "REJECTED", iso(-4, 10), "올해 교육 예산 소진 — 다음 분기에 재신청 부탁드립니다.")], currentReviewerId: undefined },
+    { id: "ap4", type: "OFFSITE" as const, title: "광화문 고객사 외근", content: "5/12 오후 — 미팅 후 곧장 퇴근.",
+      status: "PENDING" as const, startDate: iso(2).slice(0,10), endDate: iso(2).slice(0,10), createdAt: iso(0, 9),
+      requester: { id: "u-mem-12", name: "박민서", avatarColor: "#F59E0B", avatarUrl: null, position: "사원", team: "마케팅팀" },
+      steps: [step(1, { id: DEMO_ME.id, name: DEMO_ME.name, avatarColor: DEMO_ME.avatarColor, avatarUrl: null, position: DEMO_ME.position }, "PENDING")], currentReviewerId: DEMO_ME.id },
+    { id: "ap5", type: "GENERAL" as const, title: "재택 근무 신청", content: "이사로 인해 5/20 하루 재택.",
+      status: "PENDING" as const, startDate: iso(10).slice(0,10), endDate: iso(10).slice(0,10), createdAt: iso(0, 13),
+      requester: { id: "u-mem-3", name: "최지유", avatarColor: "#7C3AED", avatarUrl: null, position: "사원", team: "디자인팀" },
+      steps: [step(1, { id: DEMO_ME.id, name: DEMO_ME.name, avatarColor: DEMO_ME.avatarColor, avatarUrl: null, position: DEMO_ME.position }, "PENDING")], currentReviewerId: DEMO_ME.id },
+  ];
+}
+
+function approvals(p?: string) {
+  const m = (p ?? "").match(/scope=([^&]+)/);
+  const scope = m?.[1] ?? "mine";
+  const list = demoApprovalsAll();
+  if (scope === "pending") return { approvals: list.filter((a) => a.status === "PENDING" && a.currentReviewerId === DEMO_ME.id) };
+  if (scope === "mine")    return { approvals: list.filter((a) => a.requester.id === DEMO_ME.id) };
+  return { approvals: list };
+}
 
 /* ===== 데모 프로젝트 ===== */
 const DEMO_PROJECTS = [
@@ -366,6 +460,187 @@ function demoDocs() {
     { id: "d4", title: "Figma 컬러 토큰",         description: "디자인 시스템 v2",            folderId: "f3", fileUrl: null, fileName: null, fileType: null, fileSize: null, tags: "디자인,토큰",       scope: "TEAM"    as const, scopeTeam: "디자인팀",  scopeUserIds: null, createdAt: iso(-50), updatedAt: iso(-1),  author: { name: "이앨리스",   avatarColor: "#16A34A", avatarUrl: null }, folder: { name: "디자인 리소스" } },
     { id: "d5", title: "주간 업무 보고 템플릿",   description: null,                            folderId: null, fileUrl: null, fileName: null, fileType: null, fileSize: null, tags: "템플릿",             scope: "ALL"     as const, scopeTeam: null,        scopeUserIds: null, createdAt: iso(-20), updatedAt: iso(-7),  author: meAuthor, folder: null },
     { id: "d6", title: "내 회고 노트",             description: "주간 회고 모음",                folderId: "f4", fileUrl: null, fileName: null, fileType: null, fileSize: null, tags: "회고",               scope: "PRIVATE" as const, scopeTeam: null,        scopeUserIds: null, createdAt: iso(-15), updatedAt: iso(0),   author: meAuthor, folder: { name: "내 메모" } },
+  ];
+}
+
+/* ===== 사내톡 데모 =====
+ *  - DM (이앨리스), 팀방(개발팀), 전사 공지방 3개
+ *  - 메시지: 텍스트 / 이모지 / 코드 / 이미지 / 반응 */
+function chatRooms() {
+  const me = { id: DEMO_ME.id, name: DEMO_ME.name, avatarColor: DEMO_ME.avatarColor, avatarUrl: null };
+  const alice = { id: "u-lead-1", name: "이앨리스",   avatarColor: "#16A34A", avatarUrl: null };
+  const grace = { id: "u-lead-3", name: "박그레이스", avatarColor: "#7C3AED", avatarUrl: null };
+  return [
+    { id: "r1", name: "이앨리스", type: "DIRECT" as const,
+      members: [{ user: me }, { user: alice }],
+      messages: [{ content: "👍 확인했습니다 — 내일 보고 드릴게요!", createdAt: iso(0, 14, 32), kind: "TEXT" as const, senderId: alice.id }],
+    },
+    { id: "r2", name: "개발팀", type: "TEAM" as const,
+      members: [{ user: me }, { user: grace }, { user: { id: "u-mem-1", name: "박밥", avatarColor: "#7C3AED", avatarUrl: null } }],
+      messages: [{ content: "(이미지)", createdAt: iso(0, 11, 5), kind: "IMAGE" as const, senderId: grace.id }],
+    },
+    { id: "r3", name: "전사 공지", type: "GROUP" as const,
+      members: [{ user: me }, { user: alice }, { user: grace }],
+      messages: [{ content: "5/15 정수기 점검 안내드립니다.", createdAt: iso(-1, 9, 30), kind: "TEXT" as const, senderId: "u-lead-2" }],
+    },
+  ];
+}
+
+function chatMessages(roomId: string) {
+  const me     = { id: DEMO_ME.id, name: DEMO_ME.name, avatarColor: DEMO_ME.avatarColor, avatarUrl: null };
+  const alice  = { id: "u-lead-1", name: "이앨리스",   avatarColor: "#16A34A", avatarUrl: null };
+  const grace  = { id: "u-lead-3", name: "박그레이스", avatarColor: "#7C3AED", avatarUrl: null };
+  const eve    = { id: "u-lead-2", name: "한이브",     avatarColor: "#0EA5E9", avatarUrl: null };
+  const bob    = { id: "u-mem-1", name: "박밥",         avatarColor: "#7C3AED", avatarUrl: null };
+  const m = (id: string, sender: any, content: string, opts: any = {}) => ({
+    id, content, kind: "TEXT" as const, createdAt: opts.at ?? iso(0, 11),
+    sender, reactions: opts.reactions ?? [], ...opts,
+  });
+
+  if (roomId === "r1") {
+    // DM with 이앨리스 — 텍스트 + 코드 + 이미지 + 반응
+    return [
+      m("m1-1",  alice, "오늘 베타 피드백 정리한 거 보셨나요? 👀",          { at: iso(0, 11, 2) }),
+      m("m1-2",  me,    "네 방금 확인했어요! 우선순위 4단계 정리 좋네요 💯", { at: iso(0, 11, 4),
+        reactions: [{ userId: alice.id, emoji: "❤️", user: { name: "이앨리스" } }] }),
+      m("m1-3",  alice, "혹시 이 화면 톤 너무 회색 같지 않아요?",            { at: iso(0, 11, 12) }),
+      m("m1-4",  alice, "참고용 스크린샷이에요",                              { at: iso(0, 11, 12, 30) }),
+      m("m1-5",  alice, "scrn-2026-05-08.png", {
+        at: iso(0, 11, 13), kind: "IMAGE",
+        fileUrl: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=720&q=70",
+        fileName: "scrn-2026-05-08.png", fileType: "image/png", fileSize: 184_300,
+      }),
+      m("m1-6",  me,    "확실히 좀 더 채도 올려도 될 것 같아요. 디자인 시스템 v2.1 에 반영하시죠.", { at: iso(0, 11, 18) }),
+      m("m1-7",  alice, "엇 좋아요. 혹시 토큰 적용 코드 어디서 바꾸는지 알려주실 수 있나요?", { at: iso(0, 11, 25) }),
+      m("m1-8",  me, "이 부분이에요 ↓", { at: iso(0, 11, 27) }),
+      m("m1-9",  me,
+`\`\`\`ts
+// client/src/theme/tokens.ts
+export const tokens = {
+  surface: {
+    base:    "var(--c-surface-1)",
+    raised:  "var(--c-surface-2)",
+    overlay: "rgba(15,23,42,0.04)",
+  },
+  text: {
+    primary:   "var(--c-text-1)",
+    secondary: "var(--c-text-2)",
+    muted:     "var(--c-text-3)",
+  },
+};
+\`\`\`
+이 파일에서 \`surface\` 채도만 한 단계 올리면 전반적으로 따뜻해져요.`,
+        { at: iso(0, 11, 27, 30),
+          reactions: [
+            { userId: alice.id, emoji: "🙏", user: { name: "이앨리스" } },
+            { userId: grace.id, emoji: "👀", user: { name: "박그레이스" } },
+          ] }),
+      m("m1-10", alice, "감사합니다 🙏 오늘 안에 PR 올려둘게요!", { at: iso(0, 11, 35) }),
+      m("m1-11", me,    "👍",  { at: iso(0, 11, 36) }),
+      m("m1-12", alice, "+ 스프린트 회고 시점 맞춰서 v2.1 같이 묶어서 가는 거 어떠세요?", { at: iso(0, 14, 25) }),
+      m("m1-13", me,    "좋습니다. 박그레이스님께도 공유드릴게요.",  { at: iso(0, 14, 30) }),
+      m("m1-14", alice, "👍 확인했습니다 — 내일 보고 드릴게요!",     { at: iso(0, 14, 32),
+        reactions: [{ userId: me.id, emoji: "🙌", user: { name: DEMO_ME.name } }] }),
+    ];
+  }
+
+  if (roomId === "r2") {
+    // 팀방 — 코드 공유 + 이미지 + 다중 반응
+    return [
+      m("m2-1", grace, "어제 이슈 났던 결재 리스트 N+1 쿼리 잡았습니다 🔥", { at: iso(-1, 16, 0),
+        reactions: [{ userId: me.id, emoji: "🎉", user: { name: DEMO_ME.name } }, { userId: bob.id, emoji: "🔥", user: { name: "박밥" } }] }),
+      m("m2-2", grace,
+`\`\`\`ts
+// before
+const list = await prisma.approval.findMany({ ... });
+for (const a of list) a.steps = await prisma.approvalStep.findMany({ where: { approvalId: a.id } });
+
+// after — include 한 번에
+const list = await prisma.approval.findMany({
+  ...,
+  include: { steps: { orderBy: { order: "asc" }, include: { reviewer: true } } },
+});
+\`\`\``, { at: iso(-1, 16, 1) }),
+      m("m2-3", bob,   "헐 5초 → 80ms 됐는데요 😱",  { at: iso(-1, 16, 4),
+        reactions: [{ userId: grace.id, emoji: "😎", user: { name: "박그레이스" } }] }),
+      m("m2-4", me,    "오 좋네요. 운영 메트릭에도 반영해주시면 감사 🙏", { at: iso(-1, 16, 8) }),
+      m("m2-5", bob,   "차트로 확인했어요!", { at: iso(0, 11, 0) }),
+      m("m2-6", bob,   "perf-2026-05-09.png", {
+        at: iso(0, 11, 5), kind: "IMAGE",
+        fileUrl: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=720&q=70",
+        fileName: "perf-2026-05-09.png", fileType: "image/png", fileSize: 92_400,
+        reactions: [
+          { userId: grace.id, emoji: "🚀", user: { name: "박그레이스" } },
+          { userId: me.id,    emoji: "👏", user: { name: DEMO_ME.name } },
+        ],
+      }),
+    ];
+  }
+
+  // 전사 공지방
+  return [
+    m("m3-1", eve,   "5/15(수) 09:00~10:00 정수기 점검 예정입니다. 양해 부탁드려요 🙏", { at: iso(-1, 9, 30),
+      reactions: [{ userId: alice.id, emoji: "👌", user: { name: "이앨리스" } }, { userId: grace.id, emoji: "👍", user: { name: "박그레이스" } }] }),
+    m("m3-2", eve,   "본사 1층 카페 무료 음료 쿠폰 배포 중입니다 ☕", { at: iso(0, 9, 5),
+      reactions: [{ userId: me.id, emoji: "🙌", user: { name: DEMO_ME.name } }] }),
+  ];
+}
+
+/* ===== 근태 / 휴가 데모 =====
+ *  - 이번 달 평일에 09:00 출근 / 18:00 퇴근. 며칠은 야근(20시), 며칠은 일찍(17시).
+ *  - 주말은 빈 행. 오늘은 출근만(퇴근 안 찍음). */
+function demoMonthAttendance() {
+  const today = new Date(TODAY);
+  const y = today.getFullYear();
+  const m = today.getMonth();
+  const last = new Date(y, m + 1, 0).getDate();
+  const out: any[] = [];
+  for (let day = 1; day <= last; day++) {
+    const d = new Date(y, m, day);
+    const dow = d.getDay();
+    if (dow === 0 || dow === 6) continue; // 주말 skip
+    const date = `${y}-${String(m + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const isToday = day === today.getDate();
+    const isFuture = day > today.getDate();
+    if (isFuture) continue;
+
+    // 출근은 09:00 (변동 ±10분), 퇴근은 18:00~20:00 사이 결정.
+    const checkIn = new Date(d); checkIn.setHours(9, (day * 7) % 11, 0, 0);
+    const variant = day % 5;
+    const checkOut = new Date(d);
+    if (variant === 0) checkOut.setHours(20, 15, 0, 0);   // 야근
+    else if (variant === 1) checkOut.setHours(17, 30, 0, 0); // 일찍
+    else checkOut.setHours(18, 5 + (day % 12), 0, 0);
+
+    out.push({
+      id: `att-${date}`,
+      date,
+      checkIn: checkIn.toISOString(),
+      checkOut: isToday ? null : checkOut.toISOString(),
+    });
+  }
+  return out;
+}
+
+function demoLeaves(all: boolean) {
+  const me = { name: DEMO_ME.name, team: DEMO_ME.team };
+  const others = [
+    { name: "이앨리스",   team: "디자인팀" },
+    { name: "박그레이스", team: "개발팀" },
+    { name: "한이브",     team: "운영팀" },
+  ];
+  const my: any[] = [
+    { id: "lv1", userId: DEMO_ME.id, type: "ANNUAL", startDate: iso(-14).slice(0, 10), endDate: iso(-14).slice(0, 10), reason: "개인 사유",            status: "APPROVED", user: me },
+    { id: "lv2", userId: DEMO_ME.id, type: "HALF",   startDate: iso(7).slice(0, 10),   endDate: iso(7).slice(0, 10),   reason: "병원 진료 (오후)",     status: "PENDING",  user: me },
+    { id: "lv3", userId: DEMO_ME.id, type: "ANNUAL", startDate: iso(21).slice(0, 10),  endDate: iso(23).slice(0, 10),  reason: "여름 휴가",             status: "PENDING",  user: me },
+  ];
+  if (!all) return my;
+  return [
+    ...my,
+    { id: "lv4", userId: "u-lead-1", type: "ANNUAL", startDate: iso(-2).slice(0, 10),  endDate: iso(-2).slice(0, 10),  reason: "결혼식 참석",           status: "APPROVED", user: others[0] },
+    { id: "lv5", userId: "u-lead-3", type: "SICK",   startDate: iso(-5).slice(0, 10),  endDate: iso(-5).slice(0, 10),  reason: "감기",                  status: "APPROVED", user: others[1] },
+    { id: "lv6", userId: "u-lead-2", type: "ANNUAL", startDate: iso(10).slice(0, 10),  endDate: iso(12).slice(0, 10),  reason: "가족 여행",             status: "PENDING",  user: others[2] },
+    { id: "lv7", userId: "u-lead-3", type: "OFFSITE",startDate: iso(2).slice(0, 10),   endDate: iso(2).slice(0, 10),   reason: "외근 (고객사 미팅)",   status: "APPROVED", user: others[1] },
   ];
 }
 
@@ -440,7 +715,12 @@ function projectDetail(id: string) {
     },
   };
 }
-function approvalCounts() { return { pending: 0, mine: 0 }; }
+function approvalCounts() {
+  const list = demoApprovalsAll();
+  const pending = list.filter((a) => a.status === "PENDING" && a.currentReviewerId === DEMO_ME.id).length;
+  const mine = list.filter((a) => a.status === "PENDING" && a.requester.id === DEMO_ME.id).length;
+  return { pending, mine };
+}
 function notificationList() { return { notifications: [], unread: 0 }; }
 function featureFlags() { return { flags: {} }; }
 function teams() { return { teams: DEMO_TEAMS }; }
@@ -483,7 +763,15 @@ const HANDLERS: { test: (p: string) => boolean; data: (p?: string) => any }[] = 
       return { expenses: list, totalAmount: list.reduce((a, e) => a + e.amount, 0) };
     },
   },
-  { test: (p) => p.startsWith("/api/chat"),            data: () => ({ rooms: [], messages: [] }) },
+  // Chat — 메시지 상세 라우트가 먼저, 그다음 룸 목록.
+  { test: (p) => /\/api\/chat\/rooms\/[^/]+\/messages/.test(p), data: (p?: string) => {
+      const m = (p ?? "").match(/\/rooms\/([^/]+)\/messages/);
+      const id = m?.[1] ?? "r1";
+      return { messages: chatMessages(id), readStates: [] };
+    },
+  },
+  { test: (p) => p.startsWith("/api/chat/rooms"),      data: () => ({ rooms: chatRooms() }) },
+  { test: (p) => p.startsWith("/api/chat"),            data: () => ({ rooms: chatRooms() }) },
   // 프로젝트 — 하위 경로(events/qa/webhook) 부터 잡고 마지막에 상세/목록.
   { test: (p) => /^\/api\/project\/[^/?]+\/events/.test(p),  data: () => ({ events: [] }) },
   { test: (p) => /^\/api\/project\/[^/?]+\/qa/.test(p),      data: () => ({ items: [] }) },
@@ -494,9 +782,10 @@ const HANDLERS: { test: (p: string) => boolean; data: (p?: string) => any }[] = 
   { test: (p) => p.startsWith("/api/pins"),            data: () => ({ pins: [] }) },
   { test: (p) => p.startsWith("/api/snippet"),         data: () => ({ snippets: [] }) },
 
-  // Attendance / Leave
-  { test: (p) => p.startsWith("/api/attendance/leave"), data: () => ({ leaves: [] }) },
-  { test: (p) => p.startsWith("/api/attendance"),      data: () => ({ attendances: [], leaves: [] }) },
+  // Attendance / Leave — 한 달치 출퇴근 + 휴가 데모
+  { test: (p) => p.startsWith("/api/attendance/leave"), data: (p?: string) => ({ leaves: demoLeaves(/\?all=1/.test(p ?? "")) }) },
+  { test: (p) => p.startsWith("/api/attendance/month"), data: () => ({ attendances: demoMonthAttendance() }) },
+  { test: (p) => p.startsWith("/api/attendance"),       data: () => ({ attendances: demoMonthAttendance(), leaves: demoLeaves(false) }) },
 
   // Document — 데모 폴더 4개 + 문서 6개
   { test: (p) => p.startsWith("/api/document/folders"),  data: () => ({ folders: demoFolders() }) },
