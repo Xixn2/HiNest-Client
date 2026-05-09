@@ -570,9 +570,52 @@ function approvals(p?: string) {
 
 /* ===== 데모 프로젝트 ===== */
 const DEMO_PROJECTS = [
-  { id: "p1", name: "HiNest v2",      description: "차세대 사내 협업 플랫폼 리뉴얼",  color: "#3B5CF0", status: "ACTIVE" as const,   createdById: DEMO_ME.id, createdAt: iso(-90), updatedAt: iso(-1) },
-  { id: "p4", name: "마케팅 Q3 캠페인", description: "여름 시즌 SNS·바이럴 캠페인",    color: "#DB2777", status: "ACTIVE" as const,   createdById: "u-lead-4",  createdAt: iso(-30), updatedAt: iso(-1) },
-  { id: "p5", name: "사내 자료 정리",   description: "레거시 문서 마이그레이션 스프린트", color: "#7C3AED", status: "ARCHIVED" as const, createdById: "u-lead-2",  createdAt: iso(-180), updatedAt: iso(-60) },
+  { id: "p1", name: "HiNest v2",
+    description:
+`차세대 사내 협업 플랫폼 리뉴얼.
+
+[목표]
+- 회의록 / 결재 / 채팅 한 곳에서 끊김 없이.
+- 모바일에서도 데스크톱과 동일한 흐름 (단축키 / 알림 포함).
+- 운영 메트릭 P95 응답 200ms 이하 유지.
+
+[로드맵]
+- M1 (5월): 결재 자동화 v1 베타
+- M2 (6월): 모바일 알림 SLA 도입 + 디자인 시스템 v2.1
+- M3 (7월): 정식 런칭 + 외부 파트너 도입`,
+    color: "#3B5CF0", status: "ACTIVE" as const,   createdById: DEMO_ME.id, createdAt: iso(-90), updatedAt: iso(-1) },
+  { id: "p4", name: "마케팅 Q3 캠페인",
+    description:
+`여름 시즌 SNS · 바이럴 캠페인 (6 ~ 8월 운영).
+
+[핵심 키워드]
+간결함 / 일상의 작은 변화 / 동료의 한 마디.
+
+[채널]
+- Instagram Reels: 주 2회, 30초 이내
+- YouTube Shorts: 인터뷰 시리즈 (월 4편)
+- LinkedIn: 디자이너 / 엔지니어 토크 장문 포스팅
+- X (Twitter): 템플릿 갤러리 카드
+
+[KPI]
+- 신규 가입 전환율 +3pp
+- SNS 팔로워 +20%`,
+    color: "#DB2777", status: "ACTIVE" as const,   createdById: "u-lead-4", createdAt: iso(-30), updatedAt: iso(-1) },
+  { id: "p5", name: "사내 자료 정리",
+    description:
+`레거시 문서 마이그레이션 스프린트 (완료).
+
+[배경]
+2024 ~ 2025년 사이 부서별 산재되어 있던 운영 / 정책 문서를 사내 문서함으로 통합.
+
+[성과]
+- 마이그레이션 완료: 482건 (의도적 폐기 64건 별도)
+- 분류 / 태깅 / 권한 재설정 완료
+- 검색 인덱싱 도입 — 전체 문서 평균 응답 80ms
+
+[보관]
+스프린트 자체는 종료(아카이브). 신규 문서는 일상 워크플로로 흡수됨.`,
+    color: "#7C3AED", status: "ARCHIVED" as const, createdById: "u-lead-2", createdAt: iso(-180), updatedAt: iso(-60) },
 ];
 
 function projectList() { return { projects: DEMO_PROJECTS }; }
