@@ -140,6 +140,42 @@ const HANDLERS: { test: (p: string) => boolean; data: () => any }[] = [
   { test: (p) => p.startsWith("/api/version"),         data: () => ({ version: "preview" }) },
   { test: (p) => p.startsWith("/api/pins"),            data: () => ({ pins: [] }) },
   { test: (p) => p.startsWith("/api/snippet"),         data: () => ({ snippets: [] }) },
+
+  // Attendance / Leave
+  { test: (p) => p.startsWith("/api/attendance/leave"), data: () => ({ leaves: [] }) },
+  { test: (p) => p.startsWith("/api/attendance"),      data: () => ({ attendances: [], leaves: [] }) },
+
+  // Document
+  { test: (p) => p.startsWith("/api/document/folders"),  data: () => ({ folders: [] }) },
+  { test: (p) => p.startsWith("/api/document/projects"), data: () => ({ projects: [] }) },
+  { test: (p) => p.startsWith("/api/document"),          data: () => ({ documents: [], folders: [] }) },
+
+  // Service accounts
+  { test: (p) => p.startsWith("/api/service-accounts/projects"), data: () => ({ projects: [] }) },
+  { test: (p) => p.startsWith("/api/service-accounts"), data: () => ({ accounts: [] }) },
+
+  // Approval extras
+  { test: (p) => p.startsWith("/api/approval-extras/lines"),     data: () => ({ lines: [] }) },
+  { test: (p) => p.startsWith("/api/approval-extras/templates"), data: () => ({ templates: [] }) },
+  { test: (p) => p.startsWith("/api/approval-extras"),           data: () => ({}) },
+
+  // Profile
+  { test: (p) => p.startsWith("/api/profile"),         data: () => ({ user: DEMO_ME }) },
+
+  // Admin (미리보기 진입은 ADMIN role 이지만 admin 페이지는 거의 빈 응답으로)
+  { test: (p) => p.startsWith("/api/admin/invites"),        data: () => ({ invites: [] }) },
+  { test: (p) => p.startsWith("/api/admin/teams"),          data: () => ({ teams: [] }) },
+  { test: (p) => p.startsWith("/api/admin/positions"),      data: () => ({ positions: [] }) },
+  { test: (p) => p.startsWith("/api/admin/users"),          data: () => ({ users: DEMO_USERS }) },
+  { test: (p) => p.startsWith("/api/admin/nav-visibility"), data: () => ({ items: [] }) },
+  { test: (p) => p.startsWith("/api/admin/logs"),           data: () => ({ logs: [] }) },
+  { test: (p) => p.startsWith("/api/admin"),                data: () => ({}) },
+
+  // 알림 설정 / 채팅
+  { test: (p) => p.startsWith("/api/notification/prefs"), data: () => ({ prefs: {}, dndStart: null, dndEnd: null }) },
+
+  // 검색
+  { test: (p) => p.startsWith("/api/search"),          data: () => ({ users: [], notices: [], events: [], documents: [], messages: [], meetings: [], approvals: [] }) },
 ];
 
 /** 미리보기 모드에서 api.ts 가 호출하는 진입점. */
