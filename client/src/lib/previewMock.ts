@@ -221,6 +221,47 @@ const DEMO_PROJECTS = [
 ];
 
 function projectList() { return { projects: DEMO_PROJECTS }; }
+
+/* ===== 서비스 계정 데모 ===== */
+function demoAccounts() {
+  const me = { id: DEMO_ME.id, name: DEMO_ME.name, avatarColor: DEMO_ME.avatarColor, avatarUrl: null };
+  const proj = (id: string) => {
+    const p = DEMO_PROJECTS.find((x) => x.id === id);
+    return p ? { id: p.id, name: p.name, color: p.color } : null;
+  };
+  const base = (over: any) => ({
+    loginId: over.loginId ?? "team@hinest.app",
+    url: over.url ?? null,
+    notes: over.notes ?? null,
+    scope: over.scope ?? "ALL",
+    scopeTeam: null,
+    scopeTeams: over.scopeTeams ?? [],
+    projectId: over.projectId ?? null,
+    projectIds: over.projectId ? [over.projectId] : [],
+    project: over.projectId ? proj(over.projectId) : null,
+    ownerUser: me,
+    ownerName: DEMO_ME.name,
+    iconUrl: null,
+    iconShape: "SQUIRCLE" as const,
+    active: true,
+    hasPassword: true,
+    createdBy: { id: DEMO_ME.id, name: DEMO_ME.name },
+    createdAt: iso(-30),
+    updatedAt: iso(-1),
+    ...over,
+  });
+  return [
+    base({ id: "sa1", serviceName: "AWS Console",      category: "CLOUD",   loginId: "ops@hinest.app",     url: "https://aws.amazon.com" }),
+    base({ id: "sa2", serviceName: "Vercel",           category: "HOSTING", loginId: "deploy@hinest.app",  url: "https://vercel.com",         projectId: "p1" }),
+    base({ id: "sa3", serviceName: "GitHub Org",        category: "VCS",     loginId: "github-bot",         url: "https://github.com" }),
+    base({ id: "sa4", serviceName: "Stripe",           category: "PAYMENT", loginId: "billing@hinest.app", url: "https://dashboard.stripe.com", scope: "TEAM", scopeTeams: ["재무팀"] }),
+    base({ id: "sa5", serviceName: "Cloudflare",       category: "DOMAIN",  loginId: "ops@hinest.app",     url: "https://dash.cloudflare.com" }),
+    base({ id: "sa6", serviceName: "Google Workspace", category: "EMAIL",   loginId: "admin@hinest.app",   url: "https://admin.google.com" }),
+    base({ id: "sa7", serviceName: "Datadog",          category: "MONITOR", loginId: "ops@hinest.app",     url: "https://app.datadoghq.com",   projectId: "p1" }),
+    base({ id: "sa8", serviceName: "OpenAI Platform",  category: "AI",      loginId: "team@hinest.app",    url: "https://platform.openai.com", projectId: "p3" }),
+    base({ id: "sa9", serviceName: "RDS Postgres",     category: "DB",      loginId: "hinest",             url: null,                          notes: "운영 DB · IAM 회전 6개월 주기" }),
+  ];
+}
 function projectDetail(id: string) {
   const p = DEMO_PROJECTS.find((x) => x.id === id) ?? DEMO_PROJECTS[0];
   // 간단히 본인 + 임의 멤버 4~6명을 멤버로.
@@ -278,9 +319,12 @@ const HANDLERS: { test: (p: string) => boolean; data: (p?: string) => any }[] = 
   { test: (p) => p.startsWith("/api/document"),        data: () => ({ documents: [], folders: [] }) },
   { test: (p) => p.startsWith("/api/expense"),         data: () => ({ expenses: [] }) },
   { test: (p) => p.startsWith("/api/chat"),            data: () => ({ rooms: [], messages: [] }) },
-  // /api/project/<id> → 상세, /api/project (?all 등) → 목록
-  { test: (p) => /^\/api\/project\/[^/?]+/.test(p), data: (p?: string) => projectDetail((p ?? "").replace(/^\/api\/project\//, "").split(/[/?]/)[0]) },
-  { test: (p) => p.startsWith("/api/project"),         data: projectList },
+  // 프로젝트 — 하위 경로(events/qa/webhook) 부터 잡고 마지막에 상세/목록.
+  { test: (p) => /^\/api\/project\/[^/?]+\/events/.test(p),  data: () => ({ events: [] }) },
+  { test: (p) => /^\/api\/project\/[^/?]+\/qa/.test(p),      data: () => ({ items: [] }) },
+  { test: (p) => /^\/api\/project\/[^/?]+\/webhook/.test(p), data: () => ({ channels: [] }) },
+  { test: (p) => /^\/api\/project\/[^/?]+(?:\?|$)/.test(p),  data: (p?: string) => projectDetail((p ?? "").replace(/^\/api\/project\//, "").split(/[/?]/)[0]) },
+  { test: (p) => p.startsWith("/api/project"),               data: projectList },
   { test: (p) => p.startsWith("/api/version"),         data: () => ({ version: "preview" }) },
   { test: (p) => p.startsWith("/api/pins"),            data: () => ({ pins: [] }) },
   { test: (p) => p.startsWith("/api/snippet"),         data: () => ({ snippets: [] }) },
@@ -294,9 +338,9 @@ const HANDLERS: { test: (p: string) => boolean; data: (p?: string) => any }[] = 
   { test: (p) => p.startsWith("/api/document/projects"), data: () => ({ projects: [] }) },
   { test: (p) => p.startsWith("/api/document"),          data: () => ({ documents: [], folders: [] }) },
 
-  // Service accounts
-  { test: (p) => p.startsWith("/api/service-accounts/projects"), data: () => ({ projects: [] }) },
-  { test: (p) => p.startsWith("/api/service-accounts"), data: () => ({ accounts: [] }) },
+  // Service accounts — 데모 계정 8개
+  { test: (p) => p.startsWith("/api/service-accounts/projects"), data: () => ({ projects: DEMO_PROJECTS.map((p) => ({ id: p.id, name: p.name, color: p.color })) }) },
+  { test: (p) => p.startsWith("/api/service-accounts"), data: () => ({ accounts: demoAccounts() }) },
 
   // Approval extras
   { test: (p) => p.startsWith("/api/approval-extras/lines"),     data: () => ({ lines: [] }) },
