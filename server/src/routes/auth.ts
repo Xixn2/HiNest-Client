@@ -2,6 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "../lib/db.js";
+import { notifyAllUsers } from "../lib/notify.js";
 import {
   signToken,
   setAuthCookie,
@@ -212,6 +213,18 @@ router.post("/signup", async (req, res) => {
   const token = signToken({ id: user.id, role: user.role, name: user.name, email: user.email }, sid);
   setAuthCookie(res, token);
   await writeLog(user.id, "SIGNUP", user.email, `invite:${inviteKey} sid=${sid}`, req.ip);
+
+  // 신규 가입 안내 — 본인 제외 모든 활성 사용자에게 종 + SSE 알림.
+  // notifyAllUsers 가 사용자 NotificationPref(NOTICE 타입) 도 함께 확인하므로 옵트아웃한 사람은 자동 스킵.
+  // 가입 응답을 막지 않도록 fire-and-forget.
+  notifyAllUsers({
+    type: "NOTICE",
+    title: `🎉 ${user.name} 님이 합류했어요`,
+    body: [user.team, user.position].filter(Boolean).join(" · ") || "환영해 주세요!",
+    linkUrl: `/users/${user.id}`,
+    actorName: user.name,
+    actorColor: user.avatarColor,
+  }, user.id).catch((e) => console.error("[signup] notifyAllUsers failed", e));
 
   res.json({
     user: {
