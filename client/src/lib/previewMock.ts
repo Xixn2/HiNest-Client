@@ -778,7 +778,7 @@ function chatMessages(roomId: string) {
       m("m1-2",  me,    "네 방금 확인했어요! 우선순위 4단계 정리 좋네요 💯", { at: iso(0, 11, 4),
         reactions: [{ userId: alice.id, emoji: "❤️", user: { name: "이앨리스" } }] }),
       m("m1-3",  alice, "혹시 이 화면 톤 너무 회색 같지 않아요?",            { at: iso(0, 11, 12) }),
-      m("m1-4",  alice, "참고용 스크린샷이에요",                              { at: iso(0, 11, 12, 30) }),
+      m("m1-4",  alice, "참고용 스크린샷이에요",                              { at: iso(0, 11, 12) }),
       m("m1-5",  alice, "scrn-2026-05-08.png", {
         at: iso(0, 11, 13), kind: "IMAGE",
         fileUrl: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=720&q=70",
@@ -804,7 +804,7 @@ export const tokens = {
 };
 \`\`\`
 이 파일에서 \`surface\` 채도만 한 단계 올리면 전반적으로 따뜻해져요.`,
-        { at: iso(0, 11, 27, 30),
+        { at: iso(0, 11, 27),
           reactions: [
             { userId: alice.id, emoji: "🙏", user: { name: "이앨리스" } },
             { userId: grace.id, emoji: "👀", user: { name: "박그레이스" } },
