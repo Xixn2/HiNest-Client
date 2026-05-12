@@ -429,17 +429,17 @@ const RESOURCE_NAV: NavItem[] = [
   { to: "/snippets", label: "스니펫", icon: SnippetIcon },
 ];
 
-export default function AppLayout() {
+export default function AppLayout({ children }: { children?: React.ReactNode } = {}) {
   return (
     <NotificationProvider>
       <PinsProvider>
-        <AppLayoutInner />
+        <AppLayoutInner>{children}</AppLayoutInner>
       </PinsProvider>
     </NotificationProvider>
   );
 }
 
-function AppLayoutInner() {
+function AppLayoutInner({ children }: { children?: React.ReactNode }) {
   const { user, logout } = useAuth();
   const nav = useNavigate();
   const loc = useLocation();
@@ -624,7 +624,8 @@ function AppLayoutInner() {
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-[1400px] mx-auto px-4 md:px-8 py-4 md:py-6">
             <RouteVisibilityGate disabled={disabledNav} dev={devNav}>
-              <Outlet />
+              {/* /preview 같은 비-라우터-childless 진입 시엔 children 으로 직접 받음. 그 외엔 Outlet. */}
+              {children ?? <Outlet />}
             </RouteVisibilityGate>
           </div>
         </main>
