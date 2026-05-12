@@ -23,6 +23,26 @@ export default function PreviewBanner() {
       }}
     >
       <span style={{ opacity: 0.9 }}>👀 미리보기 모드 — 데이터는 모두 데모입니다 · 변경 사항은 저장되지 않아요</span>
+      <button
+        type="button"
+        onClick={() => {
+          try { sessionStorage.removeItem("hinest:preview-onboarded"); } catch {}
+          window.location.reload();
+        }}
+        title="가이드 다시 보기"
+        style={{
+          background: "rgba(255,255,255,0.14)",
+          color: "#fff",
+          padding: "3px 9px",
+          borderRadius: 8,
+          fontSize: 11.5,
+          fontWeight: 800,
+          border: "1px solid rgba(255,255,255,0.26)",
+          cursor: "pointer",
+        }}
+      >
+        가이드 다시 보기
+      </button>
       <Link
         to="/login"
         onClick={() => {

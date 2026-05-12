@@ -9,6 +9,7 @@ import SearchModal from "./SearchModal";
 import ChatFab from "./ChatFab";
 import ImpersonationBanner from "./ImpersonationBanner";
 import PreviewBanner from "./PreviewBanner";
+import PreviewOnboarding from "./PreviewOnboarding";
 import { useApprovalCounts } from "../lib/useApprovalCounts";
 import CreateProjectModal from "./CreateProjectModal";
 import { NotificationProvider, useNotifications } from "../notifications";
@@ -474,6 +475,7 @@ function AppLayoutInner() {
   return (
     <div className="h-screen flex flex-col bg-ink-50 overflow-hidden">
       <PreviewBanner />
+      <PreviewOnboarding />
       <ImpersonationBanner />
       <div className="flex flex-1 min-h-0">
       {/* 모바일 드로어 백드롭 — md 미만에서 열렸을 때만 보임 */}
