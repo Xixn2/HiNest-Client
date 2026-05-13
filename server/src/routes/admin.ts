@@ -431,6 +431,34 @@ router.post("/users/:id/unlock", async (req, res) => {
   res.json({ ok: true });
 });
 
+/**
+ * 잠긴 계정 일괄 해제 — 한 번에 모든 잠긴(혹은 실패 카운트 보유) 계정의 잠금을 푼다.
+ * SuperAdmin 이 아닌 경우, 다른 SuperAdmin 의 잠금은 해제하지 않는다.
+ */
+router.post("/users/unlock-all", async (req, res) => {
+  const u = (req as any).user;
+  // 대상 계정 미리 조회 — 감사 로그에 누구를 풀었는지 남기기 위함.
+  const targets = await prisma.user.findMany({
+    where: {
+      OR: [{ lockedAt: { not: null } }, { failedLoginCount: { gt: 0 } }],
+      ...(u.superAdmin ? {} : { superAdmin: false }),
+    },
+    select: { id: true, email: true },
+  });
+  if (targets.length === 0) {
+    return res.json({ ok: true, count: 0, users: [] });
+  }
+  const ids = targets.map((t) => t.id);
+  await prisma.user.updateMany({
+    where: { id: { in: ids } },
+    data: { failedLoginCount: 0, lockedAt: null },
+  });
+  // 각 사용자 캐시 무효화 + 감사 로그
+  await Promise.all(targets.map((t) => evictUserCache(t.id)));
+  await writeLog(u.id, "USER_UNLOCK_BULK", undefined, `count=${targets.length} ids=${ids.join(",")}`, req.ip);
+  res.json({ ok: true, count: targets.length, users: targets });
+});
+
 /** 관리자가 유저 비밀번호를 직접 설정. 기존 console 명령은 임시 비번 생성이고, 이건 명시 비번 입력. */
 router.post("/users/:id/reset-password", async (req, res) => {
   const u = (req as any).user;

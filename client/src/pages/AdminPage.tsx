@@ -437,7 +437,10 @@ function UsersTab({
         </div>
       )}
       <div className="section-head flex-wrap">
-        <div className="title">구성원 목록 <span className="text-ink-400 font-medium tabular ml-1">{filtered.length}</span></div>
+        <div className="title">
+          구성원 목록 <span className="text-ink-400 font-medium tabular ml-1">{filtered.length}</span>
+          <BulkUnlockButton users={users} onUnlocked={reload} />
+        </div>
         <div className="flex items-center gap-2 flex-wrap">
           {/* 기본/상세 뷰 토글 */}
           <div className="tabs">
@@ -2039,6 +2042,57 @@ function TrashIcon() {
   return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
   </svg>;
+}
+
+/* =================== 일괄 잠금 해제 — 헤더에 표시 =================== */
+
+/**
+ * 잠긴 계정이 1명 이상일 때만 표시되는 작은 버튼.
+ * 클릭 → 확인 모달 → /api/admin/users/unlock-all → reload.
+ */
+function BulkUnlockButton({ users, onUnlocked }: { users: UserRow[]; onUnlocked: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const lockedCount = users.filter((u) => !!u.lockedAt).length;
+  if (lockedCount === 0) return null;
+
+  async function run() {
+    const ok = await confirmAsync({
+      title: `잠긴 계정 ${lockedCount}건을 모두 풀까요?`,
+      description: "각 계정의 로그인 실패 카운트도 0 으로 초기화됩니다. 감사 로그에 기록돼요.",
+      confirmLabel: "전체 해제",
+      tone: "danger",
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      const r = await api<{ ok: boolean; count: number }>("/api/admin/users/unlock-all", { method: "POST" });
+      await alertAsync({ title: `${r.count}건 해제됨`, description: "다음 로그인부터 정상 시도 가능합니다." });
+      onUnlocked();
+    } catch (e: any) {
+      alertAsync({ title: "해제 실패", description: e?.message ?? String(e) });
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={run}
+      disabled={busy}
+      className="ml-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold transition disabled:opacity-60"
+      style={{
+        background: "color-mix(in srgb, var(--c-danger) 12%, transparent)",
+        color: "var(--c-danger)",
+        border: "1px solid color-mix(in srgb, var(--c-danger) 28%, transparent)",
+      }}
+      title={`잠긴 계정 ${lockedCount}건 일괄 해제`}
+    >
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="4" y="11" width="16" height="9" rx="2" />
+        <path d="M8 11V7a4 4 0 0 1 7-2.6" />
+      </svg>
+      {busy ? "해제 중…" : `잠긴 계정 ${lockedCount}건 일괄 해제`}
+    </button>
+  );
 }
 
 /* =================== 보안 블록 (잠금 상태 + 비밀번호 재설정) =================== */
