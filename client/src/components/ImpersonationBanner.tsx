@@ -9,7 +9,7 @@ import { alertAsync } from "./ConfirmHost";
  *   기록된다는 사실을 잊지 않게.
  * - \"종료\" 버튼은 stepup 없이 즉시 풀 수 있도록 (auth.ts 의 DELETE /impersonate 도 같은 정책).
  */
-export default function ImpersonationBanner() {
+export default function ImpersonationBanner({ safeAreaTop = false }: { safeAreaTop?: boolean }) {
   const { impersonator, user, refresh } = useAuth();
   const [busy, setBusy] = useState(false);
   if (!impersonator || !user) return null;
@@ -37,7 +37,10 @@ export default function ImpersonationBanner() {
         zIndex: 9999,
         background: "linear-gradient(90deg, #DC2626 0%, #B91C1C 100%)",
         color: "#fff",
-        padding: "8px 16px",
+        paddingTop: safeAreaTop ? "max(8px, calc(env(safe-area-inset-top) + 4px))" : 8,
+        paddingBottom: 8,
+        paddingLeft: "max(12px, env(safe-area-inset-left))",
+        paddingRight: "max(12px, env(safe-area-inset-right))",
         display: "flex",
         alignItems: "center",
         gap: 12,

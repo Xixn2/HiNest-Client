@@ -17,6 +17,7 @@ import { PinsProvider, usePins, pinLinkUrl } from "../pins";
 import { ROUTE_PREFETCH, loadProject } from "../routes";
 import { isDevAccount, DevBadge } from "../lib/devBadge";
 import { getDevPagesEnabled, setDevPagesEnabled } from "../lib/devPagesPref";
+import { isPreviewMode } from "../lib/previewMock";
 
 /**
  * 사이드바 hover/focus prefetch — 사용자가 클릭하기 전에 해당 페이지 청크를
@@ -440,7 +441,7 @@ export default function AppLayout({ children }: { children?: React.ReactNode } =
 }
 
 function AppLayoutInner({ children }: { children?: React.ReactNode }) {
-  const { user, logout } = useAuth();
+  const { user, logout, impersonator } = useAuth();
   const nav = useNavigate();
   const loc = useLocation();
   const { disabled: disabledNav, dev: devNav } = useNavStatus();
@@ -449,6 +450,13 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   // 모바일 사이드바 드로어 — md 미만에서만 의미 있음 (md 이상은 항상 고정 배치)
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // iOS 노치/상태바 영역(env(safe-area-inset-top)) 을 누가 흡수할지 결정.
+  // 항상 "맨 위에 첫 번째로 보이는 요소" 만 흡수해서 더블 패딩 방지.
+  const isPreview = isPreviewMode();
+  const isImpersonating = !!impersonator;
+  const topSlot: "preview" | "impersonation" | "topbar" =
+    isPreview ? "preview" : isImpersonating ? "impersonation" : "topbar";
 
   useEffect(() => {
     if (!isMacDesktop || !window.hinest?.onFullscreenChange) return;
@@ -473,10 +481,16 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
   const showTitlebarSpace = isMacDesktop && !isFullscreen;
 
   return (
-    <div className="h-screen flex flex-col bg-ink-50 overflow-hidden">
-      <PreviewBanner />
+    <div
+      className="flex flex-col bg-ink-50 overflow-hidden"
+      style={{
+        // iOS Safari 의 동적 툴바를 고려한 동적 뷰포트 높이. h-screen(100vh) 은 iOS 에서 URL 바 영역만큼 잘려 보임.
+        height: "100dvh",
+      }}
+    >
+      <PreviewBanner safeAreaTop={topSlot === "preview"} />
       <PreviewOnboarding />
-      <ImpersonationBanner />
+      <ImpersonationBanner safeAreaTop={topSlot === "impersonation"} />
       <div className="flex flex-1 min-h-0">
       {/* 모바일 드로어 백드롭 — md 미만에서 열렸을 때만 보임 */}
       {mobileNavOpen && (
@@ -505,7 +519,15 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
             }}
           />
         )}
-        <div className="h-[48px] px-5 flex items-center border-b border-ink-150">
+        <div
+          className="px-5 flex items-center border-b border-ink-150 flex-shrink-0"
+          style={{
+            // 모바일 드로어에서 fixed inset-y-0 로 떠 있을 때 iOS 노치를 흡수.
+            // 데스크톱(md+)에선 env() = 0 이라 영향 없음.
+            paddingTop: "env(safe-area-inset-top)",
+            height: "calc(48px + env(safe-area-inset-top))",
+          }}
+        >
           <Logo size={20} />
         </div>
 
@@ -560,7 +582,13 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
           </div>
         )}
 
-        <div className="border-t border-ink-150 p-2">
+        <div
+          className="border-t border-ink-150 p-2 flex-shrink-0"
+          style={{
+            // iOS 홈 인디케이터 영역 흡수 — 모바일 드로어가 화면 끝까지 닿을 때 가려지지 않도록.
+            paddingBottom: "calc(8px + env(safe-area-inset-bottom))",
+          }}
+        >
           <div className="flex items-center gap-2.5 px-2 py-2 rounded-md hover:bg-ink-50">
             <NavLink to="/profile" className="flex items-center gap-2.5 flex-1 min-w-0" title="프로필">
               {user?.avatarUrl ? (
@@ -620,7 +648,11 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
             }}
           />
         )}
-        <TopBar draggable={showTitlebarSpace} onOpenNav={() => setMobileNavOpen(true)} />
+        <TopBar
+          draggable={showTitlebarSpace}
+          onOpenNav={() => setMobileNavOpen(true)}
+          safeAreaTop={topSlot === "topbar"}
+        />
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-[1400px] mx-auto px-4 md:px-8 py-4 md:py-6">
             <RouteVisibilityGate disabled={disabledNav} dev={devNav}>
@@ -974,7 +1006,7 @@ const BREADCRUMB: Record<string, string> = {
   "/profile": "내 프로필",
 };
 
-function TopBar({ draggable = false, onOpenNav }: { draggable?: boolean; onOpenNav?: () => void }) {
+function TopBar({ draggable = false, onOpenNav, safeAreaTop = false }: { draggable?: boolean; onOpenNav?: () => void; safeAreaTop?: boolean }) {
   const loc = useLocation();
   const label = loc.pathname.startsWith("/projects/")
     ? "프로젝트"
@@ -1001,8 +1033,14 @@ function TopBar({ draggable = false, onOpenNav }: { draggable?: boolean; onOpenN
   return (
     <>
       <header
-        className="h-[48px] flex items-center justify-between px-3 md:px-6 border-b border-ink-150 bg-white"
-        style={draggable ? ({ WebkitAppRegion: "drag" } as React.CSSProperties) : undefined}
+        className="flex items-center justify-between px-3 md:px-6 border-b border-ink-150 bg-white flex-shrink-0"
+        style={{
+          // iOS 노치 흡수 — 헤더 자체가 첫 요소일 때만 (배너가 위에 있으면 배너가 처리).
+          paddingTop: safeAreaTop ? "env(safe-area-inset-top)" : 0,
+          minHeight: 48,
+          height: safeAreaTop ? "calc(48px + env(safe-area-inset-top))" : 48,
+          ...(draggable ? ({ WebkitAppRegion: "drag" } as React.CSSProperties) : undefined),
+        }}
       >
         <div
           className="flex items-center gap-2 text-[13px] min-w-0"

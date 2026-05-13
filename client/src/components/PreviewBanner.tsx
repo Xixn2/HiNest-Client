@@ -1,8 +1,12 @@
 import { Link } from "react-router-dom";
 import { isPreviewMode, disablePreview } from "../lib/previewMock";
 
-/** 미리보기 모드 알림 배너 — 화면 최상단 고정. 클릭하면 가입 페이지로. */
-export default function PreviewBanner() {
+/**
+ * 미리보기 모드 알림 배너 — 화면 최상단 고정. 클릭하면 가입 페이지로.
+ * 모바일에서는 한 줄에 압축 (긴 텍스트는 줄임표), 데스크톱에서는 풀 메시지.
+ * iOS 노치 영역(env(safe-area-inset-top))을 흡수해서 상태바와 자연스럽게 융합.
+ */
+export default function PreviewBanner({ safeAreaTop = true }: { safeAreaTop?: boolean }) {
   if (!isPreviewMode()) return null;
   return (
     <div
@@ -12,54 +16,62 @@ export default function PreviewBanner() {
         zIndex: 9999,
         background: "linear-gradient(90deg, var(--c-brand) 0%, #7C3AED 100%)",
         color: "#fff",
-        padding: "8px 16px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 12,
-        fontSize: 12.5,
-        fontWeight: 700,
-        flexWrap: "wrap",
+        paddingTop: safeAreaTop ? "max(7px, calc(env(safe-area-inset-top) + 4px))" : 7,
+        paddingBottom: 7,
+        paddingLeft: "max(12px, env(safe-area-inset-left))",
+        paddingRight: "max(12px, env(safe-area-inset-right))",
       }}
     >
-      <span style={{ opacity: 0.9 }}>👀 미리보기 모드 — 데이터는 모두 데모입니다 · 변경 사항은 저장되지 않아요</span>
-      <button
-        type="button"
-        onClick={() => {
-          try { sessionStorage.removeItem("hinest:preview-onboarded"); } catch {}
-          window.location.reload();
-        }}
-        title="가이드 다시 보기"
-        style={{
-          background: "rgba(255,255,255,0.14)",
-          color: "#fff",
-          padding: "3px 9px",
-          borderRadius: 8,
-          fontSize: 11.5,
-          fontWeight: 800,
-          border: "1px solid rgba(255,255,255,0.26)",
-          cursor: "pointer",
-        }}
-      >
-        가이드 다시 보기
-      </button>
-      <Link
-        to="/login"
-        onClick={() => {
-          disablePreview();
-        }}
-        style={{
-          background: "rgba(255,255,255,0.2)",
-          color: "#fff",
-          padding: "3px 10px",
-          borderRadius: 8,
-          fontSize: 11.5,
-          fontWeight: 800,
-          border: "1px solid rgba(255,255,255,0.32)",
-        }}
-      >
-        실제 계정으로 로그인 →
-      </Link>
+      <div className="flex items-center gap-2 max-w-[1400px] mx-auto">
+        <span
+          className="flex-1 min-w-0 truncate text-[11.5px] sm:text-[12.5px] font-bold"
+          style={{ opacity: 0.95 }}
+        >
+          <span className="sm:hidden">👀 미리보기 모드 · 데모 데이터예요</span>
+          <span className="hidden sm:inline">👀 미리보기 모드 — 데이터는 모두 데모입니다 · 변경 사항은 저장되지 않아요</span>
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            try { sessionStorage.removeItem("hinest:preview-onboarded"); } catch {}
+            window.location.reload();
+          }}
+          title="가이드 다시 보기"
+          aria-label="가이드 다시 보기"
+          className="flex-shrink-0"
+          style={{
+            background: "rgba(255,255,255,0.16)",
+            color: "#fff",
+            padding: "4px 10px",
+            borderRadius: 999,
+            fontSize: 11,
+            fontWeight: 800,
+            border: "1px solid rgba(255,255,255,0.26)",
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+          }}
+        >
+          <span className="sm:hidden">가이드</span>
+          <span className="hidden sm:inline">가이드 다시 보기</span>
+        </button>
+        <Link
+          to="/login"
+          onClick={() => { disablePreview(); }}
+          className="flex-shrink-0"
+          style={{
+            background: "#fff",
+            color: "var(--c-brand)",
+            padding: "4px 11px",
+            borderRadius: 999,
+            fontSize: 11,
+            fontWeight: 800,
+            whiteSpace: "nowrap",
+          }}
+        >
+          <span className="sm:hidden">로그인 →</span>
+          <span className="hidden sm:inline">실제 계정으로 로그인 →</span>
+        </Link>
+      </div>
     </div>
   );
 }
