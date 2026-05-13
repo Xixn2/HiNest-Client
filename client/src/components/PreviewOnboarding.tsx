@@ -72,138 +72,196 @@ export default function PreviewOnboarding() {
 
   return (
     <div
-      className="fixed inset-0 grid place-items-center p-4 hinest-onb-overlay"
+      className="fixed inset-0 hinest-onb-overlay"
       style={{ zIndex: 10000 }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="preview-onboarding-title"
     >
-      <div
-        key={step /* 단계 전환 시 살짝 re-mount 애니메이션 */}
-        className="w-full max-w-[460px] rounded-2xl overflow-hidden hinest-onb-card"
+      {/* 건너뛰기 — 우측 상단 플로팅 */}
+      <button
+        type="button"
+        onClick={dismiss}
+        className="hinest-onb-skip absolute top-5 right-5 text-[12px] font-bold transition"
         style={{
-          background: "var(--c-surface)",
-          boxShadow: "0 24px 60px rgba(2,6,23,0.35), 0 1px 0 rgba(255,255,255,0.05) inset",
-          border: "1px solid var(--c-border)",
+          color: "rgba(255,255,255,0.78)",
+          padding: "8px 14px",
+          borderRadius: 999,
+          background: "rgba(255,255,255,0.08)",
+          backdropFilter: "blur(8px)",
+          border: "1px solid rgba(255,255,255,0.16)",
         }}
       >
-        {/* 상단 그라데이션 헤더 */}
-        <div
-          className="relative px-6 py-7"
-          style={{ background: "linear-gradient(135deg, var(--c-brand) 0%, #7C3AED 100%)", color: "#fff" }}
-        >
-          {/* 건너뛰기 */}
-          <button
-            type="button"
-            onClick={dismiss}
-            className="absolute top-3 right-3 text-[11.5px] font-bold opacity-85 hover:opacity-100 transition"
-            style={{ background: "rgba(255,255,255,0.16)", padding: "5px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.24)" }}
-          >
-            건너뛰기
-          </button>
-          <div className="text-[36px] mb-2">{s.emoji}</div>
-          <h2 id="preview-onboarding-title" className="text-[19px] font-extrabold tracking-tight">{s.title}</h2>
-        </div>
+        건너뛰기
+      </button>
 
-        {/* 본문 */}
-        <div className="px-6 py-5">
-          <p className="text-[13.5px] text-ink-700 leading-relaxed">{s.body}</p>
+      {/* 콘텐츠 — 가운데 정렬, 틀 없음 */}
+      <div className="absolute inset-0 flex items-center justify-center px-6">
+        <div
+          key={step /* 단계 전환 시 re-mount 애니메이션 */}
+          className="w-full max-w-[520px] hinest-onb-card text-center"
+        >
+          <div className="text-[64px] mb-5 leading-none hinest-onb-emoji">{s.emoji}</div>
+          <h2
+            id="preview-onboarding-title"
+            className="text-[28px] sm:text-[32px] font-extrabold tracking-tight leading-tight"
+            style={{ color: "#fff", textShadow: "0 2px 24px rgba(0,0,0,0.4)" }}
+          >
+            {s.title}
+          </h2>
+          <p
+            className="mt-4 text-[15px] sm:text-[16px] leading-relaxed mx-auto max-w-[480px]"
+            style={{ color: "rgba(255,255,255,0.82)", textShadow: "0 1px 12px rgba(0,0,0,0.35)" }}
+          >
+            {s.body}
+          </p>
           {s.bullets && (
-            <ul className="mt-3 space-y-1.5">
+            <ul className="mt-5 inline-flex flex-col items-start gap-2 text-left mx-auto">
               {s.bullets.map((b, i) => (
-                <li key={i} className="flex items-start gap-2 text-[12.5px] text-ink-700">
-                  <span className="text-brand-600 mt-0.5">•</span>
+                <li
+                  key={i}
+                  className="flex items-start gap-2.5 text-[14px]"
+                  style={{ color: "rgba(255,255,255,0.88)", textShadow: "0 1px 10px rgba(0,0,0,0.35)" }}
+                >
+                  <span
+                    className="mt-2 inline-block rounded-full flex-shrink-0"
+                    style={{ width: 5, height: 5, background: "var(--c-brand)", boxShadow: "0 0 12px var(--c-brand)" }}
+                  />
                   <span>{b}</span>
                 </li>
               ))}
             </ul>
           )}
         </div>
+      </div>
 
-        {/* 하단 — 진행률 + 액션 */}
-        <div className="px-6 pb-5 pt-2 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-1.5">
-            {STEPS.map((_, i) => (
-              <span
-                key={i}
-                className="rounded-full transition"
-                style={{
-                  width: i === step ? 18 : 6,
-                  height: 6,
-                  background: i === step ? "var(--c-brand)" : "var(--c-surface-3)",
-                }}
-              />
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            {!isFirst && (
-              <button type="button" className="btn-ghost btn-xs" onClick={() => setStep((n) => Math.max(0, n - 1))}>
-                이전
-              </button>
-            )}
-            {!isLast ? (
-              <button
-                type="button"
-                className="px-4 py-2 rounded-lg text-[12.5px] font-extrabold transition"
-                style={{ background: "var(--c-brand)", color: "#fff" }}
-                onClick={() => setStep((n) => Math.min(STEPS.length - 1, n + 1))}
-              >
-                다음
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="px-4 py-2 rounded-lg text-[12.5px] font-extrabold transition"
-                style={{ background: "var(--c-brand)", color: "#fff" }}
-                onClick={dismiss}
-              >
-                시작하기
-              </button>
-            )}
-          </div>
+      {/* 하단 — 진행률 + 액션 (플로팅) */}
+      <div className="absolute left-0 right-0 bottom-8 sm:bottom-12 flex flex-col items-center gap-5 px-6">
+        <div className="flex items-center gap-2">
+          {STEPS.map((_, i) => (
+            <span
+              key={i}
+              className="rounded-full transition-all duration-300"
+              style={{
+                width: i === step ? 22 : 6,
+                height: 6,
+                background: i === step ? "#fff" : "rgba(255,255,255,0.32)",
+                boxShadow: i === step ? "0 0 12px rgba(255,255,255,0.5)" : "none",
+              }}
+            />
+          ))}
+        </div>
+        <div className="flex items-center gap-2.5">
+          {!isFirst && (
+            <button
+              type="button"
+              onClick={() => setStep((n) => Math.max(0, n - 1))}
+              className="px-5 py-2.5 rounded-full text-[13px] font-bold transition"
+              style={{
+                color: "rgba(255,255,255,0.85)",
+                background: "rgba(255,255,255,0.08)",
+                backdropFilter: "blur(8px)",
+                border: "1px solid rgba(255,255,255,0.16)",
+              }}
+            >
+              이전
+            </button>
+          )}
+          {!isLast ? (
+            <button
+              type="button"
+              className="px-7 py-2.5 rounded-full text-[13.5px] font-extrabold transition"
+              style={{
+                background: "#fff",
+                color: "var(--c-brand)",
+                boxShadow: "0 8px 32px rgba(0,0,0,0.25)",
+              }}
+              onClick={() => setStep((n) => Math.min(STEPS.length - 1, n + 1))}
+            >
+              다음
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="px-7 py-2.5 rounded-full text-[13.5px] font-extrabold transition"
+              style={{
+                background: "#fff",
+                color: "var(--c-brand)",
+                boxShadow: "0 8px 32px rgba(0,0,0,0.25)",
+              }}
+              onClick={dismiss}
+            >
+              시작하기
+            </button>
+          )}
         </div>
       </div>
 
-      {/* 진입 애니메이션 — 배경은 블러+딤이 부드럽게 깔리고, 카드는 살짝 위에서 떠오름 */}
+      {/* 진입 애니메이션 — 배경은 블러+딤이 부드럽게 깔리고, 콘텐츠는 떠오르듯 */}
       <style>{`
         .hinest-onb-overlay {
-          background: rgba(15, 23, 42, 0);
+          background: rgba(8, 12, 24, 0);
           backdrop-filter: blur(0px);
           -webkit-backdrop-filter: blur(0px);
-          animation: hinest-onb-overlay-in 0.32s ease-out forwards;
+          animation: hinest-onb-overlay-in 0.42s ease-out forwards;
         }
         @keyframes hinest-onb-overlay-in {
           to {
-            background: rgba(15, 23, 42, 0.55);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
+            background: rgba(8, 12, 24, 0.62);
+            backdrop-filter: blur(18px) saturate(140%);
+            -webkit-backdrop-filter: blur(18px) saturate(140%);
           }
         }
         .hinest-onb-card {
-          animation: hinest-onb-card-in 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
-          transform-origin: center;
-          will-change: transform, opacity;
+          animation: hinest-onb-card-in 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+          animation-delay: 0.08s;
+          will-change: transform, opacity, filter;
         }
         @keyframes hinest-onb-card-in {
           from {
             opacity: 0;
-            transform: translateY(10px) scale(0.96);
+            transform: translateY(16px) scale(0.97);
+            filter: blur(6px);
           }
           to {
             opacity: 1;
             transform: translateY(0) scale(1);
+            filter: blur(0);
           }
+        }
+        .hinest-onb-emoji {
+          animation: hinest-onb-emoji-in 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+          animation-delay: 0.18s;
+        }
+        @keyframes hinest-onb-emoji-in {
+          from { opacity: 0; transform: scale(0.5) rotate(-8deg); }
+          to   { opacity: 1; transform: scale(1) rotate(0); }
+        }
+        .hinest-onb-skip {
+          animation: hinest-onb-fade-in 0.4s ease-out both;
+          animation-delay: 0.4s;
+        }
+        .hinest-onb-skip:hover {
+          background: rgba(255,255,255,0.14) !important;
+          color: #fff !important;
+        }
+        @keyframes hinest-onb-fade-in {
+          from { opacity: 0; }
+          to   { opacity: 1; }
         }
         @media (prefers-reduced-motion: reduce) {
           .hinest-onb-overlay,
-          .hinest-onb-card {
+          .hinest-onb-card,
+          .hinest-onb-emoji,
+          .hinest-onb-skip {
             animation-duration: 0.01ms !important;
+            animation-delay: 0 !important;
             animation-iteration-count: 1 !important;
           }
           .hinest-onb-overlay {
-            background: rgba(15, 23, 42, 0.55);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
+            background: rgba(8, 12, 24, 0.62);
+            backdrop-filter: blur(18px) saturate(140%);
+            -webkit-backdrop-filter: blur(18px) saturate(140%);
           }
         }
       `}</style>
