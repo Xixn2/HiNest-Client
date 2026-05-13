@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom";
 import { isPreviewMode, disablePreview } from "../lib/previewMock";
 
 /**
@@ -54,9 +53,15 @@ export default function PreviewBanner({ safeAreaTop = true }: { safeAreaTop?: bo
           <span className="sm:hidden">가이드</span>
           <span className="hidden sm:inline">가이드 다시 보기</span>
         </button>
-        <Link
-          to="/login"
-          onClick={() => { disablePreview(); }}
+        <button
+          type="button"
+          onClick={() => {
+            disablePreview();
+            // SPA 네비게이션으로 가면 LoginPage 의 `if (user) return <Navigate to="/" />` 가
+            // 데모 user 상태(아직 React 메모리에 남아있음) 때문에 다시 "/" 로 튕긴다.
+            // 하드 리로드로 강제 인증 재검증 — /api/me 401 → user=null → /login 정상 표시.
+            window.location.href = "/login";
+          }}
           className="flex-shrink-0"
           style={{
             background: "#fff",
@@ -66,11 +71,13 @@ export default function PreviewBanner({ safeAreaTop = true }: { safeAreaTop?: bo
             fontSize: 11,
             fontWeight: 800,
             whiteSpace: "nowrap",
+            border: 0,
+            cursor: "pointer",
           }}
         >
           <span className="sm:hidden">로그인 →</span>
           <span className="hidden sm:inline">실제 계정으로 로그인 →</span>
-        </Link>
+        </button>
       </div>
     </div>
   );
