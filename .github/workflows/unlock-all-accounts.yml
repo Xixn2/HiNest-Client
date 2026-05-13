@@ -1,0 +1,109 @@
+# 잠긴 계정 일괄 해제 — 일회성 워크플로우. 컨테이너 안에서 직접 Prisma 로 풀어버린다.
+#
+# 동작:
+#   1) hinest-server 의 실행 중인 태스크를 찾는다
+#   2) `aws ecs execute-command` 로 컨테이너 안에서 base64 디코드된 node 스크립트 실행
+#   3) 영향 받은 행 수와 대상 이메일을 워크플로우 로그에 출력
+#
+# 사용:
+#   gh workflow run unlock-all-accounts.yml
+#   gh run watch
+#
+# 사전 조건:
+#   - 태스크가 enableExecuteCommand=true 로 떠있어야 함 (운영 환경 기본 ON)
+#   - 컨테이너에 node + @prisma/client 가 포함돼 있음 (서버 이미지에 이미 있음)
+
+name: Unlock all locked accounts
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECS_CLUSTER: hinest-prod
+  ECS_SERVICE: hinest-server
+  CONTAINER_NAME: server
+
+jobs:
+  unlock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::149536482210:role/github-deploy-hinest
+          role-session-name: gha-unlock-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install Session Manager plugin
+        run: |
+          curl -fsSL "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o /tmp/smp.deb
+          sudo dpkg -i /tmp/smp.deb
+          session-manager-plugin --version
+
+      - name: Find a running task
+        id: find
+        run: |
+          TASK_ARN=$(aws ecs list-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --service-name "$ECS_SERVICE" \
+            --desired-status RUNNING \
+            --query 'taskArns[0]' --output text)
+          if [ -z "$TASK_ARN" ] || [ "$TASK_ARN" = "None" ]; then
+            echo "실행 중인 태스크가 없어요." >&2; exit 1
+          fi
+          TASK_ID=$(basename "$TASK_ARN")
+          echo "task=$TASK_ID" >> "$GITHUB_OUTPUT"
+          echo "발견된 태스크: $TASK_ID"
+
+      - name: Build unlock script
+        run: |
+          cat > unlock.js << 'JS_EOF'
+          const { PrismaClient } = require("@prisma/client");
+          const p = new PrismaClient();
+          (async () => {
+            const before = await p.user.findMany({
+              where: { OR: [{ lockedAt: { not: null } }, { failedLoginCount: { gt: 0 } }] },
+              select: { id: true, email: true, name: true, lockedAt: true, failedLoginCount: true, superAdmin: true },
+            });
+            console.log("=== 해제 대상 " + before.length + "건 ===");
+            before.forEach(function (u) {
+              console.log(" - " + u.email + " (" + u.name + ")"
+                + " lockedAt=" + (u.lockedAt ? u.lockedAt.toISOString() : "null")
+                + " fails=" + u.failedLoginCount
+                + (u.superAdmin ? " [SuperAdmin]" : ""));
+            });
+            if (before.length === 0) {
+              console.log("잠긴 계정이 없습니다.");
+              await p.$disconnect();
+              return;
+            }
+            const r = await p.user.updateMany({
+              where: { OR: [{ lockedAt: { not: null } }, { failedLoginCount: { gt: 0 } }] },
+              data: { lockedAt: null, failedLoginCount: 0 },
+            });
+            console.log("=== 해제 완료 " + r.count + "건 ===");
+            await p.$disconnect();
+          })().catch(function (e) { console.error(e); process.exit(1); });
+          JS_EOF
+          # base64 로 인코딩해서 ECS Exec 의 쉘 인자 escape 지옥을 피한다.
+          B64=$(base64 -w0 unlock.js)
+          echo "B64=$B64" >> "$GITHUB_ENV"
+          echo "스크립트 길이: $(wc -c < unlock.js) bytes / base64: $(echo -n "$B64" | wc -c) bytes"
+
+      - name: Execute unlock inside container
+        run: |
+          # /tmp/unlock.js 에 디코드 → 실행 → 정리. 모든 출력은 stdout 으로 흘러나옴.
+          CMD="sh -c \"echo $B64 | base64 -d > /tmp/unlock.js && node /tmp/unlock.js; STATUS=\$?; rm -f /tmp/unlock.js; exit \$STATUS\""
+          echo "실행 명령: aws ecs execute-command --task ${{ steps.find.outputs.task }} --command '<<sh -c ...>>'"
+          aws ecs execute-command \
+            --cluster "$ECS_CLUSTER" \
+            --task "${{ steps.find.outputs.task }}" \
+            --container "$CONTAINER_NAME" \
+            --interactive \
+            --command "$CMD" \
+            < /dev/null
