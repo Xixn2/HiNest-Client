@@ -3,6 +3,12 @@ import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import Logo from "../components/Logo";
 
+/**
+ * 로그인 페이지 — Toss 의 \"한 화면에 한 흐름\" 디자인 원칙을 따른다.
+ *  - 카드/패널 없이 흰 배경 위에 큰 인사말 + 두 개의 입력 + 큰 primary 버튼
+ *  - 입력 필드는 보더 대신 옅은 회색 fill (\#F4F6FA) — 포커스 시 브랜드 링
+ *  - 부차 액션(가입 / 미리보기 / 앱 다운로드) 은 하단에 약하게
+ */
 export default function LoginPage() {
   const { user, login } = useAuth();
   const nav = useNavigate();
@@ -28,106 +34,166 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen grid place-items-center p-6 bg-ink-50">
-      <div className="w-full max-w-[380px]">
-        <div className="flex items-center justify-center mb-7">
-          <Logo size={22} />
-        </div>
+    <div className="min-h-screen flex flex-col" style={{ background: "var(--c-surface-1)" }}>
+      {/* 상단 — 로고만 살짝 */}
+      <header className="px-6 pt-8 pb-4 flex items-center">
+        <Logo size={20} />
+      </header>
 
-        <div className="panel p-7">
-          <div className="mb-5">
-            <h1 className="text-[18px] font-bold text-ink-900 tracking-tight">로그인</h1>
-            <p className="t-caption mt-1">HiNest 워크스페이스에 접속합니다.</p>
+      {/* 본문 — 중앙 정렬, 한 단 */}
+      <main className="flex-1 flex items-center justify-center px-6 pb-12">
+        <div className="w-full max-w-[360px]">
+          {/* 인사말 */}
+          <div className="mb-9">
+            <h1 className="text-[26px] font-extrabold text-ink-900 tracking-tight leading-tight">
+              어서 오세요
+            </h1>
+            <p className="text-[14px] text-ink-500 mt-2 leading-relaxed">
+              이메일과 비밀번호로 워크스페이스에 들어갈 수 있어요.
+            </p>
           </div>
 
+          {/* 폼 */}
           <form onSubmit={submit} className="space-y-3">
-            <div>
-              <label className="field-label">이메일</label>
-              <input
-                className="input"
-                type="email"
-                placeholder="name@company.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-                required
-                maxLength={200}
-              />
-            </div>
-            <div>
-              <label className="field-label">비밀번호</label>
-              <input
-                className="input"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                maxLength={128}
-                autoComplete="current-password"
-              />
-            </div>
+            <SoftInput
+              type="email"
+              placeholder="이메일"
+              value={email}
+              onChange={setEmail}
+              autoComplete="email"
+              required
+              maxLength={200}
+            />
+            <SoftInput
+              type="password"
+              placeholder="비밀번호"
+              value={password}
+              onChange={setPassword}
+              autoComplete="current-password"
+              required
+              maxLength={128}
+            />
+
             {err && (
-              <div className="flex items-start gap-2 p-2.5 rounded-md bg-red-50 border border-red-100 text-[12px] font-semibold text-red-700">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 flex-shrink-0">
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M12 8v4M12 16h.01" />
-                </svg>
+              <div
+                className="text-[12.5px] font-semibold leading-snug"
+                style={{ color: "var(--c-danger)", paddingTop: 2 }}
+              >
                 {err}
               </div>
             )}
-            <button className="btn-primary btn-lg w-full mt-1" disabled={loading}>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full transition disabled:opacity-60"
+              style={{
+                marginTop: 18,
+                background: "var(--c-brand)",
+                color: "#fff",
+                height: 54,
+                borderRadius: 14,
+                fontSize: 16,
+                fontWeight: 800,
+                letterSpacing: "-0.01em",
+              }}
+            >
               {loading ? "로그인 중…" : "로그인"}
             </button>
           </form>
 
-          <div className="mt-5 pt-4 border-t border-ink-100 flex items-center justify-between">
-            <span className="t-caption">아직 계정이 없나요?</span>
-            <Link to="/signup" className="text-[12px] font-semibold text-brand-600 hover:text-brand-700">
-              초대키로 가입 →
-            </Link>
-          </div>
-        </div>
-
-        {/* 미리보기 — 비로그인 방문자가 데모 데이터로 실사용 화면을 둘러볼 수 있게. */}
-        <Link
-          to="/preview"
-          className="mt-3 panel p-4 flex items-center gap-3 hover:!border-brand-300 transition group"
-        >
-          <div
-            className="w-10 h-10 rounded-xl grid place-items-center flex-shrink-0"
-            style={{ background: "var(--c-brand-soft)", color: "var(--c-brand)" }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-[13px] font-extrabold text-ink-900">로그인 없이 미리보기</div>
-            <div className="text-[11.5px] text-ink-500 mt-0.5">데모 데이터로 실제 화면을 둘러보세요</div>
-          </div>
-          <span className="text-ink-400 group-hover:text-brand-600 transition">→</span>
-        </Link>
-
-        {/* 데스크톱/모바일 앱 다운로드 안내 — Electron 에서는 숨김 */}
-        {!window.hinest?.isDesktop && (
-          <div className="mt-4 text-center">
+          {/* 보조 액션 */}
+          <div className="mt-5 flex items-center justify-center gap-4 text-[12.5px]">
             <Link
-              to="/download"
-              className="inline-flex items-center gap-1.5 text-[12px] text-ink-500 hover:text-ink-900"
+              to="/signup"
+              className="text-ink-500 hover:text-ink-900 transition font-semibold"
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-              데스크톱 · 모바일 앱 다운로드
+              초대키로 가입
+            </Link>
+            <span className="text-ink-300">·</span>
+            <Link
+              to="/preview"
+              className="font-semibold transition"
+              style={{ color: "var(--c-brand)" }}
+            >
+              로그인 없이 둘러보기
             </Link>
           </div>
-        )}
 
-      </div>
+          {/* 앱 다운로드 — 데스크톱 앱이 아닐 때만 */}
+          {!window.hinest?.isDesktop && (
+            <div className="mt-10 text-center">
+              <Link
+                to="/download"
+                className="inline-flex items-center gap-1.5 text-[11.5px] text-ink-400 hover:text-ink-700 transition"
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                데스크톱 · 모바일 앱
+              </Link>
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+/**
+ * Toss 톤의 입력 — 보더 없이 옅은 회색 fill, 포커스 시 브랜드 컬러 링.
+ *  - 라벨이 필드 안 placeholder 로 떠 있다가 입력 시 살짝 위로(floating label 효과는 다음 단계).
+ *  - 16px 폰트로 iOS Safari 자동 줌 방지.
+ */
+function SoftInput({
+  type, placeholder, value, onChange, autoComplete, required, maxLength,
+}: {
+  type: string;
+  placeholder: string;
+  value: string;
+  onChange: (v: string) => void;
+  autoComplete?: string;
+  required?: boolean;
+  maxLength?: number;
+}) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <div
+      style={{
+        background: "var(--c-surface-3)",
+        borderRadius: 14,
+        boxShadow: focused
+          ? "0 0 0 2px color-mix(in srgb, var(--c-brand) 32%, transparent)"
+          : "0 0 0 1px transparent",
+        transition: "box-shadow 0.15s",
+      }}
+    >
+      <input
+        type={type}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        autoComplete={autoComplete}
+        required={required}
+        maxLength={maxLength}
+        style={{
+          width: "100%",
+          height: 54,
+          padding: "0 18px",
+          background: "transparent",
+          border: 0,
+          outline: "none",
+          fontSize: 16,
+          fontWeight: 600,
+          color: "var(--c-text-1)",
+          letterSpacing: "-0.01em",
+          borderRadius: 14,
+        }}
+      />
     </div>
   );
 }
