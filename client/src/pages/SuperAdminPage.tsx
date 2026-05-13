@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { useTheme } from "../theme";
 import PageHeader from "../components/PageHeader";
 import SuperStepUpGate from "../components/SuperStepUpGate";
 import SessionsPanel from "../components/superadmin/SessionsPanel";
@@ -1299,17 +1300,18 @@ function ConsolePanel() {
   }
 
   const cmdCount = history.filter((h) => h.kind === "input").length;
+  const t = useConsoleTheme();
 
   return (
     <div
       style={{
         borderRadius: 14,
         overflow: "hidden",
-        boxShadow: "0 20px 50px rgba(2, 6, 23, 0.45), 0 1px 0 rgba(255,255,255,0.04) inset",
-        background: "#0B0E14",
-        color: "#E5E9F0",
+        boxShadow: t.panelShadow,
+        background: t.bg,
+        color: t.textPrimary,
         fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-        border: "1px solid #1F2733",
+        border: `1px solid ${t.border}`,
       }}
     >
       {/* macOS 스타일 타이틀 바 */}
@@ -1319,8 +1321,8 @@ function ConsolePanel() {
           alignItems: "center",
           gap: 10,
           padding: "10px 14px",
-          background: "linear-gradient(180deg, #1A1F2A 0%, #131722 100%)",
-          borderBottom: "1px solid #1F2733",
+          background: t.titleBarBg,
+          borderBottom: `1px solid ${t.border}`,
           position: "relative",
         }}
       >
@@ -1334,7 +1336,7 @@ function ConsolePanel() {
             position: "absolute",
             left: "50%",
             transform: "translateX(-50%)",
-            color: "#7F8AA0",
+            color: t.titleBarText,
             fontSize: 11.5,
             fontWeight: 700,
             letterSpacing: "0.04em",
@@ -1349,7 +1351,7 @@ function ConsolePanel() {
           hinest — 개발자 콘솔
         </div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 10.5, color: "#5C6577", fontWeight: 600 }}>
+          <span style={{ fontSize: 10.5, color: t.textMuted, fontWeight: 600 }}>
             {cmdCount} cmd
           </span>
           <button
@@ -1357,9 +1359,9 @@ function ConsolePanel() {
             onClick={() => setHistory([])}
             title="화면 비우기 (clear)"
             style={{
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.08)",
-              color: "#A8B0C2",
+              background: t.buttonBg,
+              border: `1px solid ${t.buttonBorder}`,
+              color: t.titleBarText,
               fontSize: 10.5,
               fontWeight: 700,
               padding: "3px 8px",
@@ -1382,16 +1384,15 @@ function ConsolePanel() {
           padding: "14px 16px",
           fontSize: 12.5,
           lineHeight: 1.65,
-          background:
-            "radial-gradient(ellipse at top, rgba(124,58,237,0.04) 0%, transparent 60%), #0B0E14",
+          background: t.outputBg,
         }}
       >
         {history.map((h, i) => {
           if (h.kind === "input") {
             return (
               <div key={i} style={{ marginTop: i === 0 ? 0 : 12, display: "flex", gap: 8 }}>
-                <Prompt ts={h.ts} />
-                <span style={{ color: "#A8FFE0", whiteSpace: "pre-wrap", wordBreak: "break-word", flex: 1 }}>
+                <Prompt ts={h.ts} theme={t} />
+                <span style={{ color: t.userInput, whiteSpace: "pre-wrap", wordBreak: "break-word", flex: 1 }}>
                   {h.text}
                 </span>
               </div>
@@ -1405,16 +1406,16 @@ function ConsolePanel() {
                 gap: 8,
                 marginTop: 4,
                 paddingLeft: 22,
-                color: h.ok ? "#D6DCE8" : "#FCA5A5",
+                color: h.ok ? t.textPrimary : t.errorText,
                 whiteSpace: "pre-wrap",
                 wordBreak: "break-word",
-                borderLeft: `2px solid ${h.ok ? "rgba(34,197,94,0.4)" : "rgba(248,113,113,0.5)"}`,
+                borderLeft: `2px solid ${h.ok ? t.okBorder : t.errorBorder}`,
                 paddingTop: 1,
                 paddingBottom: 1,
                 marginLeft: 1,
               }}
             >
-              <span style={{ color: h.ok ? "#22C55E" : "#F87171", fontWeight: 800, flexShrink: 0, marginLeft: 8 }}>
+              <span style={{ color: h.ok ? t.ok : t.error, fontWeight: 800, flexShrink: 0, marginLeft: 8 }}>
                 {h.ok ? "✓" : "✗"}
               </span>
               <span style={{ flex: 1 }}>{h.text}</span>
@@ -1422,8 +1423,8 @@ function ConsolePanel() {
           );
         })}
         {busy && (
-          <div style={{ display: "flex", gap: 8, marginTop: 8, color: "#A78BFA", alignItems: "center" }}>
-            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#A78BFA", animation: "hinest-pulse 1s infinite" }} />
+          <div style={{ display: "flex", gap: 8, marginTop: 8, color: t.accent, alignItems: "center" }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: t.accent, animation: "hinest-pulse 1s infinite" }} />
             실행 중…
           </div>
         )}
@@ -1436,8 +1437,8 @@ function ConsolePanel() {
           alignItems: "center",
           gap: 10,
           padding: "10px 14px",
-          borderTop: "1px solid #1F2733",
-          background: "linear-gradient(180deg, #131722 0%, #0F131C 100%)",
+          borderTop: `1px solid ${t.border}`,
+          background: t.inputBarBg,
           position: "relative",
         }}
       >
@@ -1449,10 +1450,10 @@ function ConsolePanel() {
               right: 14,
               bottom: "100%",
               marginBottom: 6,
-              background: "#131722",
-              border: "1px solid #2A3344",
+              background: t.popoverBg,
+              border: `1px solid ${t.popoverBorder}`,
               borderRadius: 10,
-              boxShadow: "0 12px 32px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.04) inset",
+              boxShadow: t.popoverShadow,
               maxHeight: 240,
               overflowY: "auto",
               zIndex: 10,
@@ -1472,30 +1473,28 @@ function ConsolePanel() {
                   gap: 8,
                   width: "100%",
                   padding: "7px 10px",
-                  background: i === active
-                    ? "linear-gradient(90deg, rgba(124,58,237,0.18), rgba(124,58,237,0.04))"
-                    : "transparent",
+                  background: i === active ? t.suggestionActiveBg : "transparent",
                   border: 0,
                   borderRadius: 6,
                   cursor: "pointer",
                   textAlign: "left",
                   fontFamily: "inherit",
-                  color: "#E5E9F0",
+                  color: t.textPrimary,
                 }}
               >
-                <span style={{ color: i === active ? "#A78BFA" : "#5C6577", fontSize: 11, fontWeight: 700, width: 14 }}>
+                <span style={{ color: i === active ? t.accent : t.textMuted, fontSize: 11, fontWeight: 700, width: 14 }}>
                   {i === active ? "▶" : ""}
                 </span>
                 <span style={{ fontSize: 12.5, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {s.label}
                 </span>
-                {s.hint && <span style={{ color: "#7F8AA0", fontSize: 11 }}>{s.hint}</span>}
+                {s.hint && <span style={{ color: t.titleBarText, fontSize: 11 }}>{s.hint}</span>}
               </button>
             ))}
           </div>
         )}
 
-        <PromptInline />
+        <PromptInline theme={t} />
         <input
           ref={inputRef}
           value={input}
@@ -1512,11 +1511,11 @@ function ConsolePanel() {
             border: 0,
             outline: 0,
             background: "transparent",
-            color: "#E5E9F0",
+            color: t.textPrimary,
             fontFamily: "inherit",
             fontSize: 13,
             padding: "4px 0",
-            caretColor: "#A78BFA",
+            caretColor: t.accent,
           }}
         />
         <span
@@ -1524,7 +1523,7 @@ function ConsolePanel() {
             display: input || busy ? "none" : "inline-block",
             width: 8,
             height: 14,
-            background: "#A78BFA",
+            background: t.accent,
             animation: "hinest-blink 1s steps(2, start) infinite",
             borderRadius: 1,
             marginLeft: -4,
@@ -1538,6 +1537,76 @@ function ConsolePanel() {
       `}</style>
     </div>
   );
+}
+
+/** 콘솔 색상 팔레트 — 테마(라이트/다크)에 맞춰 한 번에 스위치. */
+type ConsoleTheme = ReturnType<typeof buildConsoleTheme>;
+function buildConsoleTheme(dark: boolean) {
+  if (dark) {
+    return {
+      bg: "#0B0E14",
+      titleBarBg: "linear-gradient(180deg, #1A1F2A 0%, #131722 100%)",
+      titleBarText: "#7F8AA0",
+      inputBarBg: "linear-gradient(180deg, #131722 0%, #0F131C 100%)",
+      outputBg: "radial-gradient(ellipse at top, rgba(124,58,237,0.04) 0%, transparent 60%), #0B0E14",
+      border: "#1F2733",
+      textPrimary: "#D6DCE8",
+      textMuted: "#5C6577",
+      userInput: "#A8FFE0",
+      accent: "#A78BFA",
+      ok: "#22C55E",
+      okBorder: "rgba(34,197,94,0.4)",
+      error: "#F87171",
+      errorText: "#FCA5A5",
+      errorBorder: "rgba(248,113,113,0.5)",
+      promptUser: "#22C55E",
+      promptAt: "#7F8AA0",
+      promptHost: "#7896FF",
+      promptTime: "#7F8AA0",
+      promptBracket: "#5C6577",
+      buttonBg: "rgba(255,255,255,0.04)",
+      buttonBorder: "rgba(255,255,255,0.08)",
+      popoverBg: "#131722",
+      popoverBorder: "#2A3344",
+      popoverShadow: "0 12px 32px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.04) inset",
+      suggestionActiveBg: "linear-gradient(90deg, rgba(124,58,237,0.18), rgba(124,58,237,0.04))",
+      panelShadow: "0 20px 50px rgba(2, 6, 23, 0.45), 0 1px 0 rgba(255,255,255,0.04) inset",
+    };
+  }
+  // Light theme — 톤은 macOS Terminal 의 "Basic" 라이트 프로파일 + Toss 톤 매칭
+  return {
+    bg: "#FCFBF9",
+    titleBarBg: "linear-gradient(180deg, #F0EDE9 0%, #E6E2DC 100%)",
+    titleBarText: "#6E7280",
+    inputBarBg: "linear-gradient(180deg, #F4F2EE 0%, #ECE9E4 100%)",
+    outputBg: "radial-gradient(ellipse at top, rgba(124,58,237,0.04) 0%, transparent 60%), #FCFBF9",
+    border: "#D8D4CD",
+    textPrimary: "#1F2937",
+    textMuted: "#9CA3AF",
+    userInput: "#047857",
+    accent: "#7C3AED",
+    ok: "#16A34A",
+    okBorder: "rgba(22,163,74,0.35)",
+    error: "#DC2626",
+    errorText: "#B91C1C",
+    errorBorder: "rgba(220,38,38,0.4)",
+    promptUser: "#16A34A",
+    promptAt: "#9CA3AF",
+    promptHost: "#3B5CF0",
+    promptTime: "#9CA3AF",
+    promptBracket: "#A8B1C2",
+    buttonBg: "rgba(15,23,42,0.04)",
+    buttonBorder: "rgba(15,23,42,0.08)",
+    popoverBg: "#FFFFFF",
+    popoverBorder: "#D8D4CD",
+    popoverShadow: "0 12px 32px rgba(15,23,42,0.12), 0 1px 0 rgba(255,255,255,0.6) inset",
+    suggestionActiveBg: "linear-gradient(90deg, rgba(124,58,237,0.10), rgba(124,58,237,0.02))",
+    panelShadow: "0 12px 30px rgba(15,23,42,0.10), 0 1px 0 rgba(255,255,255,0.6) inset",
+  };
+}
+function useConsoleTheme(): ConsoleTheme {
+  const { resolved } = useTheme();
+  return useMemo(() => buildConsoleTheme(resolved === "dark"), [resolved]);
 }
 
 function TrafficLight({ color }: { color: string }) {
@@ -1554,26 +1623,26 @@ function TrafficLight({ color }: { color: string }) {
   );
 }
 
-function Prompt({ ts }: { ts: number }) {
+function Prompt({ ts, theme }: { ts: number; theme: ConsoleTheme }) {
   const t = new Date(ts).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
   return (
-    <span style={{ color: "#5C6577", fontSize: 11.5, flexShrink: 0, fontWeight: 600, paddingTop: 2 }}>
-      <span style={{ color: "#7F8AA0" }}>[{t}]</span>{" "}
-      <span style={{ color: "#22C55E" }}>dev</span>
-      <span style={{ color: "#7F8AA0" }}>@</span>
-      <span style={{ color: "#7896FF" }}>hinest</span>
-      <span style={{ color: "#A78BFA", marginLeft: 2 }}>$</span>
+    <span style={{ color: theme.promptBracket, fontSize: 11.5, flexShrink: 0, fontWeight: 600, paddingTop: 2 }}>
+      <span style={{ color: theme.promptTime }}>[{t}]</span>{" "}
+      <span style={{ color: theme.promptUser }}>dev</span>
+      <span style={{ color: theme.promptAt }}>@</span>
+      <span style={{ color: theme.promptHost }}>hinest</span>
+      <span style={{ color: theme.accent, marginLeft: 2 }}>$</span>
     </span>
   );
 }
 
-function PromptInline() {
+function PromptInline({ theme }: { theme: ConsoleTheme }) {
   return (
     <span style={{ display: "flex", alignItems: "center", gap: 0, fontSize: 12.5, fontWeight: 700, flexShrink: 0 }}>
-      <span style={{ color: "#22C55E" }}>dev</span>
-      <span style={{ color: "#7F8AA0" }}>@</span>
-      <span style={{ color: "#7896FF" }}>hinest</span>
-      <span style={{ color: "#A78BFA", marginLeft: 4 }}>❯</span>
+      <span style={{ color: theme.promptUser }}>dev</span>
+      <span style={{ color: theme.promptAt }}>@</span>
+      <span style={{ color: theme.promptHost }}>hinest</span>
+      <span style={{ color: theme.accent, marginLeft: 4 }}>❯</span>
     </span>
   );
 }
