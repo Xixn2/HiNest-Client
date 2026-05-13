@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import Logo from "../components/Logo";
+import SoftInput from "../components/SoftInput";
 
 /**
  * 로그인 페이지 — Toss 의 \"한 화면에 한 흐름\" 디자인 원칙을 따른다.
@@ -142,58 +143,3 @@ export default function LoginPage() {
   );
 }
 
-/**
- * Toss 톤의 입력 — 보더 없이 옅은 회색 fill, 포커스 시 브랜드 컬러 링.
- *  - 라벨이 필드 안 placeholder 로 떠 있다가 입력 시 살짝 위로(floating label 효과는 다음 단계).
- *  - 16px 폰트로 iOS Safari 자동 줌 방지.
- */
-function SoftInput({
-  type, placeholder, value, onChange, autoComplete, required, maxLength,
-}: {
-  type: string;
-  placeholder: string;
-  value: string;
-  onChange: (v: string) => void;
-  autoComplete?: string;
-  required?: boolean;
-  maxLength?: number;
-}) {
-  const [focused, setFocused] = useState(false);
-  return (
-    <div
-      style={{
-        background: "var(--c-surface-3)",
-        borderRadius: 14,
-        boxShadow: focused
-          ? "0 0 0 2px color-mix(in srgb, var(--c-brand) 32%, transparent)"
-          : "0 0 0 1px transparent",
-        transition: "box-shadow 0.15s",
-      }}
-    >
-      <input
-        type={type}
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        autoComplete={autoComplete}
-        required={required}
-        maxLength={maxLength}
-        style={{
-          width: "100%",
-          height: 54,
-          padding: "0 18px",
-          background: "transparent",
-          border: 0,
-          outline: "none",
-          fontSize: 16,
-          fontWeight: 600,
-          color: "var(--c-text-1)",
-          letterSpacing: "-0.01em",
-          borderRadius: 14,
-        }}
-      />
-    </div>
-  );
-}

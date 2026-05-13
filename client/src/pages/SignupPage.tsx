@@ -2,16 +2,19 @@ import { useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import Logo from "../components/Logo";
+import SoftInput from "../components/SoftInput";
 
+/**
+ * 초대키 가입 페이지 — 로그인과 동일한 Toss 톤.
+ * 한 화면, 한 흐름 — 초대키부터 비밀번호까지 순서대로 채워 \"가입하기\" 한 번에.
+ */
 export default function SignupPage() {
   const { user, signup } = useAuth();
   const nav = useNavigate();
-  const [form, setForm] = useState({
-    inviteKey: "",
-    email: "",
-    name: "",
-    password: "",
-  });
+  const [inviteKey, setInviteKey] = useState("");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -22,7 +25,7 @@ export default function SignupPage() {
     setErr("");
     setLoading(true);
     try {
-      await signup(form);
+      await signup({ inviteKey, name, email, password });
       nav("/");
     } catch (e: any) {
       setErr(e.message);
@@ -32,91 +35,101 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="min-h-screen grid place-items-center p-6 bg-ink-50">
-      <div className="w-full max-w-[400px]">
-        <div className="flex items-center justify-center mb-7">
-          <Logo size={22} />
-        </div>
+    <div className="min-h-screen flex flex-col" style={{ background: "var(--c-surface)" }}>
+      <header className="px-6 pt-8 pb-4 flex items-center">
+        <Logo size={20} />
+      </header>
 
-        <div className="panel p-7">
-          <div className="mb-5">
-            <h1 className="text-[18px] font-bold text-ink-900 tracking-tight">계정 만들기</h1>
-            <p className="t-caption mt-1">관리자로부터 전달받은 초대키가 필요합니다.</p>
+      <main className="flex-1 flex items-center justify-center px-6 pb-12">
+        <div className="w-full max-w-[400px]">
+          <div className="mb-9">
+            <h1 className="text-[26px] font-extrabold text-ink-900 tracking-tight leading-tight">
+              함께 시작해요
+            </h1>
+            <p className="text-[14px] text-ink-500 mt-2 leading-relaxed">
+              관리자에게 받은 초대키로 워크스페이스에 합류하세요.
+            </p>
           </div>
 
           <form onSubmit={submit} className="space-y-3">
-            <div>
-              <label className="field-label">초대키</label>
-              <input
-                className="input font-mono tracking-[0.05em]"
-                placeholder="HN-XXXX-XXXX"
-                value={form.inviteKey}
-                onChange={(e) => setForm((f) => ({ ...f, inviteKey: e.target.value.trim() }))}
-                required
-                maxLength={100}
-              />
-            </div>
+            <SoftInput
+              placeholder="초대키  (예: HN-XXXX-XXXX)"
+              value={inviteKey}
+              onChange={(v) => setInviteKey(v.trim())}
+              required
+              maxLength={100}
+              mono
+            />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="field-label">이름</label>
-                <input
-                  className="input"
-                  placeholder="홍길동"
-                  value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  required
-                  maxLength={200}
-                />
-              </div>
-              <div>
-                <label className="field-label">업무 이메일</label>
-                <input
-                  className="input"
-                  type="email"
-                  placeholder="name@company.com"
-                  value={form.email}
-                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                  required
-                  maxLength={200}
-                />
-              </div>
-            </div>
-            <div>
-              <label className="field-label">비밀번호 <span className="text-ink-500 font-normal">(8자 이상)</span></label>
-              <input
-                className="input"
-                type="password"
-                placeholder="••••••••"
-                value={form.password}
-                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+              <SoftInput
+                placeholder="이름"
+                value={name}
+                onChange={setName}
                 required
-                minLength={8}
-                maxLength={128}
-                autoComplete="new-password"
+                maxLength={200}
+                autoComplete="name"
+              />
+              <SoftInput
+                type="email"
+                placeholder="업무 이메일"
+                value={email}
+                onChange={setEmail}
+                required
+                maxLength={200}
+                autoComplete="email"
               />
             </div>
+            <SoftInput
+              type="password"
+              placeholder="비밀번호 (8자 이상)"
+              value={password}
+              onChange={setPassword}
+              required
+              minLength={8}
+              maxLength={128}
+              autoComplete="new-password"
+            />
+
             {err && (
-              <div className="flex items-start gap-2 p-2.5 rounded-md bg-red-50 border border-red-100 text-[12px] font-semibold text-red-700">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 flex-shrink-0">
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M12 8v4M12 16h.01" />
-                </svg>
+              <div
+                className="text-[12.5px] font-semibold leading-snug"
+                style={{ color: "var(--c-danger)", paddingTop: 2 }}
+              >
                 {err}
               </div>
             )}
-            <button className="btn-primary btn-lg w-full mt-1" disabled={loading}>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full transition disabled:opacity-60"
+              style={{
+                marginTop: 18,
+                background: "var(--c-brand)",
+                color: "#fff",
+                height: 54,
+                borderRadius: 14,
+                fontSize: 16,
+                fontWeight: 800,
+                letterSpacing: "-0.01em",
+              }}
+            >
               {loading ? "가입 중…" : "가입하기"}
             </button>
           </form>
 
-          <div className="mt-5 pt-4 border-t border-ink-100 flex items-center justify-between">
-            <span className="t-caption">이미 계정이 있나요?</span>
-            <Link to="/login" className="text-[12px] font-semibold text-brand-600 hover:text-brand-700">
-              로그인 →
+          <div className="mt-5 flex items-center justify-center gap-4 text-[12.5px]">
+            <span className="text-ink-500">이미 계정이 있나요?</span>
+            <Link
+              to="/login"
+              className="font-semibold transition"
+              style={{ color: "var(--c-brand)" }}
+            >
+              로그인
             </Link>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
