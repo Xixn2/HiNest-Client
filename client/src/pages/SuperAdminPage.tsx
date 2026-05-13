@@ -1609,6 +1609,36 @@ function useConsoleTheme(): ConsoleTheme {
   return useMemo(() => buildConsoleTheme(resolved === "dark"), [resolved]);
 }
 
+/** 서버 로그 패널 팔레트 — 콘솔과 톤 통일하되 줄 수가 많아 더 차분한 톤. */
+function buildLogsTheme(dark: boolean) {
+  if (dark) {
+    return {
+      bg: "#0E1014",
+      border: "var(--c-border)",
+      textPrimary: "#D4D8DE",
+      textMuted: "#7F8792",
+      levelInfo:  "#86EFAC", // soft green
+      levelHttp:  "#7896FF", // soft blue
+      levelWarn:  "#FCD34D", // soft amber
+      levelError: "#FCA5A5", // soft red
+    };
+  }
+  return {
+    bg: "#FCFBF9",
+    border: "var(--c-border)",
+    textPrimary: "#1F2937",
+    textMuted: "#9CA3AF",
+    levelInfo:  "#15803D", // deeper green — 라이트 배경에서 대비 확보
+    levelHttp:  "#1D4ED8", // deep blue
+    levelWarn:  "#B45309", // deep amber
+    levelError: "#B91C1C", // deep red
+  };
+}
+function useLogsTheme() {
+  const { resolved } = useTheme();
+  return useMemo(() => buildLogsTheme(resolved === "dark"), [resolved]);
+}
+
 function TrafficLight({ color }: { color: string }) {
   return (
     <span
@@ -1660,6 +1690,7 @@ function ServerLogsPanel() {
   const [err, setErr] = useState<string | null>(null);
   const aliveRef = useRef(true);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const t = useLogsTheme();
 
   useEffect(() => {
     aliveRef.current = true;
@@ -1734,10 +1765,10 @@ function ServerLogsPanel() {
       <div
         ref={scrollRef}
         style={{
-          background: "#0E1014",
-          color: "#D4D8DE",
+          background: t.bg,
+          color: t.textPrimary,
           borderRadius: 12,
-          border: "1px solid var(--c-border)",
+          border: `1px solid ${t.border}`,
           padding: "10px 12px",
           height: "min(64vh, 580px)",
           overflowY: "auto",
@@ -1747,13 +1778,13 @@ function ServerLogsPanel() {
         }}
       >
         {logs.length === 0 ? (
-          <div style={{ color: "#7F8792", textAlign: "center", padding: 32 }}>
+          <div style={{ color: t.textMuted, textAlign: "center", padding: 32 }}>
             아직 로그가 없어요. 프로세스 재기동 후 새로 쌓인 줄만 보여요.
           </div>
         ) : (
           logs.map((l, i) => (
             <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-              <span style={{ color: "#7F8792", flexShrink: 0 }}>
+              <span style={{ color: t.textMuted, flexShrink: 0 }}>
                 {new Date(l.ts).toISOString().slice(11, 23)}
               </span>
               <span
@@ -1762,10 +1793,10 @@ function ServerLogsPanel() {
                   fontWeight: 700,
                   width: 50,
                   color:
-                    l.level === "error" ? "#FCA5A5"
-                    : l.level === "warn" ? "#FCD34D"
-                    : l.level === "http" ? "#7896FF"
-                    : "#86EFAC",
+                    l.level === "error" ? t.levelError
+                    : l.level === "warn" ? t.levelWarn
+                    : l.level === "http" ? t.levelHttp
+                    : t.levelInfo,
                 }}
               >
                 {l.level.toUpperCase()}
