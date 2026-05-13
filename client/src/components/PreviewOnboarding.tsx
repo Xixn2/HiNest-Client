@@ -72,17 +72,18 @@ export default function PreviewOnboarding() {
 
   return (
     <div
-      className="fixed inset-0 grid place-items-center p-4"
-      style={{ zIndex: 10000, background: "rgba(15,23,42,0.55)", backdropFilter: "blur(4px)" }}
+      className="fixed inset-0 grid place-items-center p-4 hinest-onb-overlay"
+      style={{ zIndex: 10000 }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="preview-onboarding-title"
     >
       <div
-        className="w-full max-w-[460px] rounded-2xl overflow-hidden"
+        key={step /* 단계 전환 시 살짝 re-mount 애니메이션 */}
+        className="w-full max-w-[460px] rounded-2xl overflow-hidden hinest-onb-card"
         style={{
-          background: "var(--c-surface-1)",
-          boxShadow: "0 24px 60px rgba(2,6,23,0.45), 0 1px 0 rgba(255,255,255,0.05) inset",
+          background: "var(--c-surface)",
+          boxShadow: "0 24px 60px rgba(2,6,23,0.35), 0 1px 0 rgba(255,255,255,0.05) inset",
           border: "1px solid var(--c-border)",
         }}
       >
@@ -162,6 +163,50 @@ export default function PreviewOnboarding() {
           </div>
         </div>
       </div>
+
+      {/* 진입 애니메이션 — 배경은 블러+딤이 부드럽게 깔리고, 카드는 살짝 위에서 떠오름 */}
+      <style>{`
+        .hinest-onb-overlay {
+          background: rgba(15, 23, 42, 0);
+          backdrop-filter: blur(0px);
+          -webkit-backdrop-filter: blur(0px);
+          animation: hinest-onb-overlay-in 0.32s ease-out forwards;
+        }
+        @keyframes hinest-onb-overlay-in {
+          to {
+            background: rgba(15, 23, 42, 0.55);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+          }
+        }
+        .hinest-onb-card {
+          animation: hinest-onb-card-in 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+          transform-origin: center;
+          will-change: transform, opacity;
+        }
+        @keyframes hinest-onb-card-in {
+          from {
+            opacity: 0;
+            transform: translateY(10px) scale(0.96);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .hinest-onb-overlay,
+          .hinest-onb-card {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+          }
+          .hinest-onb-overlay {
+            background: rgba(15, 23, 42, 0.55);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+          }
+        }
+      `}</style>
     </div>
   );
 }
