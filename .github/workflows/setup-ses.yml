@@ -1,0 +1,166 @@
+# SES 발신 기능을 ECS 태스크에 활성화하는 일회성 워크플로우.
+#
+# 하는 일:
+#   1) Task role 에 ses:SendEmail / ses:SendRawEmail 인라인 정책 부여
+#   2) 태스크 정의에 SES_FROM_ADDRESS + PUBLIC_APP_URL 환경변수 추가 (없을 때만)
+#   3) 서비스를 새 리비전으로 force-new-deployment
+#   4) 안정화 대기 + 헬스 체크
+#
+# 멱등성:
+#   - 이미 같은 값으로 env 설정돼 있으면 새 리비전 만들지 않음
+#   - 이미 ses 정책이 있어도 같은 이름의 인라인 정책은 그대로 덮어쓰기 (실질 변화 없음)
+#
+# 사용:
+#   gh workflow run setup-ses.yml
+#   gh run watch
+
+name: Setup SES on Fargate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECS_CLUSTER: hinest-prod
+  ECS_SERVICE: hinest-server
+  TASK_FAMILY: hinest-server
+  CONTAINER_NAME: server
+  # 발신/링크 호스트 — 코드에서 fallback 처리하지만 운영에선 명시 권장.
+  SES_FROM_ADDRESS: "HiNest <no-reply@nest.hi-vits.com>"
+  PUBLIC_APP_URL: "https://nest.hi-vits.com"
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::149536482210:role/github-deploy-hinest
+          role-session-name: gha-ses-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Identify task role
+        id: role
+        run: |
+          # 태스크 정의에서 taskRoleArn 추출 — 이 role 에 ses 권한을 붙인다.
+          TD=$(aws ecs describe-task-definition \
+            --task-definition "$TASK_FAMILY" \
+            --region "$AWS_REGION" \
+            --query 'taskDefinition')
+          echo "$TD" > current-td.json
+
+          ROLE_ARN=$(echo "$TD" | jq -r '.taskRoleArn // empty')
+          if [ -z "$ROLE_ARN" ]; then
+            echo "taskRoleArn 이 없습니다. executionRoleArn 으로 fallback."
+            ROLE_ARN=$(echo "$TD" | jq -r '.executionRoleArn')
+          fi
+          ROLE_NAME=$(echo "$ROLE_ARN" | awk -F/ '{print $NF}')
+          echo "role_name=$ROLE_NAME" >> "$GITHUB_OUTPUT"
+          echo "role_arn=$ROLE_ARN" >> "$GITHUB_OUTPUT"
+          echo "Task role: $ROLE_NAME ($ROLE_ARN)"
+
+      - name: Attach SES send policy to task role
+        run: |
+          cat > ses-policy.json << 'EOF'
+          {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Action": ["ses:SendEmail", "ses:SendRawEmail"],
+                "Resource": "*"
+              }
+            ]
+          }
+          EOF
+          aws iam put-role-policy \
+            --role-name "${{ steps.role.outputs.role_name }}" \
+            --policy-name HinestSESSend \
+            --policy-document file://ses-policy.json
+          echo "SES 인라인 정책 부착 완료: HinestSESSend → ${{ steps.role.outputs.role_name }}"
+
+      - name: Inject env vars into container (skip if unchanged)
+        id: env
+        run: |
+          # 현재 컨테이너 env 에 SES_FROM_ADDRESS / PUBLIC_APP_URL 가 이미 같은 값으로 있으면 종료.
+          CURRENT=$(jq --arg c "$CONTAINER_NAME" '
+            .containerDefinitions[] | select(.name == $c) | .environment // []
+          ' current-td.json)
+          HAS_FROM=$(echo "$CURRENT" | jq --arg v "$SES_FROM_ADDRESS" 'any(.name == "SES_FROM_ADDRESS" and .value == $v)')
+          HAS_URL=$(echo "$CURRENT" | jq --arg v "$PUBLIC_APP_URL" 'any(.name == "PUBLIC_APP_URL" and .value == $v)')
+          if [ "$HAS_FROM" = "true" ] && [ "$HAS_URL" = "true" ]; then
+            echo "이미 같은 값으로 설정돼 있어요. 새 리비전 등록 건너뜀."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+          # 기존 env 에서 두 키만 제거(중복 방지) 후 새 값으로 추가. 등록 불가 필드는 삭제.
+          jq --arg c "$CONTAINER_NAME" \
+             --arg from "$SES_FROM_ADDRESS" \
+             --arg url  "$PUBLIC_APP_URL" '
+            .containerDefinitions |= map(
+              if .name == $c then
+                .environment = (
+                  ((.environment // []) | map(select(.name != "SES_FROM_ADDRESS" and .name != "PUBLIC_APP_URL")))
+                  + [{"name":"SES_FROM_ADDRESS","value":$from},{"name":"PUBLIC_APP_URL","value":$url}]
+                )
+              else . end
+            )
+            | del(
+                .taskDefinitionArn, .revision, .status, .requiresAttributes,
+                .compatibilities, .registeredAt, .registeredBy
+              )
+          ' current-td.json > new-td.json
+
+          NEW_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://new-td.json \
+            --region "$AWS_REGION" \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "new_arn=$NEW_ARN" >> "$GITHUB_OUTPUT"
+          echo "새 태스크 정의: $NEW_ARN"
+
+      - name: Update service to new revision
+        if: steps.env.outputs.changed == 'true'
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --task-definition "${{ steps.env.outputs.new_arn }}" \
+            --force-new-deployment \
+            --region "$AWS_REGION" >/dev/null
+          echo "서비스 업데이트 트리거 — 새 리비전 롤아웃 중."
+
+      - name: Force redeploy even if env unchanged (so updated IAM is picked up)
+        if: steps.env.outputs.changed == 'false'
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --force-new-deployment \
+            --region "$AWS_REGION" >/dev/null
+          echo "env 는 동일하지만 IAM 변경 반영 위해 force redeploy."
+
+      - name: Wait for service to stabilize
+        run: |
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --region "$AWS_REGION"
+          echo "롤아웃 안정화 완료."
+
+      - name: Post-deploy health probe
+        run: |
+          for i in 1 2 3 4 5; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" https://api.nest.hi-vits.com/api/health || true)
+            echo "attempt $i: HTTP=$code"
+            [ "$code" = "200" ] && exit 0
+            sleep 5
+          done
+          echo "health check 실패"; exit 1
