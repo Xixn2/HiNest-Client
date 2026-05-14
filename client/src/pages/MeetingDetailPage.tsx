@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import { confirmAsync, alertAsync } from "../components/ConfirmHost";
 import PinButton from "../components/PinButton";
 import RevisionHistoryModal from "../components/RevisionHistoryModal";
+import MeetingAttachments, { type MeetingAttachment } from "../components/MeetingAttachments";
 import { copyToClipboard, absoluteUrl } from "../lib/clipboard";
 import { isDevAccount, DevBadge } from "../lib/devBadge";
 // TipTap 에디터는 ~300KB 덩어리 — 회의록 상세 페이지 안에서 다시 한 번 나눠서
@@ -31,6 +32,7 @@ type Meeting = {
   author: { id: string; name: string; avatarColor: string; avatarUrl?: string | null };
   project: { id: string; name: string; color: string } | null;
   viewers: Viewer[];
+  attachments?: MeetingAttachment[];
 };
 
 type ProjectLite = { id: string; name: string; color: string };
@@ -386,6 +388,19 @@ export default function MeetingDetailPage() {
           mentionFetcher={mentionFetcher}
         />
       </Suspense>
+
+      {/* 첨부 — 파일/이미지/영상/링크. 본문이 다시 쓰여도 자료는 유지됨. */}
+      {meeting && (
+        <MeetingAttachments
+          meetingId={meeting.id}
+          authorId={meeting.authorId}
+          attachments={meeting.attachments ?? []}
+          onChange={(next) => setMeeting((m) => (m ? { ...m, attachments: next } : m))}
+          // 회의록을 읽기만 가능한 사용자(SPECIFIC 열람자 등) 도 첨부는 자유롭게 추가/조회 가능 —
+          // 본문 잠금 여부 와 무관. 본인이 올린 것 / 작성자 / ADMIN 만 삭제 가능 (서버 가드).
+          readOnly={false}
+        />
+      )}
 
       {historyOpen && meeting && (
         <RevisionHistoryModal

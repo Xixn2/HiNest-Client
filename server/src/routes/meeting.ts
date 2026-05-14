@@ -292,6 +292,12 @@ router.get("/:id", async (req, res) => {
       viewers: {
         include: { user: { select: { id: true, name: true, team: true, position: true, avatarColor: true, isDeveloper: true, avatarUrl: true } } },
       },
+      attachments: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          uploadedBy: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } },
+        },
+      },
     },
   });
   if (!meeting) return res.status(404).json({ error: "not found" });
@@ -299,6 +305,100 @@ router.get("/:id", async (req, res) => {
   if (!ok) return res.status(403).json({ error: "forbidden" });
   res.json({ meeting });
 });
+
+/* =========================== 첨부 (파일·이미지·영상·링크) =========================== */
+
+const ATTACHMENT_KINDS = ["FILE", "IMAGE", "VIDEO", "LINK"] as const;
+const fileAttachmentSchema = z.object({
+  kind: z.enum(["FILE", "IMAGE", "VIDEO"]),
+  url: z.string().min(1).max(500),
+  name: z.string().min(1).max(200),
+  mimeType: z.string().min(1).max(100),
+  sizeBytes: z.number().int().min(0).max(1_000_000_000),
+});
+// 링크는 사용자가 직접 입력 — 길이 제한 더 빡세게, 프로토콜 검증.
+const linkAttachmentSchema = z.object({
+  url: z.string().min(1).max(2000).refine(
+    (s) => /^https?:\/\//i.test(s),
+    { message: "http(s) URL 만 가능합니다" },
+  ),
+  name: z.string().min(1).max(200),
+});
+
+async function loadMeetingForAttachment(id: string) {
+  return prisma.meeting.findFirst({
+    where: { id, deletedAt: null },
+    select: { id: true, authorId: true, visibility: true, projectId: true, title: true },
+  });
+}
+
+/** 파일/이미지/영상 첨부 — 클라이언트가 /api/upload 로 먼저 올린 메타데이터를 받아 레코드만 생성. */
+router.post("/:id/attachment", async (req, res) => {
+  const u = (req as any).user;
+  const meeting = await loadMeetingForAttachment(req.params.id);
+  if (!meeting) return res.status(404).json({ error: "not found" });
+  if (!(await canRead(meeting, u.id, u.role))) return res.status(403).json({ error: "forbidden" });
+  const parsed = fileAttachmentSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid input" });
+  const d = parsed.data;
+  const att = await prisma.meetingAttachment.create({
+    data: {
+      meetingId: meeting.id,
+      kind: d.kind,
+      url: d.url,
+      name: d.name,
+      mimeType: d.mimeType,
+      sizeBytes: d.sizeBytes,
+      uploadedById: u.id,
+    },
+    include: { uploadedBy: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } } },
+  });
+  await writeLog(u.id, "MEETING_ATTACH_FILE", meeting.id, `${d.kind}:${d.name}`);
+  res.json({ attachment: att });
+});
+
+/** 링크 첨부 — 외부 URL 과 표시명. 별도 업로드 단계 불필요. */
+router.post("/:id/attachment/link", async (req, res) => {
+  const u = (req as any).user;
+  const meeting = await loadMeetingForAttachment(req.params.id);
+  if (!meeting) return res.status(404).json({ error: "not found" });
+  if (!(await canRead(meeting, u.id, u.role))) return res.status(403).json({ error: "forbidden" });
+  const parsed = linkAttachmentSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0]?.message ?? "invalid input" });
+  const d = parsed.data;
+  const att = await prisma.meetingAttachment.create({
+    data: {
+      meetingId: meeting.id,
+      kind: "LINK",
+      url: d.url,
+      name: d.name,
+      uploadedById: u.id,
+    },
+    include: { uploadedBy: { select: { id: true, name: true, avatarColor: true, avatarUrl: true } } },
+  });
+  await writeLog(u.id, "MEETING_ATTACH_LINK", meeting.id, d.name);
+  res.json({ attachment: att });
+});
+
+/** 첨부 삭제 — 업로더 본인 / 회의록 작성자 / ADMIN 만 가능. */
+router.delete("/:id/attachment/:attachmentId", async (req, res) => {
+  const u = (req as any).user;
+  const meeting = await loadMeetingForAttachment(req.params.id);
+  if (!meeting) return res.status(404).json({ error: "not found" });
+  const att = await prisma.meetingAttachment.findUnique({ where: { id: req.params.attachmentId } });
+  if (!att || att.meetingId !== meeting.id) return res.status(404).json({ error: "not found" });
+  const canDelete =
+    att.uploadedById === u.id ||
+    meeting.authorId === u.id ||
+    u.role === "ADMIN";
+  if (!canDelete) return res.status(403).json({ error: "본인이 올린 첨부 또는 회의록 작성자만 삭제할 수 있어요" });
+  await prisma.meetingAttachment.delete({ where: { id: att.id } });
+  await writeLog(u.id, "MEETING_ATTACH_DELETE", meeting.id, `${att.kind}:${att.name}`);
+  res.json({ ok: true });
+});
+
+// 미사용 변수 lint 경고 회피용 — 위 두 스키마가 cover 하는 종류 집합.
+void ATTACHMENT_KINDS;
 
 router.post("/", async (req, res) => {
   const u = (req as any).user;
