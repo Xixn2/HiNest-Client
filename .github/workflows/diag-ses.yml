@@ -29,30 +29,7 @@ jobs:
           role-session-name: gha-diag-${{ github.run_id }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: SES identity verification status
-        run: |
-          echo "=========== nest.hi-vits.com ==========="
-          aws sesv2 get-email-identity \
-            --email-identity nest.hi-vits.com \
-            --region "$AWS_REGION" \
-            --query '{VerifiedForSending: VerifiedForSendingStatus, DKIM: DkimAttributes.Status, DKIMTokens: DkimAttributes.Tokens}' \
-            --output json || true
-
-          echo ""
-          echo "=========== developer.seojiwan@gmail.com ==========="
-          aws sesv2 get-email-identity \
-            --email-identity developer.seojiwan@gmail.com \
-            --region "$AWS_REGION" \
-            --query '{VerifiedForSending: VerifiedForSendingStatus, DKIM: DkimAttributes.Status}' \
-            --output json || true
-
-      - name: SES sandbox status
-        run: |
-          aws sesv2 get-account --region "$AWS_REGION" \
-            --query '{Sandbox: ProductionAccessEnabled, SendQuota: SendQuota, EnforcementStatus: EnforcementStatus}' \
-            --output json
-
-      - name: Recent EMAIL_FALLBACK + PWD_RESET logs (last 15min)
+      - name: Recent EMAIL_FALLBACK + PWD_RESET logs (last 30min)
         run: |
           LOG_GROUP=$(aws ecs describe-task-definition \
             --task-definition "$TASK_FAMILY" \
@@ -61,7 +38,7 @@ jobs:
             --output text)
           echo "Log group: $LOG_GROUP"
 
-          START=$(( $(date -u +%s%3N) - 15*60*1000 ))
+          START=$(( $(date -u +%s%3N) - 30*60*1000 ))
           echo ""
           echo "=========== filter: EMAIL_FALLBACK ==========="
           aws logs filter-log-events \
