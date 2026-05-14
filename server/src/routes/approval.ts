@@ -25,20 +25,43 @@ const approvalSchema = z.object({
   reviewerIds: z.array(z.string().max(50)).min(1).max(10),
 });
 
-/** 사이드바·탭 배지용 — 결재 대기/내 신청 개수만 가볍게. 60s 캐시 권장. */
+/** 사이드바·탭 배지용 — 결재 대기/내 신청 개수만 가볍게.
+ *
+ * pending 의미: "지금 당장 내가 처리해야 할 결재 수"
+ *   = 결재 자체가 PENDING + 내가 그 결재의 PENDING 스텝 중 첫 번째(=현재 차례) 리뷰어
+ *
+ * 단순히 `steps.some(reviewerId=me, status=PENDING)` 만 보면 다단계 결재에서
+ * 나보다 앞 순번 리뷰어가 아직 결재 안 한 결재까지 카운트돼 빨간 배지가 부풀어 보임.
+ * 화면(스코프=pending) 은 currentReviewerId===me 만 "내 차례" 로 표시하므로 사용자는
+ * "결재 대기 0인데 왜 빨간 N?" 으로 체감. 카운트 의미를 화면과 맞추는 것이 핵심.
+ */
 router.get("/counts", async (req, res) => {
   const u = (req as any).user;
-  const [pending, mine] = await Promise.all([
-    prisma.approval.count({
-      where: {
-        status: "PENDING",
-        steps: { some: { reviewerId: u.id, status: "PENDING" } },
+
+  // 일단 후보(내가 어딘가 PENDING 리뷰어인 PENDING 결재) 만 좁혀서 가져온다 — 보통 사내 결재
+  // 동시 진행량은 매우 적으므로 count() 한 방을 못 쓰는 비용보다 정확성이 중요.
+  // steps 는 PENDING 만, order 오름차순으로 1개만 — 첫 PENDING 스텝이 곧 "현재 차례".
+  const candidates = await prisma.approval.findMany({
+    where: {
+      status: "PENDING",
+      steps: { some: { reviewerId: u.id, status: "PENDING" } },
+    },
+    select: {
+      id: true,
+      steps: {
+        where: { status: "PENDING" },
+        orderBy: { order: "asc" },
+        take: 1,
+        select: { reviewerId: true },
       },
-    }),
-    prisma.approval.count({
-      where: { requesterId: u.id, status: "PENDING" },
-    }),
-  ]);
+    },
+  });
+  const pending = candidates.filter((a) => a.steps[0]?.reviewerId === u.id).length;
+
+  const mine = await prisma.approval.count({
+    where: { requesterId: u.id, status: "PENDING" },
+  });
+
   res.setHeader("Cache-Control", "private, max-age=30");
   res.json({ pending, mine });
 });
