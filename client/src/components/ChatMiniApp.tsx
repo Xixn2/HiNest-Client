@@ -241,7 +241,12 @@ export default function ChatMiniApp({
       tick++;
       const full = tick % 3 === 0; // 90초마다 full
       loadMessages(activeId, { full });
-      if (isChatVisible()) markRead(activeId);
+      if (isChatVisible()) {
+        markRead(activeId);
+        // 폴링 사이 도착한 DM/MENTION 알림이 NotificationProvider items 에 쌓여있을 수 있음.
+        // 서버 read 만으로는 로컬 chatUnread 가 안 줄어든다 — markRoomRead 로 명시 동기화.
+        markRoomRead(activeId);
+      }
     }, 30_000);
     return () => clearInterval(t);
   }, [activeId, isPanelOpen]);
@@ -256,7 +261,12 @@ export default function ChatMiniApp({
       const msg = detail.message;
       if (msg.roomId === activeId) {
         setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
-        if (isChatVisible()) markRead(msg.roomId);
+        if (isChatVisible()) {
+          markRead(msg.roomId);
+          // 로컬 NotificationProvider items 에서도 이 방의 DM/MENTION 을 즉시 readAt 처리 →
+          // 사이드바 채팅 뱃지가 새 메시지 도착하자마자 자동 차감.
+          markRoomRead(msg.roomId);
+        }
       }
       // rooms 리스트 — 이전엔 loadRooms() 로 매 메시지마다 서버 왕복했는데,
       // 이게 수신자 체감 지연의 핵심 원인이었다. 이제는 들어온 메시지를 해당 방의

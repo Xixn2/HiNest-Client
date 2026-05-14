@@ -80,6 +80,19 @@ export default function NoticePage() {
     }
   }, [params, list, unreadByNoticeId, markRead]);
 
+  // 공지 페이지에 머무는 동안엔 미읽음 NOTICE 알림을 즉시 read 처리.
+  // - 페이지 진입(사이드바 배지 클릭 포함) 시 한 번 → 빨간 카운트 즉시 사라짐
+  // - 머무는 동안 SSE 로 새 공지 알림 도착 → 즉시 read 처리 (사용자가 어차피 보는 화면이라 안전)
+  // markRead 호출이 optimistic 으로 readAt 을 채워주므로 무한 루프 X (다음 번엔 unreadNoticeIds === 0).
+  useEffect(() => {
+    const unreadNoticeIds = bellItems
+      .filter((n) => n.type === "NOTICE" && !n.readAt)
+      .map((n) => n.id);
+    if (unreadNoticeIds.length > 0) {
+      markRead(unreadNoticeIds);
+    }
+  }, [bellItems, markRead]);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (saving) return;
