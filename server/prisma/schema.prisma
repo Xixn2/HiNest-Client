@@ -95,6 +95,7 @@ model User {
   approvalComments        ApprovalComment[]
   meetingRevisions        MeetingRevision[]
   meetingAttachments      MeetingAttachment[]    @relation("MeetingAttachmentUploader")
+  passwordResetTokens     PasswordResetToken[]
   documentRevisions       DocumentRevision[]
   shareLinksCreated       DocumentShareLink[]    @relation("ShareLinkCreator")
   folderShareLinksCreated FolderShareLink[]      @relation("FolderShareLinkCreator")
@@ -853,6 +854,28 @@ model MeetingAttachment {
   createdAt    DateTime @default(now())
 
   @@index([meetingId, createdAt])
+}
+
+/// 비밀번호 재설정 토큰 — 잠긴 계정도 본인 이메일 인증으로 풀 수 있게 한다.
+/// 보안:
+///   - 실제 토큰은 응답에만 노출, DB 엔 SHA-256 해시만 보관 → DB 유출 시에도 활성 토큰 사용 불가
+///   - 30분 단일사용 — usedAt 으로 1회용 보장
+///   - 사용 즉시 같은 유저의 다른 미사용 토큰도 같이 무효화 (옛 메일 살아있어도 차단)
+///   - 성공 시 lockedAt/failedLoginCount 자동 초기화 + 기존 모든 세션 강제 로그아웃
+model PasswordResetToken {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// SHA-256 hex (64자) of the actual token. unique 로 빠른 lookup + 충돌 방지.
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  /// 요청 시점 IP — 의심 활동 추적용 (cleanup 잡 / 감사용).
+  ipRequested String?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
 }
 
 /// visibility=SPECIFIC 인 회의록에서 열람 허용된 유저.

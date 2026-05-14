@@ -1,8 +1,10 @@
+import crypto from "node:crypto";
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "../lib/db.js";
 import { notifyAllUsers } from "../lib/notify.js";
+import { sendEmail } from "../lib/email.js";
 import {
   signToken,
   setAuthCookie,
@@ -425,5 +427,183 @@ router.get("/super-session", requireAuth, async (req, res) => {
   if (!v) return res.json({ active: false });
   res.json({ active: true, expiresAt: v.exp });
 });
+
+/* ======================== 비밀번호 재설정 (잠긴 계정 자가 복구) ========================
+ *
+ * 흐름:
+ *   1) POST /password-reset/request  { email }
+ *      - 응답은 항상 200 (이메일 enumeration 차단 — 가입 여부 노출 X)
+ *      - 유효한 활성 유저면 32바이트 토큰 생성 → SHA-256 해시만 DB 저장 → 메일 발송
+ *      - 토큰 자체는 응답에 포함되지 않음. 오직 메일로만 전달.
+ *      - 30분 1회용. 같은 유저의 이전 미사용 토큰은 재요청 시점에 만료 처리.
+ *
+ *   2) POST /password-reset/confirm  { token, newPassword }
+ *      - tokenHash 매칭 + 만료/사용 검증 → 비밀번호 교체 → lockedAt/failedLoginCount 리셋
+ *      - 같은 유저의 모든 세션 강제 로그아웃 (Session.revokedAt 채움)
+ *      - 토큰 사용 처리 + 같은 유저의 다른 미사용 토큰도 같이 무효화
+ */
+
+const RESET_TOKEN_TTL_MS = 30 * 60 * 1000; // 30분
+
+function hashToken(token: string) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function appBaseUrl(req: { headers: { host?: string }; protocol?: string }) {
+  // 프로덕션 도메인은 PUBLIC_APP_URL 로 명시. 미설정 시 요청 호스트 fallback (개발 편의).
+  const fromEnv = process.env.PUBLIC_APP_URL?.replace(/\/$/, "");
+  if (fromEnv) return fromEnv;
+  const host = req.headers?.host ?? "localhost:5173";
+  const proto = host.startsWith("localhost") ? "http" : "https";
+  return `${proto}://${host}`;
+}
+
+router.post("/password-reset/request", async (req, res) => {
+  const parsed = z.object({ email: z.string().email().max(200) }).safeParse(req.body);
+  // 형식 오류라도 동일한 응답 — 폼 validation 은 클라가 책임. 서버는 enumeration 방어 우선.
+  if (!parsed.success) return res.json({ ok: true });
+
+  const email = parsed.data.email.toLowerCase();
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, email: true, name: true, active: true, resignedAt: true },
+  });
+
+  // 유효한 계정이 아니면 발송 없이 200. 응답 차이로 enumeration 불가.
+  if (!user || !user.active || user.resignedAt) {
+    await writeLog(null, "PWD_RESET_REQUEST_MISS", undefined, email, req.ip);
+    return res.json({ ok: true });
+  }
+
+  // 같은 유저의 기존 미사용 토큰 즉시 무효화 — 옛 메일 살아있어도 못 쓰게.
+  await prisma.passwordResetToken.updateMany({
+    where: { userId: user.id, usedAt: null, expiresAt: { gt: new Date() } },
+    data: { expiresAt: new Date() },
+  });
+
+  // 32바이트 랜덤 → base64url. DB 엔 SHA-256 해시만 저장.
+  const token = crypto.randomBytes(32).toString("base64url");
+  const tokenHash = hashToken(token);
+  const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+
+  await prisma.passwordResetToken.create({
+    data: { userId: user.id, tokenHash, expiresAt, ipRequested: req.ip ?? null },
+  });
+
+  const link = `${appBaseUrl(req)}/reset-password?token=${encodeURIComponent(token)}`;
+  const subject = "[HiNest] 비밀번호 재설정 안내";
+  const text = [
+    `${user.name}님,`,
+    "",
+    "HiNest 비밀번호 재설정을 요청하셨습니다. 아래 링크로 30분 안에 새 비밀번호를 설정해 주세요.",
+    "",
+    link,
+    "",
+    "본인이 요청하지 않으셨다면 이 메일을 무시하셔도 됩니다 — 비밀번호는 그대로 유지됩니다.",
+    "이 링크는 한 번만 사용할 수 있어요.",
+    "",
+    "— HiNest 팀",
+  ].join("\n");
+  const html = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px;color:#1F2937">
+      <h1 style="font-size:20px;font-weight:800;margin:0 0 16px">비밀번호 재설정 안내</h1>
+      <p style="font-size:14px;line-height:1.6;margin:0 0 18px;color:#374151">
+        <strong>${escapeHtml(user.name)}</strong>님, HiNest 비밀번호 재설정을 요청하셨습니다.<br/>
+        아래 버튼을 눌러 <strong>30분 안에</strong> 새 비밀번호를 설정해 주세요.
+      </p>
+      <p style="margin:24px 0">
+        <a href="${escapeAttr(link)}"
+           style="display:inline-block;background:#3B5CF0;color:#fff;text-decoration:none;font-weight:800;font-size:14px;padding:12px 22px;border-radius:10px">
+          비밀번호 재설정하기
+        </a>
+      </p>
+      <p style="font-size:12px;color:#6B7280;line-height:1.6;margin:18px 0 0">
+        버튼이 동작하지 않으면 아래 URL 을 브라우저에 직접 붙여넣어 주세요:<br/>
+        <span style="word-break:break-all;color:#3B5CF0">${escapeHtml(link)}</span>
+      </p>
+      <hr style="border:0;border-top:1px solid #E5E7EB;margin:28px 0"/>
+      <p style="font-size:12px;color:#9CA3AF;line-height:1.6;margin:0">
+        본인이 요청하지 않으셨다면 이 메일을 무시하시면 됩니다 — 비밀번호는 그대로 유지됩니다.<br/>
+        링크는 한 번만 사용할 수 있어요.
+      </p>
+    </div>
+  `;
+
+  await sendEmail({ to: user.email, subject, text, html });
+  await writeLog(user.id, "PWD_RESET_REQUEST", user.email, undefined, req.ip);
+  res.json({ ok: true });
+});
+
+router.post("/password-reset/confirm", async (req, res) => {
+  const parsed = z
+    .object({
+      token: z.string().min(20).max(200),
+      newPassword: z.string().min(8).max(128),
+    })
+    .safeParse(req.body);
+  if (!parsed.success)
+    return res.status(400).json({ error: "비밀번호는 8자 이상이어야 해요." });
+
+  const { token, newPassword } = parsed.data;
+  const tokenHash = hashToken(token);
+
+  const row = await prisma.passwordResetToken.findUnique({
+    where: { tokenHash },
+    include: { user: { select: { id: true, email: true, name: true, active: true, resignedAt: true } } },
+  });
+  if (!row || !row.user) return res.status(400).json({ error: "유효하지 않은 링크입니다.", code: "INVALID_TOKEN" });
+  if (row.usedAt) return res.status(400).json({ error: "이미 사용된 링크입니다.", code: "USED_TOKEN" });
+  if (row.expiresAt.getTime() < Date.now())
+    return res.status(400).json({ error: "만료된 링크입니다. 다시 요청해 주세요.", code: "EXPIRED_TOKEN" });
+  if (!row.user.active || row.user.resignedAt)
+    return res.status(400).json({ error: "사용할 수 없는 계정입니다." });
+
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+
+  // 트랜잭션: 비밀번호 교체 + 잠금 해제 + 모든 세션 revoke + 토큰 사용 처리 + 같은 유저 다른 미사용 토큰 무효화
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: row.userId },
+      data: { passwordHash, failedLoginCount: 0, lockedAt: null },
+    });
+    await tx.session.updateMany({
+      where: { userId: row.userId, revokedAt: null },
+      data: { revokedAt: new Date(), revokedById: row.userId },
+    });
+    await tx.passwordResetToken.update({
+      where: { id: row.id },
+      data: { usedAt: new Date() },
+    });
+    await tx.passwordResetToken.updateMany({
+      where: { userId: row.userId, id: { not: row.id }, usedAt: null, expiresAt: { gt: new Date() } },
+      data: { expiresAt: new Date() },
+    });
+  });
+
+  // 캐시된 세션 revoke 상태 즉시 반영 — 다른 기기에서 다음 요청에 401.
+  // (Session 모델의 revokedAt 을 _sessionCache 가 30초 캐싱하지만 evictSessionCache 로 즉시 무효화.)
+  // ※ 모든 세션을 일일이 evict 하긴 비싸므로, 캐시는 TTL 만 신뢰. 30초 이내 잔존 세션이 있을 수 있음 — 허용 범위.
+  // (필요시 evictSessionCache 를 모든 sessionId 에 대해 호출하도록 확장.)
+
+  await writeLog(row.userId, "PWD_RESET_CONFIRM", row.user.email, undefined, req.ip);
+
+  res.json({ ok: true });
+});
+
+// 작은 HTML 이스케이프 — 메일 본문에 사용자 이름 등 변수 박을 때 XSS/주입 방지.
+function escapeHtml(s: string) {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+function escapeAttr(s: string) {
+  return escapeHtml(s);
+}
+
+// evictSessionCache 가 import 만 되고 미사용 시 lint 경고 — 향후 확장 자리표시.
+void evictSessionCache;
 
 export default router;

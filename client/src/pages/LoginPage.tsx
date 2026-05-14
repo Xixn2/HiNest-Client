@@ -16,6 +16,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
+  const [errCode, setErrCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   if (user) return <Navigate to="/" replace />;
@@ -23,12 +24,17 @@ export default function LoginPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setErr("");
+    setErrCode(null);
     setLoading(true);
     try {
       await login(email, password);
       nav("/");
     } catch (e: any) {
       setErr(e.message);
+      // 서버가 ACCOUNT_LOCKED 같은 코드를 message JSON 에 포함하는 경우를 위해
+      // 우선 message 안에 "잠겨" 단어가 있는지로 fallback 판정.
+      const isLocked = (e?.code === "ACCOUNT_LOCKED") || /잠겨|잠겼|잠긴|LOCKED/i.test(e?.message ?? "");
+      if (isLocked) setErrCode("ACCOUNT_LOCKED");
     } finally {
       setLoading(false);
     }
@@ -81,6 +87,21 @@ export default function LoginPage() {
                 style={{ color: "var(--c-danger)", paddingTop: 2 }}
               >
                 {err}
+                {errCode === "ACCOUNT_LOCKED" && (
+                  <div className="mt-2">
+                    <Link
+                      to="/forgot-password"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11.5px] font-bold transition"
+                      style={{
+                        background: "color-mix(in srgb, var(--c-brand) 12%, transparent)",
+                        color: "var(--c-brand)",
+                        border: "1px solid color-mix(in srgb, var(--c-brand) 26%, transparent)",
+                      }}
+                    >
+                      🔑 이메일로 잠금 풀고 비밀번호 재설정
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
 
@@ -113,11 +134,18 @@ export default function LoginPage() {
             </Link>
             <span className="text-ink-300">·</span>
             <Link
+              to="/forgot-password"
+              className="text-ink-500 hover:text-ink-900 transition font-semibold"
+            >
+              비밀번호 찾기
+            </Link>
+            <span className="text-ink-300">·</span>
+            <Link
               to="/preview"
               className="font-semibold transition"
               style={{ color: "var(--c-brand)" }}
             >
-              로그인 없이 둘러보기
+              둘러보기
             </Link>
           </div>
 

@@ -6,6 +6,8 @@ import DesktopUpdateBanner from "./components/DesktopUpdateBanner";
 import ConfirmHost from "./components/ConfirmHost";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import DownloadPage from "./pages/DownloadPage";
 import PublicSharePage from "./pages/PublicSharePage";
 import PreviewEntry from "./pages/PreviewEntry";
@@ -75,6 +77,8 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/download" element={<DownloadPage />} />
         <Route path="/share/:token" element={<PublicSharePage />} />
         <Route path="/preview" element={<PreviewEntry />} />
