@@ -65,25 +65,12 @@ jobs:
           echo "role_arn=$ROLE_ARN" >> "$GITHUB_OUTPUT"
           echo "Task role: $ROLE_NAME ($ROLE_ARN)"
 
-      - name: Attach SES send policy to task role
+      - name: SES IAM policy reminder (manual step required)
         run: |
-          cat > ses-policy.json << 'EOF'
-          {
-            "Version": "2012-10-17",
-            "Statement": [
-              {
-                "Effect": "Allow",
-                "Action": ["ses:SendEmail", "ses:SendRawEmail"],
-                "Resource": "*"
-              }
-            ]
-          }
-          EOF
-          aws iam put-role-policy \
-            --role-name "${{ steps.role.outputs.role_name }}" \
-            --policy-name HinestSESSend \
-            --policy-document file://ses-policy.json
-          echo "SES 인라인 정책 부착 완료: HinestSESSend → ${{ steps.role.outputs.role_name }}"
+          echo "⚠️ OIDC 역할(github-deploy-hinest) 에 iam:PutRolePolicy 권한이 없어"
+          echo "  IAM 정책은 콘솔에서 수동으로 추가해주세요:"
+          echo "  Task role: ${{ steps.role.outputs.role_name }}"
+          echo "  Policy: { ses:SendEmail, ses:SendRawEmail }"
 
       - name: Inject env vars into container (skip if unchanged)
         id: env
