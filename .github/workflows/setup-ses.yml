@@ -30,7 +30,9 @@ env:
   TASK_FAMILY: hinest-server
   CONTAINER_NAME: server
   # 발신/링크 호스트 — 코드에서 fallback 처리하지만 운영에선 명시 권장.
-  SES_FROM_ADDRESS: "HiNest <no-reply@nest.hi-vits.com>"
+  # 임시: nest.hi-vits.com 도메인 verify 끝날 때까지 verified 된 이메일을 FROM 으로 사용.
+  # production access 받거나 도메인 verify 완료되면 no-reply@nest.hi-vits.com 으로 복원.
+  SES_FROM_ADDRESS: "HiNest <developer.seojiwan@gmail.com>"
   PUBLIC_APP_URL: "https://nest.hi-vits.com"
 
 jobs:
