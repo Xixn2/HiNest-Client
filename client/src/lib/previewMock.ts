@@ -28,8 +28,8 @@ const DEMO_ME = {
   position: "팀장",
   avatarColor: "#3D54C4",
   avatarUrl: null,
-  superAdmin: false,
-  isDeveloper: false,
+  superAdmin: true,
+  isDeveloper: true,
   employeeNo: "AD0000001",
   presenceStatus: null,
   presenceMessage: null,
@@ -1051,6 +1051,8 @@ const HANDLERS: { test: (p: string) => boolean; data: (p?: string) => any }[] = 
   { test: (p) => p === "/api/me",                      data: () => ({ user: DEMO_ME, impersonator: null }) },
   { test: (p) => p === "/api/me/presence",             data: () => ({ presenceStatus: null, presenceMessage: null, presenceUpdatedAt: null }) },
   { test: (p) => p.startsWith("/api/version"),         data: () => ({ version: "preview" }) },
+  // 미리보기에서 개발자 페이지 열람 허용 — step-up 게이트를 통과시킨다 (active=true).
+  { test: (p) => p === "/api/auth/super-session",      data: () => ({ active: true, expiresAt: Date.now() + 60 * 60 * 1000 }) },
 
   /* === 사용자 / 디렉토리 === */
   { test: (p) => p.startsWith("/api/users/teams"),     data: teams },
@@ -1184,13 +1186,33 @@ const HANDLERS: { test: (p: string) => boolean; data: (p?: string) => any }[] = 
   { test: (p) => p.startsWith("/api/admin/positions"),      data: () => ({ positions: ["이사", "팀장", "리드", "대리", "주임", "사원", "인턴"].map((n, i) => ({ id: `p${i}`, name: n, rank: i, createdAt: iso(-30) })) }) },
   { test: (p) => p.startsWith("/api/admin/users"),          data: () => ({ users: DEMO_USERS.map((u) => ({ ...u, active: true, createdAt: iso(-90) })) }) },
   { test: (p) => p.startsWith("/api/admin/nav-visibility"), data: () => ({ items: [] }) },
-  { test: (p) => p.startsWith("/api/admin/logs"),           data: () => ({ logs: [] }) },
-  /* SuperAdmin 영역은 demo 사용자 권한으론 못 가지만, 사이드바/번들 prefetch 등이 호출할 수 있어 안전 응답. */
+  { test: (p) => p.startsWith("/api/admin/logs"),           data: () => ({ logs: [
+      { id: "log1", action: "LOGIN",               target: DEMO_ME.email, detail: "sid=demo",            ip: "211.234.0.0", createdAt: iso(0, 9, 12),  user: { name: DEMO_ME.name, email: DEMO_ME.email } },
+      { id: "log2", action: "MEETING_CREATE",      target: "m1",          detail: "5월 둘째 주 정기 회의", ip: "211.234.0.0", createdAt: iso(0, 10, 30), user: { name: DEMO_ME.name, email: DEMO_ME.email } },
+      { id: "log3", action: "APPROVAL_APPROVE",    target: "a2",          detail: "외근 신청",            ip: "121.88.0.0",  createdAt: iso(-1, 15, 5), user: { name: "이앨리스", email: "alice@hinest.app" } },
+      { id: "log4", action: "USER_UNLOCK",         target: "u-staff-3",   detail: "계정 잠금 해제",        ip: "211.234.0.0", createdAt: iso(-1, 11, 20),user: { name: DEMO_ME.name, email: DEMO_ME.email } },
+      { id: "log5", action: "FEATURE_FLAG_UPDATE", target: "chat-v2",     detail: "enabled=true",        ip: "211.234.0.0", createdAt: iso(-2, 16, 40),user: { name: DEMO_ME.name, email: DEMO_ME.email } },
+    ] }) },
+  /* SuperAdmin(개발자) 영역 — 미리보기에서도 열람 가능. 데모 데이터로 채운다. */
   { test: (p) => p.startsWith("/api/admin/2fa-policy"),     data: () => ({ policies: [], users: [] }) },
-  { test: (p) => p.startsWith("/api/admin/feature-flags"),  data: () => ({ flags: [] }) },
+  { test: (p) => p.startsWith("/api/admin/feature-flags"),  data: () => ({ flags: [
+      { id: "ff1", key: "chat-v2",        description: "사내톡 v2 — 코드블록·이모지 반응", enabled: true,  updatedAt: iso(-2, 16, 40) },
+      { id: "ff2", key: "meeting-attach", description: "회의록 파일·링크 첨부",           enabled: true,  updatedAt: iso(-1, 11, 0) },
+      { id: "ff3", key: "preview-mode",   description: "로그인 없이 둘러보기",            enabled: true,  updatedAt: iso(-5, 9, 0) },
+      { id: "ff4", key: "new-dashboard",  description: "개편된 개요 대시보드 (실험)",      enabled: false, updatedAt: iso(-8, 14, 20) },
+    ] }) },
   { test: (p) => p.startsWith("/api/admin/audit"),          data: () => ({ logs: [], actions: [] }) },
-  { test: (p) => p.startsWith("/api/admin/health"),         data: () => ({ ok: true, ts: Date.now(), checks: {} }) },
-  { test: (p) => p.startsWith("/api/admin/sessions"),       data: () => ({ sessions: [] }) },
+  { test: (p) => p.startsWith("/api/admin/health"),         data: () => ({ ok: true, ts: Date.now(), checks: {
+      database: { ok: true, latencyMs: 12 },
+      redis:    { ok: true, latencyMs: 3 },
+      storage:  { ok: true, latencyMs: 41, detail: "S3 · ap-northeast-2" },
+      email:    { ok: true, latencyMs: 88, detail: "SES" },
+    } }) },
+  { test: (p) => p.startsWith("/api/admin/sessions"),       data: () => ({ sessions: [
+      { id: "sess1", userId: DEMO_ME.id, ua: "Chrome 125 · macOS",        ip: "211.234.0.0", createdAt: iso(0, 9, 12),  lastSeenAt: iso(0, 14, 3),  revokedAt: null,         user: { id: DEMO_ME.id, name: DEMO_ME.name, email: DEMO_ME.email } },
+      { id: "sess2", userId: DEMO_ME.id, ua: "HiNest Desktop · Windows",  ip: "211.234.0.0", createdAt: iso(-1, 18, 40),lastSeenAt: iso(-1, 21, 2), revokedAt: null,         user: { id: DEMO_ME.id, name: DEMO_ME.name, email: DEMO_ME.email } },
+      { id: "sess3", userId: "u-lead-1", ua: "Safari · iPhone",           ip: "121.88.0.0",  createdAt: iso(-2, 8, 0),  lastSeenAt: iso(-2, 8, 30), revokedAt: iso(-2, 9, 0),user: { id: "u-lead-1", name: "이앨리스", email: "alice@hinest.app" } },
+    ] }) },
   { test: (p) => p.startsWith("/api/admin/api-tokens"),     data: () => ({ tokens: [] }) },
   { test: (p) => p.startsWith("/api/admin/role-permissions"), data: () => ({ catalog: [], matrix: {} }) },
   { test: (p) => p.startsWith("/api/admin/server-logs"),    data: () => ({ logs: [] }) },
